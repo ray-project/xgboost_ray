@@ -1,0 +1,92 @@
+# Python byte code files
+*.pyc
+python/.eggs
+
+# Backup files
+*.bak
+
+# Emacs temporary files
+*~
+*#
+
+# Debug symbols
+*.pdb
+
+# Visual Studio files
+/packages
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+
+# Protobuf-generated files
+*_pb2.py
+*.pb.h
+*.pb.cc
+
+# Ray cluster configuration
+scripts/nodes.txt
+
+# OS X folder attributes
+.DS_Store
+
+# Debug files
+*.dSYM/
+*.su
+
+# Python setup files
+*.egg-info
+
+# Compressed files
+*.gz
+
+# Datasets from examples
+**/MNIST_data/
+**/cifar-10-batches-bin/
+
+# Generated documentation files
+/doc/_build
+/doc/source/_static/thumbs
+/doc/source/tune/generated_guides/
+
+# User-specific stuff:
+.idea/
+
+# Pytest Cache
+**/.pytest_cache
+**/.cache
+.benchmarks
+python-driver-*
+
+# Vscode
+.vscode/
+
+*.iml
+
+# python virtual env
+venv
+
+# pyenv version file
+.python-version
+
+# Vim
+.*.swp
+*.swp
+tags
+
+# Emacs
+.#*
+
+# tools
+tools/prometheus*
+
+# ray project files
+project-id
+.mypy_cache/
+
+# XGBoost models from examples
+*.xgb
+
+# Downloaded test data
+*.csv
+*.csv.gz
