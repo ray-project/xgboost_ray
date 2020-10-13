@@ -4,6 +4,16 @@ Distributed XGBoost on Ray
 This library adds a new backend for XGBoost utilizing the
 [distributed computing framework Ray](https://ray.io).
 
+Installation
+------------
+You can install `xgboost_ray` like this:
+
+```
+git clone https://github.com/ray-project/xgboost_ray.git
+cd xgboost_ray
+pip install -e .
+```
+
 Usage
 -----
 `xgboost_ray` provides a drop-in replacement for XGBoost's `train`
@@ -34,8 +44,9 @@ print("Final training error: {:.4f}".format(evals["train"]["error"][-1]))
 Fore complete end to end examples, please have a look at 
 the [examples folder](examples/):
 
-* [Simple sklearn breastcancer dataset example](examples/simple.py)
-* [HIGGS classification example](examples/higgs.py)
+* [Simple sklearn breastcancer dataset example](examples/simple.py) (requires `sklearn`)
+* [HIGGS classification example](examples/higgs.py) 
+([download dataset (2.6 GB)](https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz))
 
 Resources
 ---------

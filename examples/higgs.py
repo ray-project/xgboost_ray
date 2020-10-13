@@ -6,7 +6,9 @@ import pandas as pd
 
 
 def main():
-    # We use HIGGS as the dataset for demonstration. To obtain it, download:
+    # Example adapted from this blog post:
+    # https://medium.com/rapids-ai/a-new-official-dask-api-for-xgboost-e8b10f3d1eb7
+    # This uses the HIGGS dataset. Download here:
     # https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz
     fname = "HIGGS.csv"
     colnames = ["label"] + ["feature-%02d" % i for i in range(1, 29)]

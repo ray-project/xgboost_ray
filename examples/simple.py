@@ -16,6 +16,7 @@ def main():
 
     # Set config
     config = {
+        "tree_method": "approx",
         "objective": "binary:logistic",
         "eval_metric": ["logloss", "error"],
         "max_depth": 3,
