@@ -11,14 +11,11 @@ def main():
     # https://medium.com/rapids-ai/a-new-official-dask-api-for-xgboost-e8b10f3d1eb7
     # This uses the HIGGS dataset. Download here:
     # https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz
-    fname = "HIGGS.csv"
+    fname = "HIGGS.parquet"
     colnames = ["label"] + ["feature-%02d" % i for i in range(1, 29)]
 
-    # data = pd.read_csv(fname, header=None, names=colnames)
-
-    # dtrain = RayDMatrix(data, label="label")
-
-    dtrain = RayDMatrix(os.path.abspath("HIGGS.parquet"), label="label", columns=colnames)
+    dtrain = RayDMatrix(
+        os.path.abspath(fname), label="label", columns=colnames)
 
     config = {
         "tree_method": "hist",
