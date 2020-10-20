@@ -24,7 +24,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
     def setUp(self):
         repeat = 8  # Repeat data a couple of times for stability
-        self.X = np.array([
+        self.x = np.array([
             [1, 0, 0, 0],  # Feature 0 -> Label 0
             [0, 1, 0, 0],  # Feature 1 -> Label 1
             [0, 0, 1, 1],  # Feature 2+3 -> Label 2
@@ -44,22 +44,22 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
     def testSingleTraining(self):
         """Test that XGBoost learns to predict full matrix"""
-        dtrain = xgb.DMatrix(self.X, self.y)
+        dtrain = xgb.DMatrix(self.x, self.y)
         bst = xgb.train(
             self.params,
             dtrain,
             num_boost_round=2)
 
-        X_mat = xgb.DMatrix(self.X)
-        pred_y = bst.predict(X_mat)
+        x_mat = xgb.DMatrix(self.x)
+        pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
 
     def testHalfTraining(self):
         """Test that XGBoost learns to predict half matrices individually"""
-        X_first = self.X[::2]
+        x_first = self.x[::2]
         y_first = self.y[::2]
 
-        X_second = self.X[1::2]
+        x_second = self.x[1::2]
         y_second = self.y[1::2]
 
         # Test case: The first model only sees feature 2 --> label 2
@@ -72,28 +72,28 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         test_y_second = [3, 3]
 
         # First half
-        dtrain = xgb.DMatrix(X_first, y_first)
+        dtrain = xgb.DMatrix(x_first, y_first)
         bst = xgb.train(
             self.params,
             dtrain,
             num_boost_round=2)
 
-        X_mat = xgb.DMatrix(X_first)
-        pred_y = bst.predict(X_mat)
+        x_mat = xgb.DMatrix(x_first)
+        pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(y_first), list(pred_y))
 
         pred_test = bst.predict(test_X)
         self.assertSequenceEqual(test_y_first, list(pred_test))
 
         # Second half
-        dtrain = xgb.DMatrix(X_second, y_second)
+        dtrain = xgb.DMatrix(x_second, y_second)
         bst = xgb.train(
             self.params,
             dtrain,
             num_boost_round=2)
 
-        X_mat = xgb.DMatrix(X_second)
-        pred_y = bst.predict(X_mat)
+        x_mat = xgb.DMatrix(x_second)
+        pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(y_second), list(pred_y))
 
         pred_test = bst.predict(test_X)
@@ -106,12 +106,12 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
         bst, _ = train(
             self.params,
-            RayDMatrix(self.X, self.y),
+            RayDMatrix(self.x, self.y),
             num_actors=2)
 
         # Todo(krfricke): Fix feature name inference
-        X_mat = xgb.DMatrix(self.X, feature_names=["0", "1", "2", "3"])
-        pred_y = bst.predict(X_mat)
+        x_mat = xgb.DMatrix(self.x, feature_names=["0", "1", "2", "3"])
+        pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
 
 

@@ -10,5 +10,5 @@ setup(
                      "distributed computing framework Ray.",
     url="https://github.com/ray-project/xgboost_ray",
     install_requires=[
-        "xgboost", "ray", "numpy>=1.16", "pandas"
+        "xgboost", "ray", "numpy>=1.16", "pandas", "pytest"
     ])

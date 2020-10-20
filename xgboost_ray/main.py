@@ -230,7 +230,12 @@ def _train(
         for actor in actors
     ]
 
-    ray.get(fut)
+    try:
+        ray.get(fut)
+    except RayActorError:
+        for actor in actors:
+            ray.kill(actor)
+        raise
 
     # All results should be the same because of Rabit tracking. So we just
     # return the first one.
@@ -277,10 +282,10 @@ def train(
         if max_actor_restarts >= 0 else float("inf")
     _assert_ray_support()
 
-    checkpoint_prefix = kwargs.get(
+    checkpoint_prefix = kwargs.pop(
         "checkpoint_prefix", f".xgb_ray_{time.time()}")
-    checkpoint_path = kwargs.get("checkpoint_path", "/tmp")
-    checkpoint_frequency = kwargs.get("checkpoint_frequency", 5)
+    checkpoint_path = kwargs.pop("checkpoint_path", "/tmp")
+    checkpoint_frequency = kwargs.pop("checkpoint_frequency", 5)
 
     tries = 0
     while tries <= max_actor_restarts:
@@ -305,11 +310,13 @@ def train(
             else:
                 raise RuntimeError(
                     "A Ray actor died during training and the maximum number "
-                    "of retries is exhausted. Checkpoints have been stored "
-                    "at `{}` with prefix `{}` - you can pass these parameters "
-                    "as `checkpoint_path` and `checkpoint_prefix` to the "
-                    "`train()` function to try to continue "
+                    "of retries ({}) is exhausted. Checkpoints have been "
+                    "stored at `{}` with prefix `{}` - you can pass these "
+                    "parameters as `checkpoint_path` and `checkpoint_prefix` "
+                    "to the `train()` function to try to continue "
                     "the training.".format(
-                        checkpoint_path, checkpoint_frequency))
+                        max_actor_restarts,
+                        checkpoint_path,
+                        checkpoint_frequency))
             tries += 1
     return None, {}
