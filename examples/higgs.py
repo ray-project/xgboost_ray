@@ -11,11 +11,11 @@ def main():
     # https://medium.com/rapids-ai/a-new-official-dask-api-for-xgboost-e8b10f3d1eb7
     # This uses the HIGGS dataset. Download here:
     # https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz
-    fname = "HIGGS.parquet"
+    fname = "HIGGS.csv"
     colnames = ["label"] + ["feature-%02d" % i for i in range(1, 29)]
 
     dtrain = RayDMatrix(
-        os.path.abspath(fname), label="label", columns=colnames)
+        os.path.abspath(fname), label="label", names=colnames)
 
     config = {
         "tree_method": "hist",
@@ -36,6 +36,9 @@ def main():
 
 
 if __name__ == "__main__":
+    import ray
+    ray.init()
+
     start = time.time()
     main()
     taken = time.time() - start

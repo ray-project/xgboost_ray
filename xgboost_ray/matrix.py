@@ -17,8 +17,8 @@ class RayFileType(Enum):
 
 
 class RayShardingMode(Enum):
-    BATCH = 1
-    INTERLEAVED = 2
+    INTERLEAVED = 1
+    BATCH = 2
 
 
 @ray.remote
@@ -118,20 +118,26 @@ class _RayRemoteDMatrix:
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
         assert isinstance(self.data, np.ndarray)
 
-        n = len(self.data)
+        if self._df is None:
+            self._df = pd.DataFrame(self.data)
+
+        n = len(self._df)
         indices = self._get_sharding(rank, num_actors, n)
 
-        local_data: pd.DataFrame = pd.DataFrame(self.data[indices])
+        local_data: pd.DataFrame = self._df.loc[indices]
         return self._split_dataframe(local_data, indices)
 
     def _load_data_pandas(self, rank: int, num_actors: int) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
         assert isinstance(self.data, (pd.DataFrame, pd.Series))
 
-        n = len(self.data)
+        if self._df is None:
+            self._df = self.data
+
+        n = len(self._df)
         indices = self._get_sharding(rank, num_actors, n)
 
-        local_data: pd.DataFrame = self.data.loc[indices]
+        local_data: pd.DataFrame = self._df.loc[indices]
         return self._split_dataframe(local_data, indices)
 
     def _load_data_csv(self, rank: int, num_actors: int) -> \
