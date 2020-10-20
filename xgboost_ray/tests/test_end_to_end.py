@@ -4,7 +4,7 @@ import xgboost as xgb
 
 import ray
 
-from xgboost_ray import train
+from xgboost_ray import train, RayDMatrix
 
 
 class XGBoostRayEndToEndTest(unittest.TestCase):
@@ -106,10 +106,11 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
         bst, _ = train(
             self.params,
-            (self.X, self.y),
+            RayDMatrix(self.X, self.y),
             num_actors=2)
 
-        X_mat = xgb.DMatrix(self.X)
+        # Todo(krfricke): Fix feature name inference
+        X_mat = xgb.DMatrix(self.X, feature_names=["0", "1", "2", "3"])
         pred_y = bst.predict(X_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
 
