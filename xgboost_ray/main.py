@@ -1,5 +1,5 @@
 from threading import Thread
-from typing import Tuple, Dict, Any, Union, Optional
+from typing import Tuple, Dict, Any, List
 
 try:
     import ray
@@ -12,12 +12,10 @@ except ImportError:
     get_node_ip_address = None
     RAY_INSTALLED = False
 
-import pandas as pd
-import numpy as np
 import xgboost as xgb
 
 
-Data = Union[ np.ndarray, pd.DataFrame, pd.Series]
+from xgboost_ray.matrix import RayDMatrix
 
 
 def _assert_ray_support():
@@ -61,32 +59,38 @@ class RabitContext:
         xgb.rabit.finalize()
 
 
-class RayDMatrix:
-    def __init__(self, X: Data, y: Optional[Data] = None):
-        self.X = X
-        self.y = y
-
-    def __iter__(self):
-        yield self.X
-        yield self.y
-
-
 @ray.remote
 class RayXGBoostActor:
-    def __init__(self):
-        self._dtrain = []
+    def __init__(self, rank: int, num_actors: int):
+        self.rank = rank
+        self.num_actors = num_actors
+
+        self._data: Dict[RayDMatrix, xgb.DMatrix] = {}
         self._evals = []
 
-    def set_X_y(self, X, y):
-        self._dtrain = xgb.DMatrix(X, y)
+    def load_data(self, data: RayDMatrix):
+        x, y = ray.get(data.load_data(self.rank, self.num_actors))
+        matrix = xgb.DMatrix(x, label=y)
+        self._data[data] = matrix
 
-    def add_eval_X_y(self, X, y, method):
-        self._evals.append((xgb.DMatrix(X, y), method))
-
-    def train(self, rabit_args, params, *args, **kwargs):
+    def train(self,
+              rabit_args: List[str],
+              params: Dict[str, Any],
+              dtrain: RayDMatrix,
+              evals: Tuple[RayDMatrix, str],
+              *args,
+              **kwargs):
         local_params = params.copy()
-        local_dtrain = self._dtrain
-        local_evals = self._evals
+
+        if dtrain not in self._data:
+            self.load_data(dtrain)
+        local_dtrain = self._data[dtrain]
+
+        local_evals = []
+        for deval, name in evals:
+            if deval not in self._data:
+                self.load_data(deval)
+            local_evals.append((self._data[deval], name))
 
         evals_result = dict()
 
@@ -102,18 +106,9 @@ class RayXGBoostActor:
             return {"bst": bst, "evals_result": evals_result}
 
 
-def _data_slice(data, indices):
-    if isinstance(data, (pd.DataFrame, pd.Series)):
-        return data.loc[indices]
-    elif isinstance(data, np.ndarray):
-        return data[indices]
-    else:
-        raise NotImplementedError
-
-
 def train(
         params: Dict,
-        data: Union[RayDMatrix, Tuple[Data, Data]],
+        dtrain: RayDMatrix,
         *args, evals=(),
         num_actors: int = 4,
         gpus_per_worker: int = -1,
@@ -130,28 +125,20 @@ def train(
 
     # Create remote actors
     actors = [
-        RayXGBoostActor.options(num_gpus=gpus_per_worker).remote()
-        for _ in range(num_actors)
+        RayXGBoostActor.options(num_gpus=gpus_per_worker).remote(
+            rank=i, num_actors=num_actors)
+        for i in range(num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
 
-    X, y = data
-    assert len(X) == len(y)
-
     # Split data across workers
+    wait_load = []
     for i, actor in enumerate(actors):
-        indices = range(i, len(X), len(actors))
+        wait_load.append(actor.load_data.remote(dtrain))
+        for deval, name in evals:
+            wait_load.append(actor.load_data.remote(deval))
 
-        X_ref = ray.put(_data_slice(X, indices))
-        y_ref = ray.put(_data_slice(y, indices))
-        actor.set_X_y.remote(X_ref, y_ref)
-
-        for i, ((eval_X, eval_y), eval_method) in enumerate(evals):
-            eval_indices = range(i, len(eval_X), len(actors))
-            eval_X_ref = ray.put(_data_slice(eval_X, eval_indices))
-            eval_y_ref = ray.put(_data_slice(eval_y, eval_indices))
-
-            actor.add_eval_X_y.remote(eval_X_ref, eval_y_ref, eval_method)
+    ray.get(wait_load)
 
     logger.info("[RayXGBoost] Starting XGBoost training.")
 
@@ -160,7 +147,10 @@ def train(
     rabit_args = [('%s=%s' % item).encode() for item in env.items()]
 
     # Train
-    fut = [actor.train.remote(rabit_args, params, *args, **kwargs) for actor in actors]
+    fut = [
+        actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
+        for actor in actors
+    ]
 
     # All results should be the same because of Rabit tracking. So we just
     # return the first one.

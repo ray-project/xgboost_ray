@@ -90,3 +90,4 @@ project-id
 # Downloaded test data
 *.csv
 *.csv.gz
+*.parquet

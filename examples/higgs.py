@@ -15,10 +15,7 @@ def main():
 
     data = pd.read_csv(fname, header=None, names=colnames)
 
-    X = data[data.columns.difference(["label"])]
-    y = data["label"]
-
-    dtrain = RayDMatrix(X, y)
+    dtrain = RayDMatrix(data, label="label")
 
     config = {
         "tree_method": "hist",
