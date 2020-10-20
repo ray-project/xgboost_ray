@@ -24,10 +24,11 @@ def main():
 
     start = time.time()
     bst, evals = train(
-                config,
-                dtrain,
-                num_boost_round=100,
-                evals=[(dtrain, "train")])
+        config,
+        dtrain,
+        max_actor_restarts=1,
+        num_boost_round=100,
+        evals=[(dtrain, "train")])
     taken = time.time() - start
     print(f"TRAIN TIME TAKEN: {taken:.2f} seconds")
 

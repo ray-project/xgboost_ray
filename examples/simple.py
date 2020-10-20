@@ -27,6 +27,7 @@ def main():
         config,
         train_set,
         evals=[(test_set, "eval")],
+        max_actor_restarts=1,
         verbose_eval=False)
 
     bst.save_model('simple.xgb')
