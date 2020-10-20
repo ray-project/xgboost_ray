@@ -1,4 +1,5 @@
 import math
+import os
 from enum import Enum
 from typing import Union, Optional, Tuple, List
 
@@ -26,11 +27,15 @@ class _RayRemoteDMatrix:
                  data: Data,
                  label: Optional[Data] = None,
                  filetype: Optional[RayFileType] = None,
-                 sharding: RayShardingMode = RayShardingMode.INTERLEAVED):
+                 sharding: RayShardingMode = RayShardingMode.INTERLEAVED,
+                 **kwargs):
         self.data = data
         self.label = label
         self.filetype = filetype
         self.sharding = sharding
+        self.kwargs = kwargs
+
+        self._df = None
 
         if isinstance(data, str):
             if not self.filetype:
@@ -44,8 +49,6 @@ class _RayRemoteDMatrix:
                         "File or stream specified as data source, but "
                         "filetype could not be detected. Please pass "
                         "the `filetype` parameter to the RayDMatrix.")
-
-        self._hash = None
 
     def __hash__(self):
         return hash((
@@ -70,12 +73,24 @@ class _RayRemoteDMatrix:
 
         if isinstance(self.data, np.ndarray):
             return self._load_data_numpy(rank, num_actors)
-        if isinstance(self.data, (pd.DataFrame, pd.Series)):
+        elif isinstance(self.data, (pd.DataFrame, pd.Series)):
             return self._load_data_pandas(rank, num_actors)
+        elif isinstance(self.data, str) and self.filetype == RayFileType.CSV:
+            return self._load_data_csv(rank, num_actors)
+        elif isinstance(self.data, str) and \
+                self.filetype == RayFileType.PARQUET:
+            return self._load_data_parquet(rank, num_actors)
+        else:
+            raise ValueError(
+                "Unknown data source type: {} with FileType: {}. Supported "
+                "data types include pandas.DataFrame, pandas.Series, "
+                "np.ndarray, and CSV/Parquet files. If you specify a file, "
+                "consider passing the `filetype` argument to specify the "
+                "type of the source.")
 
     def _split_dataframe(self,
                          local_data: pd.DataFrame,
-                         indices: List[int]) -> \
+                         indices: Optional[List[int]] = None) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
         if self.label is not None:
             if isinstance(self.label, str):
@@ -87,11 +102,7 @@ class _RayRemoteDMatrix:
             return x, y
         return local_data, None
 
-    def _load_data_numpy(self, rank: int, num_actors: int) -> \
-            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        assert isinstance(self.data, np.ndarray)
-
-        n = len(self.data)
+    def _get_sharding(self, rank: int, num_actors: int, n: int):
         if self.sharding == RayShardingMode.BATCH:
             start_index = int(math.floor(rank / num_actors) * n)
             end_index = int(math.floor(rank + 1 / num_actors) * n)
@@ -101,6 +112,14 @@ class _RayRemoteDMatrix:
         else:
             raise ValueError(f"Invalid value for `sharding` parameter: "
                              f"{self.sharding}")
+        return indices
+
+    def _load_data_numpy(self, rank: int, num_actors: int) -> \
+            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+        assert isinstance(self.data, np.ndarray)
+
+        n = len(self.data)
+        indices = self._get_sharding(rank, num_actors, n)
 
         local_data: pd.DataFrame = pd.DataFrame(self.data[indices])
         return self._split_dataframe(local_data, indices)
@@ -110,17 +129,39 @@ class _RayRemoteDMatrix:
         assert isinstance(self.data, (pd.DataFrame, pd.Series))
 
         n = len(self.data)
-        if self.sharding == RayShardingMode.BATCH:
-            start_index = int(math.floor(rank / num_actors) * n)
-            end_index = int(math.floor(rank + 1 / num_actors) * n)
-            indices = list(range(start_index, end_index))
-        elif self.sharding == RayShardingMode.INTERLEAVED:
-            indices = list(range(rank, n, num_actors))
-        else:
-            raise ValueError(f"Invalid value for `sharding` parameter: "
-                             f"{self.sharding}")
+        indices = self._get_sharding(rank, num_actors, n)
 
         local_data: pd.DataFrame = self.data.loc[indices]
+        return self._split_dataframe(local_data, indices)
+
+    def _load_data_csv(self, rank: int, num_actors: int) -> \
+            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+        assert isinstance(self.data, str)
+        if not os.path.exists(self.data):
+            raise ValueError(f"CSV source not found: {self.data}")
+
+        if self._df is None:
+            self._df = pd.read_csv(self.data, **self.kwargs)
+
+        n = len(self._df)
+        indices = self._get_sharding(rank, num_actors, n)
+
+        local_data: pd.DataFrame = self._df.loc[indices]
+        return self._split_dataframe(local_data, indices)
+
+    def _load_data_parquet(self, rank: int, num_actors: int) -> \
+            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+        assert isinstance(self.data, str)
+        if not os.path.exists(self.data):
+            raise ValueError(f"Parquet source not found: {self.data}")
+
+        if self._df is None:
+            self._df = pd.read_parquet(self.data, **self.kwargs)
+
+        n = len(self._df)
+        indices = self._get_sharding(rank, num_actors, n)
+
+        local_data: pd.DataFrame = self._df.loc[indices]
         return self._split_dataframe(local_data, indices)
 
 
@@ -129,7 +170,8 @@ class RayDMatrix:
                  data: Data,
                  label: Optional[Data] = None,
                  filetype: Optional[RayFileType] = None,
-                 sharding: RayShardingMode = RayShardingMode.INTERLEAVED):
+                 sharding: RayShardingMode = RayShardingMode.INTERLEAVED,
+                 **kwargs):
 
         if not ray.is_initialized():
             ray.init()
@@ -138,7 +180,8 @@ class RayDMatrix:
             data=data,
             label=label,
             filetype=filetype,
-            sharding=sharding)
+            sharding=sharding,
+            **kwargs)
 
     def load_data(self, rank: int, num_actors: int) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:

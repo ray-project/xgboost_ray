@@ -1,3 +1,4 @@
+import os
 import time
 
 from xgboost_ray import train, RayDMatrix
@@ -13,9 +14,11 @@ def main():
     fname = "HIGGS.csv"
     colnames = ["label"] + ["feature-%02d" % i for i in range(1, 29)]
 
-    data = pd.read_csv(fname, header=None, names=colnames)
+    # data = pd.read_csv(fname, header=None, names=colnames)
 
-    dtrain = RayDMatrix(data, label="label")
+    # dtrain = RayDMatrix(data, label="label")
+
+    dtrain = RayDMatrix(os.path.abspath("HIGGS.parquet"), label="label", columns=colnames)
 
     config = {
         "tree_method": "hist",
