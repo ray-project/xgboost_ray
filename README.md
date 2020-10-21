@@ -4,6 +4,12 @@ Distributed XGBoost on Ray
 This library adds a new backend for XGBoost utilizing the
 [distributed computing framework Ray](https://ray.io).
 
+Please note that this is an early version and both the API and
+the behavior can change without prior notice.
+
+We'll switch to a release-based development process once the
+implementation has all features for first real world use cases.
+
 Installation
 ------------
 You can install `xgboost_ray` like this:
