@@ -85,7 +85,6 @@ class RayXGBoostActor:
         self.checkpoint_frequency = checkpoint_frequency
 
         self._data: Dict[RayDMatrix, xgb.DMatrix] = {}
-        self._evals = []
 
     @property
     def checkpoint_file(self) -> Optional[str]:
