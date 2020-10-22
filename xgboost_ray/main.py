@@ -99,7 +99,9 @@ class RayXGBoostActor:
         return callback
 
     def load_data(self, data: RayDMatrix):
-        x, y = ray.get(data.load_data(self.rank, self.num_actors))
+        if data in self._data:
+            return
+        x, y = data.get_data(self.rank, self.num_actors)
         matrix = xgb.DMatrix(x, label=y)
         self._data[data] = matrix
 
@@ -170,9 +172,9 @@ def _trigger_data_load(actor, dtrain, evals):
 
 
 def _cleanup(
-    checkpoint_prefix: str,
-    checkpoint_path: str,
-    num_actors: int):
+        checkpoint_prefix: str,
+        checkpoint_path: str,
+        num_actors: int):
     for i in range(num_actors):
         checkpoint_file = _checkpoint_file(
             checkpoint_path, checkpoint_prefix, i)

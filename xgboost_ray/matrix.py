@@ -1,7 +1,6 @@
 import math
-import os
 from enum import Enum
-from typing import Union, Optional, Tuple, List
+from typing import Union, Optional, Tuple, Iterable
 
 import numpy as np
 import pandas as pd
@@ -21,21 +20,20 @@ class RayShardingMode(Enum):
     BATCH = 2
 
 
-@ray.remote
-class _RayRemoteDMatrix:
+class _RayDMatrixLoader:
     def __init__(self,
                  data: Data,
                  label: Optional[Data] = None,
                  filetype: Optional[RayFileType] = None,
-                 sharding: RayShardingMode = RayShardingMode.INTERLEAVED,
                  **kwargs):
         self.data = data
         self.label = label
         self.filetype = filetype
-        self.sharding = sharding
         self.kwargs = kwargs
 
-        self._df = None
+        self._x_ref = None
+        self._y_ref = None
+        self._n = 0
 
         if isinstance(data, str):
             if not self.filetype:
@@ -50,18 +48,19 @@ class _RayRemoteDMatrix:
                         "filetype could not be detected. Please pass "
                         "the `filetype` parameter to the RayDMatrix.")
 
+        self.load_data()
+
     def __hash__(self):
         return hash((
-            id(self.data), id(self.label), self.filetype, self.sharding))
+            id(self.data), id(self.label), self.filetype))
 
-    @ray.method(num_returns=2)
-    def load_data(self, rank: int, num_actors: int) -> \
-            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        """
-        Load data shard for worker with rank `rank`.
-        """
-        assert rank < num_actors
+    def get_refs(self):
+        return self._x_ref, self._y_ref, self._n
 
+    def load_data(self):
+        """
+        Load data into memory
+        """
         if self.label is not None and not isinstance(self.label, str):
             if type(self.data) != type(self.label):
                 raise ValueError(
@@ -72,14 +71,13 @@ class _RayRemoteDMatrix:
                     ))
 
         if isinstance(self.data, np.ndarray):
-            return self._load_data_numpy(rank, num_actors)
+            local_df = self._load_data_numpy()
         elif isinstance(self.data, (pd.DataFrame, pd.Series)):
-            return self._load_data_pandas(rank, num_actors)
-        elif isinstance(self.data, str) and self.filetype == RayFileType.CSV:
-            return self._load_data_csv(rank, num_actors)
-        elif isinstance(self.data, str) and \
-                self.filetype == RayFileType.PARQUET:
-            return self._load_data_parquet(rank, num_actors)
+            local_df = self._load_data_pandas()
+        elif self.filetype == RayFileType.CSV:
+            local_df = self._load_data_csv()
+        elif self.filetype == RayFileType.PARQUET:
+            local_df = self._load_data_parquet()
         else:
             raise ValueError(
                 "Unknown data source type: {} with FileType: {}. Supported "
@@ -88,21 +86,86 @@ class _RayRemoteDMatrix:
                 "consider passing the `filetype` argument to specify the "
                 "type of the source.")
 
-    def _split_dataframe(self,
-                         local_data: pd.DataFrame,
-                         indices: Optional[List[int]] = None) -> \
+        x, y = self._split_dataframe(local_df)
+        n = len(local_df)
+
+        self._x_ref = ray.put(x)
+        self._y_ref = ray.put(y)
+        self._n = n
+
+    def _split_dataframe(self, local_data: pd.DataFrame) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+        """Split dataframe into `features`, `labels`"""
         if self.label is not None:
             if isinstance(self.label, str):
                 x = local_data[local_data.columns.difference([self.label])]
                 y = local_data[self.label]
             else:
                 x = local_data
-                y = self.label[indices]
+                y = self.label
             return x, y
         return local_data, None
 
+    def _load_data_numpy(self):
+        return pd.DataFrame(self.data)
+
+    def _load_data_pandas(self):
+        return self.data
+
+    def _load_data_csv(self):
+        if isinstance(self.data, Iterable):
+            data_sources = self.data
+        else:
+            data_sources = [self.data]
+
+        return pd.concat([pd.read_csv(data_source, **self.kwargs)
+                          for data_source in data_sources])
+
+    def _load_data_parquet(self):
+        if isinstance(self.data, Iterable):
+            return pd.concat([pd.read_parquet(data_source, **self.kwargs)
+                              for data_source in self.data])
+        else:
+            return pd.read_parquet(self.data, **self.kwargs)
+
+
+class RayDMatrix:
+    def __init__(self,
+                 data: Data,
+                 label: Optional[Data] = None,
+                 filetype: Optional[RayFileType] = None,
+                 sharding: RayShardingMode = RayShardingMode.INTERLEAVED,
+                 **kwargs):
+
+        self.sharding = sharding
+
+        loader = _RayDMatrixLoader(
+            data=data,
+            label=label,
+            filetype=filetype,
+            **kwargs)
+
+        self.x_ref, self.y_ref, self.n = loader.get_refs()
+
+    def get_data(self, rank: int, num_actors: int) -> \
+            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+
+        # x_df and y_df and ObjectRefs
+        x_df: pd.DataFrame = ray.get(self.x_ref)
+        y_df: pd.DataFrame = ray.get(self.y_ref)
+
+        indices = self._get_sharding(rank, num_actors, self.n)
+
+        if x_df is not None:
+            x_df = x_df.iloc[indices]
+
+        if y_df is not None:
+            y_df = y_df.iloc[indices]
+
+        return x_df, y_df
+
     def _get_sharding(self, rank: int, num_actors: int, n: int):
+        """Return indices that belong to worker with rank `rank`"""
         if self.sharding == RayShardingMode.BATCH:
             start_index = int(math.floor(rank / num_actors) * n)
             end_index = int(math.floor(rank + 1 / num_actors) * n)
@@ -114,89 +177,8 @@ class _RayRemoteDMatrix:
                              f"{self.sharding}")
         return indices
 
-    def _load_data_numpy(self, rank: int, num_actors: int) -> \
-            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        assert isinstance(self.data, np.ndarray)
-
-        if self._df is None:
-            self._df = pd.DataFrame(self.data)
-
-        n = len(self._df)
-        indices = self._get_sharding(rank, num_actors, n)
-
-        local_data: pd.DataFrame = self._df.loc[indices]
-        return self._split_dataframe(local_data, indices)
-
-    def _load_data_pandas(self, rank: int, num_actors: int) -> \
-            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        assert isinstance(self.data, (pd.DataFrame, pd.Series))
-
-        if self._df is None:
-            self._df = self.data
-
-        n = len(self._df)
-        indices = self._get_sharding(rank, num_actors, n)
-
-        local_data: pd.DataFrame = self._df.loc[indices]
-        return self._split_dataframe(local_data, indices)
-
-    def _load_data_csv(self, rank: int, num_actors: int) -> \
-            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        assert isinstance(self.data, str)
-        if not os.path.exists(self.data):
-            raise ValueError(f"CSV source not found: {self.data}")
-
-        if self._df is None:
-            self._df = pd.read_csv(self.data, **self.kwargs)
-
-        n = len(self._df)
-        indices = self._get_sharding(rank, num_actors, n)
-
-        local_data: pd.DataFrame = self._df.loc[indices]
-        return self._split_dataframe(local_data, indices)
-
-    def _load_data_parquet(self, rank: int, num_actors: int) -> \
-            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        assert isinstance(self.data, str)
-        if not os.path.exists(self.data):
-            raise ValueError(f"Parquet source not found: {self.data}")
-
-        if self._df is None:
-            self._df = pd.read_parquet(self.data, **self.kwargs)
-
-        n = len(self._df)
-        indices = self._get_sharding(rank, num_actors, n)
-
-        local_data: pd.DataFrame = self._df.loc[indices]
-        return self._split_dataframe(local_data, indices)
-
-
-class RayDMatrix:
-    def __init__(self,
-                 data: Data,
-                 label: Optional[Data] = None,
-                 filetype: Optional[RayFileType] = None,
-                 sharding: RayShardingMode = RayShardingMode.INTERLEAVED,
-                 **kwargs):
-
-        if not ray.is_initialized():
-            ray.init()
-
-        self._dmatrix = _RayRemoteDMatrix.remote(
-            data=data,
-            label=label,
-            filetype=filetype,
-            sharding=sharding,
-            **kwargs)
-
-    def load_data(self, rank: int, num_actors: int) -> \
-            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        return self._dmatrix.load_data.remote(
-            rank=rank,
-            num_actors=num_actors)
-
     def __hash__(self):
-        return ray.get(self._dmatrix.__hash__.remote())
+        return hash((self.x_ref, self.y_ref, self.n, self.sharding))
 
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
