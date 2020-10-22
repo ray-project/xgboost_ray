@@ -31,10 +31,6 @@ class _RayDMatrixLoader:
         self.filetype = filetype
         self.kwargs = kwargs
 
-        self._x_ref = None
-        self._y_ref = None
-        self._n = 0
-
         if isinstance(data, str):
             if not self.filetype:
                 # Try to guess filetype from file ending
@@ -48,14 +44,9 @@ class _RayDMatrixLoader:
                         "filetype could not be detected. Please pass "
                         "the `filetype` parameter to the RayDMatrix.")
 
-        self.load_data()
-
     def __hash__(self):
         return hash((
             id(self.data), id(self.label), self.filetype))
-
-    def get_refs(self):
-        return self._x_ref, self._y_ref, self._n
 
     def load_data(self):
         """
@@ -89,9 +80,7 @@ class _RayDMatrixLoader:
         x, y = self._split_dataframe(local_df)
         n = len(local_df)
 
-        self._x_ref = ray.put(x)
-        self._y_ref = ray.put(y)
-        self._n = n
+        return ray.put(x), ray.put(y), n
 
     def _split_dataframe(self, local_data: pd.DataFrame) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
@@ -145,7 +134,7 @@ class RayDMatrix:
             filetype=filetype,
             **kwargs)
 
-        self.x_ref, self.y_ref, self.n = loader.get_refs()
+        self.x_ref, self.y_ref, self.n = loader.load_data()
 
     def get_data(self, rank: int, num_actors: int) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
