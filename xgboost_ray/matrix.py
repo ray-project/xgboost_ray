@@ -1,6 +1,6 @@
 import math
 from enum import Enum
-from typing import Union, Optional, Tuple, Iterable
+from typing import Union, Optional, Tuple, Iterable, List
 
 import numpy as np
 import pandas as pd
@@ -54,6 +54,9 @@ class _RayDMatrixLoader:
         """
         Load data into memory
         """
+        if not ray.is_initialized():
+            ray.init()
+
         if "OMP_NUM_THREADS" in os.environ:
             del os.environ["OMP_NUM_THREADS"]
 
@@ -96,12 +99,18 @@ class _RayDMatrixLoader:
                 y = local_data[self.label]
             else:
                 x = local_data
-                y = self.label
+                if not isinstance(self.label, pd.DataFrame):
+                    y = pd.DataFrame(self.label)
+                else:
+                    y = self.label
             return x, y
         return local_data, None
 
     def _load_data_numpy(self):
-        return pd.DataFrame(self.data)
+        return pd.DataFrame(self.data, columns=[
+            f"f{i}"
+            for i in range(self.data.shape[1])
+        ])
 
     def _load_data_pandas(self):
         return self.data
@@ -176,3 +185,21 @@ class RayDMatrix:
 
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
+
+
+def combine_data(sharding: RayShardingMode, data: Iterable):
+    if sharding == RayShardingMode.BATCH:
+        np.ravel(data)
+    elif sharding == RayShardingMode.INTERLEAVED:
+        # Sometimes the lengths are off by 1 for uneven divisions
+        min_len = min([len(d) for d in data])
+        res = np.ravel(np.column_stack([d[0:min_len] for d in data]))
+        # Append these here
+        res = np.concatenate([res] + [
+            d[min_len:]
+            for d in data if len(d) > min_len
+        ])
+        return res
+    else:
+        raise ValueError(f"Invalid value for `sharding` parameter: "
+                         f"{sharding}")

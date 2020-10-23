@@ -1,4 +1,6 @@
-from xgboost_ray.main import train
-from xgboost_ray.matrix import RayDMatrix, RayFileType, RayShardingMode, Data
+from xgboost_ray.main import train, predict
+from xgboost_ray.matrix import RayDMatrix, RayFileType, RayShardingMode, \
+    Data, combine_data
 
-__all__ = ["RayDMatrix", "RayFileType", "RayShardingMode", "Data", "train"]
+__all__ = ["RayDMatrix", "RayFileType", "RayShardingMode", "Data",
+           "combine_data", "train", "predict"]

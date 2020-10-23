@@ -19,7 +19,7 @@ except ImportError:
 import xgboost as xgb
 
 
-from xgboost_ray.matrix import RayDMatrix
+from xgboost_ray.matrix import RayDMatrix, Data, combine_data
 
 
 def _assert_ray_support():
@@ -153,6 +153,20 @@ class RayXGBoostActor:
                 **kwargs
             )
             return {"bst": bst, "evals_result": evals_result}
+
+    def predict(self,
+                model: xgb.Booster,
+                data: RayDMatrix,
+                **kwargs):
+        if "OMP_NUM_THREADS" in os.environ:
+            del os.environ["OMP_NUM_THREADS"]
+
+        if data not in self._data:
+            self.load_data(data)
+        local_data = self._data[data]
+
+        predictions = model.predict(local_data, **kwargs)
+        return predictions
 
 
 def _create_actor(
@@ -327,3 +341,85 @@ def train(
                         checkpoint_frequency))
             tries += 1
     return None, {}
+
+
+def _predict(
+        model: xgb.Booster,
+        data: RayDMatrix,
+        num_actors: int = 4,
+        gpus_per_worker: int = 0,
+        **kwargs):
+    _assert_ray_support()
+
+    if not ray.is_initialized():
+        ray.init()
+
+    # Create remote actors
+    actors = [
+        _create_actor(
+            i, num_actors, gpus_per_worker)
+        for i in range(num_actors)
+    ]
+    logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
+
+    # Split data across workers
+    wait_load = []
+    for _, actor in enumerate(actors):
+        wait_load.extend(_trigger_data_load(actor, data, []))
+
+    ray.get(wait_load)
+
+    # Put model into object store
+    model_ref = ray.put(model)
+
+    logger.info("[RayXGBoost] Starting XGBoost prediction.")
+
+    # Train
+    fut = [
+        actor.predict.remote(model_ref, data, **kwargs)
+        for actor in actors
+    ]
+
+    try:
+        actor_results = ray.get(fut)
+    except RayActorError:
+        for actor in actors:
+            ray.kill(actor)
+        raise
+
+    return combine_data(data.sharding, actor_results)
+
+
+def predict(
+        model: xgb.Booster,
+        data: RayDMatrix,
+        num_actors: int = 4,
+        gpus_per_worker: int = 0,
+        max_actor_restarts: int = 0,
+        **kwargs):
+    max_actor_restarts = max_actor_restarts \
+        if max_actor_restarts >= 0 else float("inf")
+    _assert_ray_support()
+
+    tries = 0
+    while tries <= max_actor_restarts:
+        try:
+            return _predict(
+                model,
+                data,
+                num_actors=num_actors,
+                gpus_per_worker=gpus_per_worker,
+                **kwargs
+            )
+        except RayActorError:
+            if tries+1 <= max_actor_restarts:
+                logger.warning(
+                    "A Ray actor died during prediction. Trying to restart "
+                    "prediction from scratch.")
+            else:
+                raise RuntimeError(
+                    "A Ray actor died during prediction and the maximum "
+                    "number of retries ({}) is exhausted.".format(
+                        max_actor_restarts))
+            tries += 1
+    return None
