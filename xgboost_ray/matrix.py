@@ -5,6 +5,8 @@ from typing import Union, Optional, Tuple, Iterable
 import numpy as np
 import pandas as pd
 
+import os
+
 import ray
 
 Data = Union[str, np.ndarray, pd.DataFrame, pd.Series]
@@ -52,6 +54,9 @@ class _RayDMatrixLoader:
         """
         Load data into memory
         """
+        if "OMP_NUM_THREADS" in os.environ:
+            del os.environ["OMP_NUM_THREADS"]
+
         if self.label is not None and not isinstance(self.label, str):
             if type(self.data) != type(self.label):
                 raise ValueError(

@@ -86,6 +86,9 @@ class RayXGBoostActor:
 
         self._data: Dict[RayDMatrix, xgb.DMatrix] = {}
 
+        if "OMP_NUM_THREADS" in os.environ:
+            del os.environ["OMP_NUM_THREADS"]
+
     @property
     def checkpoint_file(self) -> Optional[str]:
         return _checkpoint_file(
@@ -112,6 +115,9 @@ class RayXGBoostActor:
               evals: Tuple[RayDMatrix, str],
               *args,
               **kwargs) -> Dict[str, Any]:
+        if "OMP_NUM_THREADS" in os.environ:
+            del os.environ["OMP_NUM_THREADS"]
+
         local_params = params.copy()
 
         if dtrain not in self._data:
