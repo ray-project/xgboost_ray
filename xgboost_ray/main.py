@@ -120,6 +120,9 @@ class RayXGBoostActor:
 
         local_params = params.copy()
 
+        if not "nthread" in local_params:
+            local_params["nthread"] = ray.utils.get_num_cpus()
+
         if dtrain not in self._data:
             self.load_data(dtrain)
         local_dtrain = self._data[dtrain]
