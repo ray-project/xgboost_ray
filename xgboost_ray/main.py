@@ -122,7 +122,7 @@ class RayXGBoostActor:
 
         if not "nthread" in local_params:
             local_params["nthread"] = ray.utils.get_num_cpus()
-
+        print(local_params)
         if dtrain not in self._data:
             self.load_data(dtrain)
         local_dtrain = self._data[dtrain]
@@ -175,11 +175,14 @@ class RayXGBoostActor:
 def _create_actor(
         rank: int,
         num_actors: int,
+        num_cpus_per_worker: int,
         num_gpus_per_worker: int,
         checkpoint_prefix: Optional[str] = None,
         checkpoint_path: str = "/tmp",
         checkpoint_frequency: int = 5):
-    return RayXGBoostActor.options(num_gpus=num_gpus_per_worker).remote(
+    return RayXGBoostActor.options(
+        num_cpus=num_cpus_per_worker,
+        num_gpus=num_gpus_per_worker).remote(
         rank=rank,
         num_actors=num_actors,
         checkpoint_prefix=checkpoint_prefix,
@@ -211,6 +214,7 @@ def _train(
         *args,
         evals=(),
         num_actors: int = 4,
+        cpus_per_worker: int = 0,
         gpus_per_worker: int = -1,
         checkpoint_prefix: Optional[str] = None,
         checkpoint_path: str = "/tmp",
@@ -226,10 +230,22 @@ def _train(
         if "tree_method" in params and params["tree_method"].startswith("gpu"):
             gpus_per_worker = 1
 
+    if cpus_per_worker == 0:
+        num_cpus = ray.utils.get_num_cpus()
+        cpus_per_worker = int(num_cpus//num_actors)
+
+    if "nthread" in params:
+        if params["nthread"] > cpus_per_worker:
+            raise ValueError(
+                "Specified number of threads greater than number of CPUs. "
+                "Please choose a lower value for the `nthread` parameter.")
+    else:
+        params["nthread"] = cpus_per_worker
+
     # Create remote actors
     actors = [
         _create_actor(
-            i, num_actors, gpus_per_worker,
+            i, num_actors, cpus_per_worker, gpus_per_worker,
             checkpoint_prefix, checkpoint_path, checkpoint_frequency)
         for i in range(num_actors)
     ]
