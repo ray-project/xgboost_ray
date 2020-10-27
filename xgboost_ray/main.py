@@ -76,6 +76,12 @@ def _ray_get_cluster_cpus():
     return ray.cluster_resources().get("CPU", None)
 
 
+def _get_max_node_cpus():
+    max_node_cpus = max(node.get("Resources", {}).get("CPU", 0.0)
+                        for node in ray.nodes())
+    return max_node_cpus if max_node_cpus > 0.0 else _ray_get_cluster_cpus()
+
+
 def _set_omp_num_threads():
     ray_cpus = _ray_get_actor_cpus()
     if ray_cpus:
@@ -254,7 +260,9 @@ def _train(
 
     if cpus_per_actor <= 0:
         cluster_cpus = _ray_get_cluster_cpus() or 1
-        cpus_per_actor = int(cluster_cpus // num_actors)
+        cpus_per_actor = min(
+            int(_get_max_node_cpus() or 1),
+            int(cluster_cpus // num_actors))
 
     if "nthread" in params:
         if params["nthread"] > cpus_per_actor:
