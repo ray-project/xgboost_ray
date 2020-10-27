@@ -73,8 +73,7 @@ def _ray_get_actor_cpus():
 
 
 def _ray_get_cluster_cpus():
-    return sum(node.get("Resources", {}).get("CPU", 0.0)
-               for node in ray.nodes())
+    return ray.cluster_resources().get("CPU", None)
 
 
 def _set_omp_num_threads():
