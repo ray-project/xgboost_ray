@@ -52,8 +52,20 @@ print("Final training error: {:.4f}".format(
     evals_result["train"]["error"][-1]))
 ```
 
-Please consider always explicitly setting the number of actors and
-the number of CPUs per actor.
+
+Resources
+---------
+By default, `xgboost_ray` tries to determine the number of CPUs
+available and distributes them evenly across actors.
+
+In the case of very large clusters or clusters with many different
+machine sizes, it makes sense to limit the number of CPUs per actor
+by setting the `cpus_per_actor` argument. Consider always
+setting this explicitly.
+
+
+More examples
+-------------
 
 Fore complete end to end examples, please have a look at 
 the [examples folder](examples/):
