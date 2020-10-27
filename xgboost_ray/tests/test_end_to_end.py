@@ -104,13 +104,12 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         should be combined together and find the true model."""
         ray.init(num_cpus=2, num_gpus=0)
 
-        bst, _ = train(
+        bst = train(
             self.params,
             RayDMatrix(self.x, self.y),
             num_actors=2)
 
-        # Todo(krfricke): Fix feature name inference
-        x_mat = xgb.DMatrix(self.x, feature_names=["0", "1", "2", "3"])
+        x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
 

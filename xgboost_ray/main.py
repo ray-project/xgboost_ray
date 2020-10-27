@@ -66,8 +66,8 @@ class RabitContext:
 def _set_omp_num_threads():
     resource_ids = ray.get_resource_ids()
     if "CPU" in resource_ids:
-        os.environ["OMP_NUM_THREADS"] = str(sum(
-            cpu[1] for cpu in resource_ids["CPU"]))
+        os.environ["OMP_NUM_THREADS"] = str(int(sum(
+            cpu[1] for cpu in resource_ids["CPU"])))
     else:
         del os.environ["OMP_NUM_THREADS"]
     return int(float(os.environ.get("OMP_NUM_THREADS", "0.0")))
@@ -239,9 +239,11 @@ def _train(
         if "tree_method" in params and params["tree_method"].startswith("gpu"):
             gpus_per_actor = 1
 
+    n_threads = cpus_per_actor
     if cpus_per_actor <= 0:
         num_cpus = ray.utils.get_num_cpus()
-        cpus_per_actor = int(num_cpus // num_actors)
+        n_threads = int(num_cpus // num_actors)  # Try to set sensible value
+        cpus_per_actor = 1  # Ray default
 
     if "nthread" in params:
         if params["nthread"] > cpus_per_actor:
@@ -250,7 +252,7 @@ def _train(
                 "\nFIX THIS by passing a lower value for the `nthread` "
                 "parameter or a higher number for `cpus_per_actor`.")
     else:
-        params["nthread"] = cpus_per_actor
+        params["nthread"] = n_threads
 
     # Create remote actors
     actors = [

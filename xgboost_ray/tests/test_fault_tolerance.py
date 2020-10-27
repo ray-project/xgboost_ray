@@ -71,7 +71,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingContinuation(self):
         """This should continue after one actor died."""
-        bst, _ = train(
+        bst = train(
             self.params,
             RayDMatrix(self.x, self.y),
             callbacks=[self._fail_callback(self.die_lock_file)],
@@ -80,7 +80,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             num_actors=2,
             checkpoint_path=self.tmpdir)
 
-        x_mat = xgb.DMatrix(self.x, feature_names=["0", "1", "2", "3"])
+        x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
 
@@ -88,7 +88,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         """This should now continue training after one actor died."""
         # The `train()` function raises a RuntimeError
         with self.assertRaises(RuntimeError):
-            bst, _ = train(
+            bst = train(
                 self.params,
                 RayDMatrix(self.x, self.y),
                 callbacks=[self._fail_callback(self.die_lock_file)],
