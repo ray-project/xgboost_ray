@@ -30,7 +30,6 @@ def main():
         train_set,
         evals=[(test_set, "eval")],
         evals_result=evals_result,
-        cpus_per_actor=1,
         max_actor_restarts=1,
         verbose_eval=False)
 

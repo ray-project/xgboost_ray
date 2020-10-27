@@ -43,12 +43,17 @@ bst = train(
     train_set,
     evals_result=evals_result,
     evals=[(train_set, "train")],
-    verbose_eval=False)
+    verbose_eval=False,
+    num_actors=2,
+    cpus_per_actor=1)
 
 bst.save_model("model.xgb")
 print("Final training error: {:.4f}".format(
     evals_result["train"]["error"][-1]))
 ```
+
+Please consider always explicitly setting the number of actors and
+the number of CPUs per actor.
 
 Fore complete end to end examples, please have a look at 
 the [examples folder](examples/):

@@ -63,14 +63,28 @@ class RabitContext:
         xgb.rabit.finalize()
 
 
-def _set_omp_num_threads():
+def _ray_get_actor_cpus():
+    # Get through resource IDs
     resource_ids = ray.get_resource_ids()
     if "CPU" in resource_ids:
-        os.environ["OMP_NUM_THREADS"] = str(int(sum(
-            cpu[1] for cpu in resource_ids["CPU"])))
+        return sum(
+            cpu[1] for cpu in resource_ids["CPU"])
+    return None
+
+
+def _ray_get_cluster_cpus():
+    return sum(node.get("Resources", {}).get("CPU", 0.0)
+               for node in ray.nodes())
+
+
+def _set_omp_num_threads():
+    ray_cpus = _ray_get_actor_cpus()
+    if ray_cpus:
+        os.environ["OMP_NUM_THREADS"] = str(int(ray_cpus))
     else:
         del os.environ["OMP_NUM_THREADS"]
     return int(float(os.environ.get("OMP_NUM_THREADS", "0.0")))
+
 
 def _checkpoint_file(path: str, prefix: str, rank: int):
     if not prefix:
@@ -239,11 +253,9 @@ def _train(
         if "tree_method" in params and params["tree_method"].startswith("gpu"):
             gpus_per_actor = 1
 
-    n_threads = cpus_per_actor
     if cpus_per_actor <= 0:
-        num_cpus = ray.utils.get_num_cpus()
-        n_threads = int(num_cpus // num_actors)  # Try to set sensible value
-        cpus_per_actor = 1  # Ray default
+        cluster_cpus = _ray_get_cluster_cpus() or 1
+        cpus_per_actor = int(cluster_cpus // num_actors)
 
     if "nthread" in params:
         if params["nthread"] > cpus_per_actor:
@@ -252,7 +264,7 @@ def _train(
                 "\nFIX THIS by passing a lower value for the `nthread` "
                 "parameter or a higher number for `cpus_per_actor`.")
     else:
-        params["nthread"] = n_threads
+        params["nthread"] = cpus_per_actor
 
     # Create remote actors
     actors = [
