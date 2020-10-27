@@ -34,17 +34,20 @@ from xgboost_ray import RayDMatrix, train
 train_x, train_y = None, None  # Load data here
 train_set = RayDMatrix(train_x, train_y)
 
-bst, evals = train(
+evals_result = {}
+bst = train(
     {
         "objective": "binary:logistic",
         "eval_metric": ["logloss", "error"],
     },
     train_set,
+    evals_result=evals_result,
     evals=[(train_set, "train")],
     verbose_eval=False)
 
 bst.save_model("model.xgb")
-print("Final training error: {:.4f}".format(evals["train"]["error"][-1]))
+print("Final training error: {:.4f}".format(
+    evals_result["train"]["error"][-1]))
 ```
 
 Fore complete end to end examples, please have a look at 
