@@ -63,6 +63,15 @@ class RabitContext:
         xgb.rabit.finalize()
 
 
+def _set_omp_num_threads():
+    resource_ids = ray.get_resource_ids()
+    if "CPU" in resource_ids:
+        os.environ["OMP_NUM_THREADS"] = str(sum(
+            cpu[1] for cpu in resource_ids["CPU"]))
+    else:
+        del os.environ["OMP_NUM_THREADS"]
+    return int(float(os.environ.get("OMP_NUM_THREADS", "0.0")))
+
 def _checkpoint_file(path: str, prefix: str, rank: int):
     if not prefix:
         return None
@@ -86,8 +95,7 @@ class RayXGBoostActor:
 
         self._data: Dict[RayDMatrix, xgb.DMatrix] = {}
 
-        os.environ["OMP_NUM_THREADS"] = str(sum(
-            cpu[1] for cpu in ray.get_resource_ids()["CPU"]))
+        _set_omp_num_threads()
 
     @property
     def checkpoint_file(self) -> Optional[str]:
@@ -115,13 +123,15 @@ class RayXGBoostActor:
               evals: Tuple[RayDMatrix, str],
               *args,
               **kwargs) -> Dict[str, Any]:
-        os.environ["OMP_NUM_THREADS"] = str(sum(
-            cpu[1] for cpu in ray.get_resource_ids()["CPU"]))
+        num_threads = _set_omp_num_threads()
 
         local_params = params.copy()
 
         if not "nthread" in local_params:
-            local_params["nthread"] = ray.utils.get_num_cpus()
+            if num_threads > 0:
+                local_params["num_threads"] = num_threads
+            else:
+                local_params["nthread"] = ray.utils.get_num_cpus()
 
         if dtrain not in self._data:
             self.load_data(dtrain)
@@ -161,8 +171,7 @@ class RayXGBoostActor:
                 model: xgb.Booster,
                 data: RayDMatrix,
                 **kwargs):
-        os.environ["OMP_NUM_THREADS"] = str(sum(
-            cpu[1] for cpu in ray.get_resource_ids()["CPU"]))
+        _set_omp_num_threads()
 
         if data not in self._data:
             self.load_data(data)
@@ -230,7 +239,7 @@ def _train(
         if "tree_method" in params and params["tree_method"].startswith("gpu"):
             gpus_per_actor = 1
 
-    if cpus_per_actor == 0:
+    if cpus_per_actor <= 0:
         num_cpus = ray.utils.get_num_cpus()
         cpus_per_actor = int(num_cpus // num_actors)
 
@@ -238,7 +247,8 @@ def _train(
         if params["nthread"] > cpus_per_actor:
             raise ValueError(
                 "Specified number of threads greater than number of CPUs. "
-                "Please choose a lower value for the `nthread` parameter.")
+                "\nFIX THIS by passing a lower value for the `nthread` "
+                "parameter or a higher number for `cpus_per_actor`.")
     else:
         params["nthread"] = cpus_per_actor
 
@@ -323,6 +333,15 @@ def train(
     max_actor_restarts = max_actor_restarts \
         if max_actor_restarts >= 0 else float("inf")
     _assert_ray_support()
+
+    if not isinstance(dtrain, RayDMatrix):
+        raise ValueError(
+            "The `dtrain` argument passed to `train()` is not a RayDMatrix, "
+            "but of type {}. "
+            "\nFIX THIS by instantiating a RayDMatrix first: "
+            "`dtrain = RayDMatrix(data=data, label=label)`.".format(
+                type(dtrain))
+        )
 
     checkpoint_prefix = kwargs.pop(
         "checkpoint_prefix", f".xgb_ray_{time.time()}")
@@ -430,6 +449,15 @@ def predict(
     max_actor_restarts = max_actor_restarts \
         if max_actor_restarts >= 0 else float("inf")
     _assert_ray_support()
+
+    if not isinstance(data, RayDMatrix):
+        raise ValueError(
+            "The `data` argument passed to `train()` is not a RayDMatrix, "
+            "but of type {}. "
+            "\nFIX THIS by instantiating a RayDMatrix first: "
+            "`data = RayDMatrix(data=data)`.".format(
+                type(data))
+        )
 
     tries = 0
     while tries <= max_actor_restarts:

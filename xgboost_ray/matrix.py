@@ -43,8 +43,10 @@ class _RayDMatrixLoader:
                 else:
                     raise ValueError(
                         "File or stream specified as data source, but "
-                        "filetype could not be detected. Please pass "
-                        "the `filetype` parameter to the RayDMatrix.")
+                        "filetype could not be detected. "
+                        "\nFIX THIS by passing] "
+                        "the `filetype` parameter to the RayDMatrix. Use the "
+                        "`RayFileType` enum for this.")
 
     def __hash__(self):
         return hash((
@@ -65,8 +67,10 @@ class _RayDMatrixLoader:
                 isinstance(self.label, pd.Series)):
             if type(self.data) != type(self.label):
                 raise ValueError(
-                    "If you pass a data object as label (e.g. a DataFrame), "
-                    "it has to be of the same type as the main data. Got"
+                    "The passed `data` and `label` types are not compatible."
+                    "\nFIX THIS by passing the same types to the "
+                    "`RayDMatrix` - e.g. a `pandas.DataFrame` as `data` "
+                    "and `label`. The `label` can always be a string. Got "
                     "{} for the main data and {} for the label.".format(
                         type(self.data), type(self.label)
                     ))
@@ -81,11 +85,13 @@ class _RayDMatrixLoader:
             local_df = self._load_data_parquet()
         else:
             raise ValueError(
-                "Unknown data source type: {} with FileType: {}. Supported "
+                "Unknown data source type: {} with FileType: {}."
+                "\nFIX THIS by passing a supported data type. Supported "
                 "data types include pandas.DataFrame, pandas.Series, "
-                "np.ndarray, and CSV/Parquet files. If you specify a file, "
-                "consider passing the `filetype` argument to specify the "
-                "type of the source.")
+                "np.ndarray, and CSV/Parquet file paths. If you specify a "
+                "file, path, consider passing the `filetype` argument to "
+                "specify the type of the source. Use the `RayFileType` "
+                "enum for that.")
 
         x, y = self._split_dataframe(local_df)
         n = len(local_df)
@@ -177,7 +183,10 @@ class RayDMatrix:
             indices = list(range(rank, n, num_actors))
         else:
             raise ValueError(f"Invalid value for `sharding` parameter: "
-                             f"{self.sharding}")
+                             f"{self.sharding}"
+                             f"\nFIX THIS by passing any item of the "
+                             f"`RayShardingMode` enum, for instance "
+                             f"`RayShardingMode.BATCH`.")
         return indices
 
     def __hash__(self):
@@ -202,4 +211,7 @@ def combine_data(sharding: RayShardingMode, data: Iterable):
         return res
     else:
         raise ValueError(f"Invalid value for `sharding` parameter: "
-                         f"{sharding}")
+                         f"{sharding}"
+                         f"\nFIX THIS by passing any item of the "
+                         f"`RayShardingMode` enum, for instance "
+                         f"`RayShardingMode.BATCH`.")
