@@ -86,8 +86,8 @@ class RayXGBoostActor:
 
         self._data: Dict[RayDMatrix, xgb.DMatrix] = {}
 
-        if "OMP_NUM_THREADS" in os.environ:
-            del os.environ["OMP_NUM_THREADS"]
+        os.environ["OMP_NUM_THREADS"] = str(sum(
+            cpu[1] for cpu in ray.get_resource_ids()["CPU"]))
 
     @property
     def checkpoint_file(self) -> Optional[str]:
@@ -115,8 +115,8 @@ class RayXGBoostActor:
               evals: Tuple[RayDMatrix, str],
               *args,
               **kwargs) -> Dict[str, Any]:
-        if "OMP_NUM_THREADS" in os.environ:
-            del os.environ["OMP_NUM_THREADS"]
+        os.environ["OMP_NUM_THREADS"] = str(sum(
+            cpu[1] for cpu in ray.get_resource_ids()["CPU"]))
 
         local_params = params.copy()
 
@@ -161,8 +161,8 @@ class RayXGBoostActor:
                 model: xgb.Booster,
                 data: RayDMatrix,
                 **kwargs):
-        if "OMP_NUM_THREADS" in os.environ:
-            del os.environ["OMP_NUM_THREADS"]
+        os.environ["OMP_NUM_THREADS"] = str(sum(
+            cpu[1] for cpu in ray.get_resource_ids()["CPU"]))
 
         if data not in self._data:
             self.load_data(data)
@@ -175,14 +175,14 @@ class RayXGBoostActor:
 def _create_actor(
         rank: int,
         num_actors: int,
-        num_cpus_per_worker: int,
-        num_gpus_per_worker: int,
+        num_cpus_per_actor: int,
+        num_gpus_per_actor: int,
         checkpoint_prefix: Optional[str] = None,
         checkpoint_path: str = "/tmp",
         checkpoint_frequency: int = 5):
     return RayXGBoostActor.options(
-        num_cpus=num_cpus_per_worker,
-        num_gpus=num_gpus_per_worker).remote(
+        num_cpus=num_cpus_per_actor,
+        num_gpus=num_gpus_per_actor).remote(
         rank=rank,
         num_actors=num_actors,
         checkpoint_prefix=checkpoint_prefix,
@@ -214,8 +214,8 @@ def _train(
         *args,
         evals=(),
         num_actors: int = 4,
-        cpus_per_worker: int = 0,
-        gpus_per_worker: int = -1,
+        cpus_per_actor: int = 0,
+        gpus_per_actor: int = -1,
         checkpoint_prefix: Optional[str] = None,
         checkpoint_path: str = "/tmp",
         checkpoint_frequency: int = 5,
@@ -225,27 +225,27 @@ def _train(
     if not ray.is_initialized():
         ray.init()
 
-    if gpus_per_worker == -1:
-        gpus_per_worker = 0
+    if gpus_per_actor == -1:
+        gpus_per_actor = 0
         if "tree_method" in params and params["tree_method"].startswith("gpu"):
-            gpus_per_worker = 1
+            gpus_per_actor = 1
 
-    if cpus_per_worker == 0:
+    if cpus_per_actor == 0:
         num_cpus = ray.utils.get_num_cpus()
-        cpus_per_worker = int(num_cpus//num_actors)
+        cpus_per_actor = int(num_cpus // num_actors)
 
     if "nthread" in params:
-        if params["nthread"] > cpus_per_worker:
+        if params["nthread"] > cpus_per_actor:
             raise ValueError(
                 "Specified number of threads greater than number of CPUs. "
                 "Please choose a lower value for the `nthread` parameter.")
     else:
-        params["nthread"] = cpus_per_worker
+        params["nthread"] = cpus_per_actor
 
     # Create remote actors
     actors = [
         _create_actor(
-            i, num_actors, cpus_per_worker, gpus_per_worker,
+            i, num_actors, cpus_per_actor, gpus_per_actor,
             checkpoint_prefix, checkpoint_path, checkpoint_frequency)
         for i in range(num_actors)
     ]
@@ -294,8 +294,10 @@ def train(
         dtrain: RayDMatrix,
         *args,
         evals=(),
+        evals_result: Optional[Dict] = None,
         num_actors: int = 4,
-        gpus_per_worker: int = -1,
+        cpus_per_actor: int = 0,
+        gpus_per_actor: int = -1,
         max_actor_restarts: int = 0,
         **kwargs):
     """Test
@@ -306,7 +308,7 @@ def train(
         evals (Union[List[Tuple], Tuple]): `evals` tuple passed to
             `xgboost.train()`.
         num_actors (int): Number of parallel Ray actors.
-        gpus_per_worker (int): Number of GPUs to be used per Ray actor.
+        gpus_per_actor (int): Number of GPUs to be used per Ray actor.
         max_actor_restarts (int): Number of retries when Ray actors fail.
             Defaults to 0 (no retries). Set to -1 for unlimited retries.
 
@@ -327,21 +329,26 @@ def train(
     checkpoint_path = kwargs.pop("checkpoint_path", "/tmp")
     checkpoint_frequency = kwargs.pop("checkpoint_frequency", 5)
 
+    bst = None
+    train_evals_result = {}
+
     tries = 0
     while tries <= max_actor_restarts:
         try:
-            return _train(
+            bst, train_evals_result = _train(
                 params,
                 dtrain,
                 *args,
                 evals=evals,
                 num_actors=num_actors,
-                gpus_per_worker=gpus_per_worker,
+                cpus_per_actor=cpus_per_actor,
+                gpus_per_actor=gpus_per_actor,
                 checkpoint_prefix=checkpoint_prefix,
                 checkpoint_path=checkpoint_path,
                 checkpoint_frequency=checkpoint_frequency,
                 **kwargs
             )
+            break
         except RayActorError:
             if tries+1 <= max_actor_restarts:
                 logger.warning(
@@ -359,14 +366,17 @@ def train(
                         checkpoint_path,
                         checkpoint_frequency))
             tries += 1
-    return None, {}
+    if isinstance(evals_result, dict):
+        evals_result.update(train_evals_result)
+    return bst
 
 
 def _predict(
         model: xgb.Booster,
         data: RayDMatrix,
         num_actors: int = 4,
-        gpus_per_worker: int = 0,
+        cpus_per_actor: int = 0,
+        gpus_per_actor: int = 0,
         **kwargs):
     _assert_ray_support()
 
@@ -376,7 +386,7 @@ def _predict(
     # Create remote actors
     actors = [
         _create_actor(
-            i, num_actors, gpus_per_worker)
+            i, num_actors, cpus_per_actor, gpus_per_actor)
         for i in range(num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
@@ -413,7 +423,8 @@ def predict(
         model: xgb.Booster,
         data: RayDMatrix,
         num_actors: int = 4,
-        gpus_per_worker: int = 0,
+        cpus_per_actor: int = 0,
+        gpus_per_actor: int = 0,
         max_actor_restarts: int = 0,
         **kwargs):
     max_actor_restarts = max_actor_restarts \
@@ -427,7 +438,8 @@ def predict(
                 model,
                 data,
                 num_actors=num_actors,
-                gpus_per_worker=gpus_per_worker,
+                cpus_per_actor=cpus_per_actor,
+                gpus_per_actor=gpus_per_actor,
                 **kwargs
             )
         except RayActorError:

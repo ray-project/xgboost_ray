@@ -22,16 +22,21 @@ def main():
         "max_depth": 3,
     }
 
+    evals_result = {}
+
     # Train the classifier
-    bst, evals = train(
+    bst = train(
         config,
         train_set,
         evals=[(test_set, "eval")],
+        evals_result=evals_result,
+        cpus_per_actor=1,
         max_actor_restarts=1,
         verbose_eval=False)
 
     bst.save_model('simple.xgb')
-    print("Final validation error: {:.4f}".format(evals["eval"]["error"][-1]))
+    print("Final validation error: {:.4f}".format(
+        evals_result["eval"]["error"][-1]))
 
 
 if __name__ == "__main__":

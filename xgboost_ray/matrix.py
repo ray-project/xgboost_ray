@@ -60,7 +60,9 @@ class _RayDMatrixLoader:
         if "OMP_NUM_THREADS" in os.environ:
             del os.environ["OMP_NUM_THREADS"]
 
-        if self.label is not None and not isinstance(self.label, str):
+        if self.label is not None and not isinstance(self.label, str) and \
+           not (isinstance(self.data, pd.DataFrame) and
+                isinstance(self.label, pd.Series)):
             if type(self.data) != type(self.label):
                 raise ValueError(
                     "If you pass a data object as label (e.g. a DataFrame), "
@@ -116,16 +118,14 @@ class _RayDMatrixLoader:
         return self.data
 
     def _load_data_csv(self):
-        if isinstance(self.data, Iterable):
-            data_sources = self.data
+        if isinstance(self.data, Iterable) and not isinstance(self.data, str):
+            return pd.concat([pd.read_csv(data_source, **self.kwargs)
+                              for data_source in self.data])
         else:
-            data_sources = [self.data]
-
-        return pd.concat([pd.read_csv(data_source, **self.kwargs)
-                          for data_source in data_sources])
+            return pd.read_csv(self.data, **self.kwargs)
 
     def _load_data_parquet(self):
-        if isinstance(self.data, Iterable):
+        if isinstance(self.data, Iterable) and not isinstance(self.data, str):
             return pd.concat([pd.read_parquet(data_source, **self.kwargs)
                               for data_source in self.data])
         else:

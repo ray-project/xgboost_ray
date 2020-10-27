@@ -22,10 +22,13 @@ def main():
         "eval_metric": ["logloss", "error"],
     }
 
+    evals_result = {}
+
     start = time.time()
-    bst, evals = train(
+    bst = train(
         config,
         dtrain,
+        evals_result=evals_result,
         max_actor_restarts=1,
         num_boost_round=100,
         evals=[(dtrain, "train")])
@@ -33,7 +36,8 @@ def main():
     print(f"TRAIN TIME TAKEN: {taken:.2f} seconds")
 
     bst.save_model('higgs.xgb')
-    print("Final training error: {:.4f}".format(evals["train"]["error"][-1]))
+    print("Final training error: {:.4f}".format(
+        evals_result["train"]["error"][-1]))
 
 
 if __name__ == "__main__":
