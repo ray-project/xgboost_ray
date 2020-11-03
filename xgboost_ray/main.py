@@ -205,12 +205,14 @@ def _create_actor(
         num_actors: int,
         num_cpus_per_actor: int,
         num_gpus_per_actor: int,
+        resources_per_actor: Optional[Dict] = None,
         checkpoint_prefix: Optional[str] = None,
         checkpoint_path: str = "/tmp",
         checkpoint_frequency: int = 5):
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
-        num_gpus=num_gpus_per_actor).remote(
+        num_gpus=num_gpus_per_actor,
+        resources=resources_per_actor).remote(
         rank=rank,
         num_actors=num_actors,
         checkpoint_prefix=checkpoint_prefix,
@@ -244,6 +246,7 @@ def _train(
         num_actors: int = 4,
         cpus_per_actor: int = 0,
         gpus_per_actor: int = -1,
+        resources_per_actor: Optional[Dict] = None,
         checkpoint_prefix: Optional[str] = None,
         checkpoint_path: str = "/tmp",
         checkpoint_frequency: int = 5,
@@ -277,6 +280,7 @@ def _train(
     actors = [
         _create_actor(
             i, num_actors, cpus_per_actor, gpus_per_actor,
+            resources_per_actor,
             checkpoint_prefix, checkpoint_path, checkpoint_frequency)
         for i in range(num_actors)
     ]
@@ -329,6 +333,7 @@ def train(
         num_actors: int = 4,
         cpus_per_actor: int = 0,
         gpus_per_actor: int = -1,
+        resources_per_actor: Optional[Dict] = None,
         max_actor_restarts: int = 0,
         **kwargs):
     """Test
@@ -339,7 +344,10 @@ def train(
         evals (Union[List[Tuple], Tuple]): `evals` tuple passed to
             `xgboost.train()`.
         num_actors (int): Number of parallel Ray actors.
+        cpus_per_actor (int): Number of CPUs to be used per Ray actor.
         gpus_per_actor (int): Number of GPUs to be used per Ray actor.
+        resources_per_actor (Optional[Dict]): Dict of additional resources
+            required per Ray actor.
         max_actor_restarts (int): Number of retries when Ray actors fail.
             Defaults to 0 (no retries). Set to -1 for unlimited retries.
 
@@ -383,6 +391,7 @@ def train(
                 num_actors=num_actors,
                 cpus_per_actor=cpus_per_actor,
                 gpus_per_actor=gpus_per_actor,
+                resources_per_actor=resources_per_actor,
                 checkpoint_prefix=checkpoint_prefix,
                 checkpoint_path=checkpoint_path,
                 checkpoint_frequency=checkpoint_frequency,
@@ -417,6 +426,7 @@ def _predict(
         num_actors: int = 4,
         cpus_per_actor: int = 0,
         gpus_per_actor: int = 0,
+        resources_per_actor: Optional[Dict] = None,
         **kwargs):
     _assert_ray_support()
 
@@ -426,7 +436,8 @@ def _predict(
     # Create remote actors
     actors = [
         _create_actor(
-            i, num_actors, cpus_per_actor, gpus_per_actor)
+            i, num_actors, cpus_per_actor, gpus_per_actor,
+            resources_per_actor)
         for i in range(num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
@@ -465,6 +476,7 @@ def predict(
         num_actors: int = 4,
         cpus_per_actor: int = 0,
         gpus_per_actor: int = 0,
+        resources_per_actor: Optional[Dict] = None,
         max_actor_restarts: int = 0,
         **kwargs):
     max_actor_restarts = max_actor_restarts \
@@ -489,6 +501,7 @@ def predict(
                 num_actors=num_actors,
                 cpus_per_actor=cpus_per_actor,
                 gpus_per_actor=gpus_per_actor,
+                resources_per_actor=resources_per_actor,
                 **kwargs
             )
         except RayActorError:
