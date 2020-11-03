@@ -87,7 +87,8 @@ def _set_omp_num_threads():
     if ray_cpus:
         os.environ["OMP_NUM_THREADS"] = str(int(ray_cpus))
     else:
-        del os.environ["OMP_NUM_THREADS"]
+        if "OMP_NUM_THREADS" in os.environ:
+            del os.environ["OMP_NUM_THREADS"]
     return int(float(os.environ.get("OMP_NUM_THREADS", "0.0")))
 
 
