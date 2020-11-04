@@ -160,7 +160,7 @@ class RayDMatrix:
         x_ref, y_ref = get_data.options(
             num_cpus=0,
             resources={
-                f"node:{self.memory_node_ip}": 0.1
+                f"node:{self.memory_node_ip}": 0.01
             },
             num_returns=2).remote(self.x_ref, self.y_ref, self.sharding, rank,
                                   num_actors)
