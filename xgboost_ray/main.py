@@ -18,15 +18,14 @@ except ImportError:
 
 import xgboost as xgb
 
-
-from xgboost_ray.matrix import RayDMatrix, Data, combine_data
+from xgboost_ray.matrix import RayDMatrix, combine_data
 
 
 def _assert_ray_support():
     if not RAY_INSTALLED:
         raise ImportError(
-            'Ray needs to be installed in order to use this module. '
-            'Try: `pip install ray`')
+            "Ray needs to be installed in order to use this module. "
+            "Try: `pip install ray`")
 
 
 def _start_rabit_tracker(num_workers: int):
@@ -34,7 +33,7 @@ def _start_rabit_tracker(num_workers: int):
     their results."""
     host = get_node_ip_address()
 
-    env = {'DMLC_NUM_WORKER': num_workers}
+    env = {"DMLC_NUM_WORKER": num_workers}
     rabit_tracker = xgb.RabitTracker(hostIP=host, nslave=num_workers)
 
     # Get tracker Host + IP
@@ -51,10 +50,10 @@ def _start_rabit_tracker(num_workers: int):
 
 class RabitContext:
     """Context to connect a worker to a rabit tracker"""
+
     def __init__(self, actor_id, args):
         self.args = args
-        self.args.append(
-            ('DMLC_TASK_ID=[xgboost.ray]:' + actor_id).encode())
+        self.args.append(("DMLC_TASK_ID=[xgboost.ray]:" + actor_id).encode())
 
     def __enter__(self):
         xgb.rabit.init(self.args)
@@ -67,8 +66,7 @@ def _ray_get_actor_cpus():
     # Get through resource IDs
     resource_ids = ray.get_resource_ids()
     if "CPU" in resource_ids:
-        return sum(
-            cpu[1] for cpu in resource_ids["CPU"])
+        return sum(cpu[1] for cpu in resource_ids["CPU"])
     return None
 
 
@@ -77,8 +75,8 @@ def _ray_get_cluster_cpus():
 
 
 def _get_max_node_cpus():
-    max_node_cpus = max(node.get("Resources", {}).get("CPU", 0.0)
-                        for node in ray.nodes())
+    max_node_cpus = max(
+        node.get("Resources", {}).get("CPU", 0.0) for node in ray.nodes())
     return max_node_cpus if max_node_cpus > 0.0 else _ray_get_cluster_cpus()
 
 
@@ -119,14 +117,15 @@ class RayXGBoostActor:
 
     @property
     def checkpoint_file(self) -> Optional[str]:
-        return _checkpoint_file(
-            self.checkpoint_path, self.checkpoint_prefix, self.rank)
+        return _checkpoint_file(self.checkpoint_path, self.checkpoint_prefix,
+                                self.rank)
 
     @property
     def _save_checkpoint_callback(self):
         def callback(env):
             if env.iteration % self.checkpoint_frequency == 0:
                 env.model.save_model(self.checkpoint_file)
+
         return callback
 
     def load_data(self, data: RayDMatrix):
@@ -136,18 +135,14 @@ class RayXGBoostActor:
         matrix = xgb.DMatrix(x, label=y)
         self._data[data] = matrix
 
-    def train(self,
-              rabit_args: List[str],
-              params: Dict[str, Any],
-              dtrain: RayDMatrix,
-              evals: Tuple[RayDMatrix, str],
-              *args,
+    def train(self, rabit_args: List[str], params: Dict[str, Any],
+              dtrain: RayDMatrix, evals: Tuple[RayDMatrix, str], *args,
               **kwargs) -> Dict[str, Any]:
         num_threads = _set_omp_num_threads()
 
         local_params = params.copy()
 
-        if not "nthread" in local_params:
+        if "nthread" not in local_params:
             if num_threads > 0:
                 local_params["num_threads"] = num_threads
             else:
@@ -183,14 +178,10 @@ class RayXGBoostActor:
                 *args,
                 evals=local_evals,
                 evals_result=evals_result,
-                **kwargs
-            )
+                **kwargs)
             return {"bst": bst, "evals_result": evals_result}
 
-    def predict(self,
-                model: xgb.Booster,
-                data: RayDMatrix,
-                **kwargs):
+    def predict(self, model: xgb.Booster, data: RayDMatrix, **kwargs):
         _set_omp_num_threads()
 
         if data not in self._data:
@@ -201,24 +192,24 @@ class RayXGBoostActor:
         return predictions
 
 
-def _create_actor(
-        rank: int,
-        num_actors: int,
-        num_cpus_per_actor: int,
-        num_gpus_per_actor: int,
-        resources_per_actor: Optional[Dict] = None,
-        checkpoint_prefix: Optional[str] = None,
-        checkpoint_path: str = "/tmp",
-        checkpoint_frequency: int = 5):
+def _create_actor(rank: int,
+                  num_actors: int,
+                  num_cpus_per_actor: int,
+                  num_gpus_per_actor: int,
+                  resources_per_actor: Optional[Dict] = None,
+                  checkpoint_prefix: Optional[str] = None,
+                  checkpoint_path: str = "/tmp",
+                  checkpoint_frequency: int = 5):
+
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
         resources=resources_per_actor).remote(
-        rank=rank,
-        num_actors=num_actors,
-        checkpoint_prefix=checkpoint_prefix,
-        checkpoint_path=checkpoint_path,
-        checkpoint_frequency=checkpoint_frequency)
+            rank=rank,
+            num_actors=num_actors,
+            checkpoint_prefix=checkpoint_prefix,
+            checkpoint_path=checkpoint_path,
+            checkpoint_frequency=checkpoint_frequency)
 
 
 def _trigger_data_load(actor, dtrain, evals):
@@ -228,30 +219,26 @@ def _trigger_data_load(actor, dtrain, evals):
     return wait_load
 
 
-def _cleanup(
-        checkpoint_prefix: str,
-        checkpoint_path: str,
-        num_actors: int):
+def _cleanup(checkpoint_prefix: str, checkpoint_path: str, num_actors: int):
     for i in range(num_actors):
-        checkpoint_file = _checkpoint_file(
-            checkpoint_path, checkpoint_prefix, i)
+        checkpoint_file = _checkpoint_file(checkpoint_path, checkpoint_prefix,
+                                           i)
         if os.path.exists(checkpoint_file):
             os.remove(checkpoint_file)
 
 
-def _train(
-        params: Dict,
-        dtrain: RayDMatrix,
-        *args,
-        evals=(),
-        num_actors: int = 4,
-        cpus_per_actor: int = 0,
-        gpus_per_actor: int = -1,
-        resources_per_actor: Optional[Dict] = None,
-        checkpoint_prefix: Optional[str] = None,
-        checkpoint_path: str = "/tmp",
-        checkpoint_frequency: int = 5,
-        **kwargs):
+def _train(params: Dict,
+           dtrain: RayDMatrix,
+           *args,
+           evals=(),
+           num_actors: int = 4,
+           cpus_per_actor: int = 0,
+           gpus_per_actor: int = -1,
+           resources_per_actor: Optional[Dict] = None,
+           checkpoint_prefix: Optional[str] = None,
+           checkpoint_path: str = "/tmp",
+           checkpoint_frequency: int = 5,
+           **kwargs):
     _assert_ray_support()
 
     if not ray.is_initialized():
@@ -265,8 +252,7 @@ def _train(
     if cpus_per_actor <= 0:
         cluster_cpus = _ray_get_cluster_cpus() or 1
         cpus_per_actor = min(
-            int(_get_max_node_cpus() or 1),
-            int(cluster_cpus // num_actors))
+            int(_get_max_node_cpus() or 1), int(cluster_cpus // num_actors))
 
     if "nthread" in params:
         if params["nthread"] > cpus_per_actor:
@@ -279,11 +265,9 @@ def _train(
 
     # Create remote actors
     actors = [
-        _create_actor(
-            i, num_actors, cpus_per_actor, gpus_per_actor,
-            resources_per_actor,
-            checkpoint_prefix, checkpoint_path, checkpoint_frequency)
-        for i in range(num_actors)
+        _create_actor(i, num_actors, cpus_per_actor, gpus_per_actor,
+                      resources_per_actor, checkpoint_prefix, checkpoint_path,
+                      checkpoint_frequency) for i in range(num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
 
@@ -298,7 +282,7 @@ def _train(
 
     # Start tracker
     env = _start_rabit_tracker(num_actors)
-    rabit_args = [('%s=%s' % item).encode() for item in env.items()]
+    rabit_args = [("%s=%s" % item).encode() for item in env.items()]
 
     # Train
     fut = [
@@ -325,18 +309,17 @@ def _train(
     return bst, evals_result
 
 
-def train(
-        params: Dict,
-        dtrain: RayDMatrix,
-        *args,
-        evals=(),
-        evals_result: Optional[Dict] = None,
-        num_actors: int = 4,
-        cpus_per_actor: int = 0,
-        gpus_per_actor: int = -1,
-        resources_per_actor: Optional[Dict] = None,
-        max_actor_restarts: int = 0,
-        **kwargs):
+def train(params: Dict,
+          dtrain: RayDMatrix,
+          *args,
+          evals=(),
+          evals_result: Optional[Dict] = None,
+          num_actors: int = 4,
+          cpus_per_actor: int = 0,
+          gpus_per_actor: int = -1,
+          resources_per_actor: Optional[Dict] = None,
+          max_actor_restarts: int = 0,
+          **kwargs):
     """Test
 
     Args:
@@ -370,11 +353,10 @@ def train(
             "but of type {}. "
             "\nFIX THIS by instantiating a RayDMatrix first: "
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(
-                type(dtrain))
-        )
+                type(dtrain)))
 
-    checkpoint_prefix = kwargs.pop(
-        "checkpoint_prefix", f".xgb_ray_{time.time()}")
+    checkpoint_prefix = kwargs.pop("checkpoint_prefix",
+                                   f".xgb_ray_{time.time()}")
     checkpoint_path = kwargs.pop("checkpoint_path", "/tmp")
     checkpoint_frequency = kwargs.pop("checkpoint_frequency", 5)
 
@@ -396,11 +378,10 @@ def train(
                 checkpoint_prefix=checkpoint_prefix,
                 checkpoint_path=checkpoint_path,
                 checkpoint_frequency=checkpoint_frequency,
-                **kwargs
-            )
+                **kwargs)
             break
         except RayActorError:
-            if tries+1 <= max_actor_restarts:
+            if tries + 1 <= max_actor_restarts:
                 logger.warning(
                     "A Ray actor died during training. Trying to restart "
                     "and continue training from last checkpoint.")
@@ -411,24 +392,21 @@ def train(
                     "stored at `{}` with prefix `{}` - you can pass these "
                     "parameters as `checkpoint_path` and `checkpoint_prefix` "
                     "to the `train()` function to try to continue "
-                    "the training.".format(
-                        max_actor_restarts,
-                        checkpoint_path,
-                        checkpoint_frequency))
+                    "the training.".format(max_actor_restarts, checkpoint_path,
+                                           checkpoint_frequency))
             tries += 1
     if isinstance(evals_result, dict):
         evals_result.update(train_evals_result)
     return bst
 
 
-def _predict(
-        model: xgb.Booster,
-        data: RayDMatrix,
-        num_actors: int = 4,
-        cpus_per_actor: int = 0,
-        gpus_per_actor: int = 0,
-        resources_per_actor: Optional[Dict] = None,
-        **kwargs):
+def _predict(model: xgb.Booster,
+             data: RayDMatrix,
+             num_actors: int = 4,
+             cpus_per_actor: int = 0,
+             gpus_per_actor: int = 0,
+             resources_per_actor: Optional[Dict] = None,
+             **kwargs):
     _assert_ray_support()
 
     if not ray.is_initialized():
@@ -436,10 +414,8 @@ def _predict(
 
     # Create remote actors
     actors = [
-        _create_actor(
-            i, num_actors, cpus_per_actor, gpus_per_actor,
-            resources_per_actor)
-        for i in range(num_actors)
+        _create_actor(i, num_actors, cpus_per_actor, gpus_per_actor,
+                      resources_per_actor) for i in range(num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
 
@@ -456,10 +432,7 @@ def _predict(
     logger.info("[RayXGBoost] Starting XGBoost prediction.")
 
     # Train
-    fut = [
-        actor.predict.remote(model_ref, data, **kwargs)
-        for actor in actors
-    ]
+    fut = [actor.predict.remote(model_ref, data, **kwargs) for actor in actors]
 
     try:
         actor_results = ray.get(fut)
@@ -471,15 +444,14 @@ def _predict(
     return combine_data(data.sharding, actor_results)
 
 
-def predict(
-        model: xgb.Booster,
-        data: RayDMatrix,
-        num_actors: int = 4,
-        cpus_per_actor: int = 0,
-        gpus_per_actor: int = 0,
-        resources_per_actor: Optional[Dict] = None,
-        max_actor_restarts: int = 0,
-        **kwargs):
+def predict(model: xgb.Booster,
+            data: RayDMatrix,
+            num_actors: int = 4,
+            cpus_per_actor: int = 0,
+            gpus_per_actor: int = 0,
+            resources_per_actor: Optional[Dict] = None,
+            max_actor_restarts: int = 0,
+            **kwargs):
     max_actor_restarts = max_actor_restarts \
         if max_actor_restarts >= 0 else float("inf")
     _assert_ray_support()
@@ -489,9 +461,7 @@ def predict(
             "The `data` argument passed to `train()` is not a RayDMatrix, "
             "but of type {}. "
             "\nFIX THIS by instantiating a RayDMatrix first: "
-            "`data = RayDMatrix(data=data)`.".format(
-                type(data))
-        )
+            "`data = RayDMatrix(data=data)`.".format(type(data)))
 
     tries = 0
     while tries <= max_actor_restarts:
@@ -503,10 +473,9 @@ def predict(
                 cpus_per_actor=cpus_per_actor,
                 gpus_per_actor=gpus_per_actor,
                 resources_per_actor=resources_per_actor,
-                **kwargs
-            )
+                **kwargs)
         except RayActorError:
-            if tries+1 <= max_actor_restarts:
+            if tries + 1 <= max_actor_restarts:
                 logger.warning(
                     "A Ray actor died during prediction. Trying to restart "
                     "prediction from scratch.")
