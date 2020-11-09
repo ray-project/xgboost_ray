@@ -1,6 +1,6 @@
 import math
 from enum import Enum
-from typing import Union, Optional, Tuple, Iterable
+from typing import Union, Optional, Tuple, Iterable, List
 
 import numpy as np
 import pandas as pd
@@ -9,7 +9,7 @@ import os
 
 import ray
 
-Data = Union[str, np.ndarray, pd.DataFrame, pd.Series]
+Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series]
 
 
 class RayFileType(Enum):
@@ -51,7 +51,7 @@ class _RayDMatrixLoader:
     def __hash__(self):
         return hash((id(self.data), id(self.label), self.filetype))
 
-    def load_data(self):
+    def load_data(self, num_actors: int, sharding: RayShardingMode):
         """
         Load data into memory
         """
@@ -94,7 +94,16 @@ class _RayDMatrixLoader:
         x, y = self._split_dataframe(local_df)
         n = len(local_df)
 
-        return ray.put(x), ray.put(y), n
+        x_refs = {}
+        y_refs = {}
+        for i in range(num_actors):
+            indices = _get_sharding_indices(sharding, i, num_actors, n)
+            actor_x = x.iloc[indices]
+            actor_y = y.iloc[indices]
+            x_refs[i] = ray.put(actor_x)
+            y_refs[i] = ray.put(actor_y)
+
+        return x_refs, y_refs, n
 
     def _split_dataframe(self, local_data: pd.DataFrame) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
@@ -142,54 +151,52 @@ class RayDMatrix:
     def __init__(self,
                  data: Data,
                  label: Optional[Data] = None,
+                 num_actors: Optional[int] = None,
                  filetype: Optional[RayFileType] = None,
                  sharding: RayShardingMode = RayShardingMode.INTERLEAVED,
                  **kwargs):
 
-        self.sharding = sharding
         self.memory_node_ip = ray.services.get_node_ip_address()
+        self.num_actors = num_actors
+        self.sharding = sharding
 
-        loader = _RayDMatrixLoader(
+        self.loader = _RayDMatrixLoader(
             data=data, label=label, filetype=filetype, **kwargs)
 
-        self.x_ref, self.y_ref, self.n = loader.load_data()
+        self.x_ref = None
+        self.y_ref = None
+        self.n = None
 
-    def get_data(self, rank: int, num_actors: int) -> \
+        self.loaded = False
+
+        if num_actors is not None:
+            self.load_data(num_actors)
+
+    def load_data(self, num_actors: Optional[int] = None):
+        if not self.loaded:
+            if num_actors is not None:
+                self.num_actors = num_actors
+            self.x_ref, self.y_ref, self.n = self.loader.load_data(
+                self.num_actors, self.sharding)
+            self.loaded = True
+
+    def get_data(self, rank: int) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+        self.load_data()
 
-        x_ref, y_ref = get_data.options(
-            num_cpus=0,
-            resources={
-                f"node:{self.memory_node_ip}": 0.01
-            },
-            num_returns=2).remote(self.x_ref, self.y_ref, self.sharding, rank,
-                                  num_actors)
+        x_ref = self.x_ref[rank]
+        y_ref = self.y_ref[rank]
 
         x_df, y_df = ray.get([x_ref, y_ref])
 
         return x_df, y_df
 
     def __hash__(self):
-        return hash((self.x_ref, self.y_ref, self.n, self.sharding))
+        return hash((tuple(self.x_ref.values()), tuple(self.y_ref.values()),
+                     self.n, self.sharding))
 
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
-
-
-@ray.remote
-def get_data(x_df, y_df, sharding: RayShardingMode, rank: int,
-             num_actors: int) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-
-    n = len(x_df)
-    indices = _get_sharding_indices(sharding, rank, num_actors, n)
-
-    if x_df is not None:
-        x_df = x_df.iloc[indices]
-
-    if y_df is not None:
-        y_df = y_df.iloc[indices]
-
-    return x_df, y_df
 
 
 def _get_sharding_indices(sharding: RayShardingMode, rank: int,
