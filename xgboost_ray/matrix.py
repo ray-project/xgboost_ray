@@ -254,7 +254,8 @@ class RayDMatrix:
     def load_data(self, num_actors: Optional[int] = None):
         if not self.loaded:
             if num_actors is not None:
-                if self.num_actors is not None:
+                if self.num_actors is not None \
+                        and num_actors != self.num_actors:
                     raise ValueError(
                         f"The `RayDMatrix` was initialized or `load_data()`"
                         f"has been called with a different numbers of"
