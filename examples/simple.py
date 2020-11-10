@@ -33,7 +33,7 @@ def main():
         max_actor_restarts=1,
         verbose_eval=False)
 
-    bst.save_model('simple.xgb')
+    bst.save_model("simple.xgb")
     print("Final validation error: {:.4f}".format(
         evals_result["eval"]["error"][-1]))
 

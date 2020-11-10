@@ -3,8 +3,6 @@ import time
 
 from xgboost_ray import train, RayDMatrix
 
-import pandas as pd
-
 
 def main():
     # Example adapted from this blog post:
@@ -14,8 +12,7 @@ def main():
     fname = "HIGGS.csv"
     colnames = ["label"] + ["feature-%02d" % i for i in range(1, 29)]
 
-    dtrain = RayDMatrix(
-        os.path.abspath(fname), label="label", names=colnames)
+    dtrain = RayDMatrix(os.path.abspath(fname), label="label", names=colnames)
 
     config = {
         "tree_method": "hist",
@@ -35,7 +32,7 @@ def main():
     taken = time.time() - start
     print(f"TRAIN TIME TAKEN: {taken:.2f} seconds")
 
-    bst.save_model('higgs.xgb')
+    bst.save_model("higgs.xgb")
     print("Final training error: {:.4f}".format(
         evals_result["train"]["error"][-1]))
 

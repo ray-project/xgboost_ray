@@ -57,7 +57,12 @@ Data loading
 
 Data is passed to `xgboost_ray` via a `RayDMatrix` object.
 
+The `RayDMatrix` lazy loads data and stores it sharded in the
+Ray object store. The Ray XGBoost actors then access these
+shards to run their training on. 
 
+A `RayDMatrix` support various data and file types, like
+Pandas DataFrames, Numpy Arrays, CSV files and Parquet files.
 
 Example loading multiple parquet files:
 
@@ -79,7 +84,6 @@ columns = [
 
 dtrain = RayDMatrix(
     path, 
-    num_actors=4,
     label="passenger_count",  # Will select this column as the label
     columns=columns, 
     filetype=RayFileType.PARQUET)
@@ -109,6 +113,7 @@ the [examples folder](examples/):
 * [Simple sklearn breastcancer dataset example](examples/simple.py) (requires `sklearn`)
 * [HIGGS classification example](examples/higgs.py) 
 ([download dataset (2.6 GB)](https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz))
+* [HIGGS classification example with Parquet](examples/higgs_parquet.py) (uses the same dataset) 
 
 Resources
 ---------
