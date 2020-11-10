@@ -52,6 +52,40 @@ print("Final training error: {:.4f}".format(
     evals_result["train"]["error"][-1]))
 ```
 
+Data loading
+------------
+
+Data is passed to `xgboost_ray` via a `RayDMatrix` object.
+
+
+
+Example loading multiple parquet files:
+
+```python
+import glob    
+from xgboost_ray import RayDMatrix, RayFileType
+
+# We can also pass a list of files
+path = list(sorted(glob.glob("/data/nyc-taxi/*/*/*.parquet")))
+
+# This argument will be passed to `pd.read_parquet()`
+columns = [
+    'passenger_count',
+    'trip_distance', 'pickup_longitude', 'pickup_latitude',
+    'dropoff_longitude', 'dropoff_latitude',
+    'fare_amount', 'extra', 'mta_tax', 'tip_amount',
+    'tolls_amount', 'total_amount'
+]
+
+dtrain = RayDMatrix(
+    path, 
+    num_actors=4,
+    label="passenger_count",  # Will select this column as the label
+    columns=columns, 
+    filetype=RayFileType.PARQUET)
+```
+
+
 
 Resources
 ---------
@@ -63,6 +97,8 @@ machine sizes, it makes sense to limit the number of CPUs per actor
 by setting the `cpus_per_actor` argument. Consider always
 setting this explicitly.
 
+The number of XGBoost actors always has to be set manually with
+the `num_actors` argument. 
 
 More examples
 -------------

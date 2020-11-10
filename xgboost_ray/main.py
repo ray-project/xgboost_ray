@@ -1,5 +1,7 @@
+import numpy as np
 import os
 import time
+
 from threading import Thread
 from typing import Tuple, Dict, Any, List, Optional
 
@@ -98,6 +100,27 @@ def _checkpoint_file(path: str, prefix: str, rank: int):
 
 @ray.remote
 class RayXGBoostActor:
+    """Remote Ray XGBoost actor class.
+
+    This remote actor handles local training and prediction of one data
+    shard. It initializes a Rabit context, thus connecting to the Rabit
+    all-reduce ring, and initializes local training, sending updates
+    to other workers.
+
+    The actor also takes care of checkpointing (locally), enabling
+    training to resume after it has been stopped.
+
+    Args:
+        rank (int): Rank of the actor. Must be ``0 <= rank < num_actors``.
+        num_actors (int): Total number of actors.
+        checkpoint_prefix (str): Prefix for checkpoint files.
+        checkpoint_path (str): Path to store checkpoints at. Defaults to
+            ``/tmp``
+        checkpoint_frequency (int): How often to store checkpoints. Defaults
+            to ``5``, saving checkpoints every 5 boosting rounds.
+
+    """
+
     def __init__(self,
                  rank: int,
                  num_actors: int,
@@ -321,13 +344,19 @@ def train(params: Dict,
           resources_per_actor: Optional[Dict] = None,
           max_actor_restarts: int = 0,
           **kwargs):
-    """Test
+    """Distributed XGBoost training via Ray.
+
+    This function will connect to a Ray cluster, create ``num_actors``
+    remote actors, send data shards to them, and have them train an
+    XGBoost classifier. The XGBoost parameters will be shared and combined
+    via Rabit's all-reduce protocol.
 
     Args:
-        params (Dict): parameter dict passed to `xgboost.train()`
+        params (Dict): parameter dict passed to ``xgboost.train()``
         dtrain (RayDMatrix): Data object containing the training data.
-        evals (Union[List[Tuple], Tuple]): `evals` tuple passed to
-            `xgboost.train()`.
+        evals (Union[List[Tuple], Tuple]): ``evals`` tuple passed to
+            ``xgboost.train()``.
+        evals_result (Optional[Dict]): Dict to store evaluation results in.
         num_actors (int): Number of parallel Ray actors.
         cpus_per_actor (int): Number of CPUs to be used per Ray actor.
         gpus_per_actor (int): Number of GPUs to be used per Ray actor.
@@ -338,11 +367,13 @@ def train(params: Dict,
 
     Keyword Args:
         checkpoint_prefix (str): Prefix for the checkpoint filenames.
-            Defaults to `.xgb_ray_{time.time()}`.
+            Defaults to ``.xgb_ray_{time.time()}``.
         checkpoint_path (str): Path to store checkpoints at. Defaults to
-            `/tmp`
+            ``/tmp``
         checkpoint_frequency (int): How often to save checkpoints. Defaults
-            to 5.
+            to ``5``.
+
+    Returns: An ``xgboost.Booster`` object.
     """
     max_actor_restarts = max_actor_restarts \
         if max_actor_restarts >= 0 else float("inf")
@@ -400,7 +431,7 @@ def train(params: Dict,
                     "parameters as `checkpoint_path` and `checkpoint_prefix` "
                     "to the `train()` function to try to continue "
                     "the training.".format(max_actor_restarts, checkpoint_path,
-                                           checkpoint_frequency))
+                                           checkpoint_prefix))
             tries += 1
     if isinstance(evals_result, dict):
         evals_result.update(train_evals_result)
@@ -458,7 +489,28 @@ def predict(model: xgb.Booster,
             gpus_per_actor: int = 0,
             resources_per_actor: Optional[Dict] = None,
             max_actor_restarts: int = 0,
-            **kwargs):
+            **kwargs) -> Optional[np.ndarray]:
+    """Distributed XGBoost predict via Ray.
+
+    This function will connect to a Ray cluster, create ``num_actors``
+    remote actors, send data shards to them, and have them predict labels
+    using an XGBoost booster model. The results are then combined and
+    returned.
+
+    Args:
+        model (xgb.Booster): Booster object to call for prediction.
+        data (RayDMatrix): Data object containing the prediction data.
+        num_actors (int): Number of parallel Ray actors.
+        cpus_per_actor (int): Number of CPUs to be used per Ray actor.
+        gpus_per_actor (int): Number of GPUs to be used per Ray actor.
+        resources_per_actor (Optional[Dict]): Dict of additional resources
+            required per Ray actor.
+        max_actor_restarts (int): Number of retries when Ray actors fail.
+            Defaults to 0 (no retries). Set to -1 for unlimited retries.
+
+    Returns: ``np.ndarray`` containing the predicted labels.
+
+    """
     max_actor_restarts = max_actor_restarts \
         if max_actor_restarts >= 0 else float("inf")
     _assert_ray_support()

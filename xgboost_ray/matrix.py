@@ -148,12 +148,91 @@ class _RayDMatrixLoader:
 
 
 class RayDMatrix:
+    """XGBoost on Ray DMatrix class.
+
+    This is the data object that the training and prediction functions
+    expect. This wrapper manages distributed data by sharding the data for the
+    workers and storing the shards in the object store.
+
+    If this class is called without the ``num_actors`` argument, it will
+    be lazy loaded. Thus, it will return immediately and only load the data
+    and store it in the Ray object store after ``load_data(num_actors)`` or
+    ``get_data(rank, num_actors)`` is called.
+
+    If this class is instantiated with the ``num_actors`` argument, it will
+    directly load the data and store them in the object store. If this should
+    be deferred, pass ``lazy=True`` as an argument.
+
+    Loading the data will store it in the Ray object store. This object then
+    stores references to the data shards in the Ray object store. Actors
+    can request these shards with the ``get_data(rank)`` method, returning
+    dataframes according to the actor rank.
+
+    The total number of actors has to remain constant and cannot be changed
+    once it has been set.
+
+    Args:
+        data: Data object. Can be a pandas dataframe, pandas series,
+            numpy array, string pointing to a csv or parquet file, or
+            list of strings pointing to csv or parquet files.
+        label: Optional label object. Can be a pandas series,
+            numpy array, string pointing to a csv or parquet file, or
+            a string indicating the column of the data dataframe that
+            contains the label. If this is not a string it must be of the
+            same type as the data argument.
+        num_actors: Number of actors to shard this data for. If this is
+            not None, data will be loaded and stored into the object store
+            after initialization. If this is None, it will be set by
+            the ``xgboost_ray.train()`` function, and it will be loaded and
+            stored in the object store then. Defaults to None (
+        filetype (RayFileType): Type of data to read. This is disregarded if
+            a data object like a pandas dataframe is passed as the ``data``
+            argument. For filenames, the filetype is automaticlly detected
+            via the file name (e.g. ``.csv`` will be detected as
+            ``RayFileType.CSV``). Passing this argument will overwrite the
+            detected filename. If the filename cannot be determined from
+            the ``data`` object, passing this is mandatory. Defaults to
+            ``None`` (auto detection).
+        sharding (RayShardingMode): How to shard the data for different
+            workers. ``RayShardingMode.INTERLEAVED`` will divide the data
+            per row, i.e. every i-th row will be passed to the first worker,
+            every (i+1)th row to the second worker, etc.
+            ``RayShardingMode.BATCH`` will divide the data in batches, i.e.
+            the first 0-(m-1) rows will be passed to the first worker, the
+            m-(2m-1) rows to the second worker, etc. Defaults to
+            ``RayShardingMode.INTERLEAVED``.
+        lazy (bool): If ``num_actors`` is passed, setting this to ``True``
+            will defer data loading and storing until ``load_data()`` or
+            ``get_data()`` is called. Defaults to ``False``.
+        **kwargs: Keyword arguments will be passed to the data loading
+            function. For instance, with ``RayFileType.PARQUET``, these
+            arguments will be passed to ``pandas.read_parquet()``.
+
+
+    .. code-block:: python
+
+        from xgboost_ray import RayDMatrix, RayFileType
+
+        files = ["data_one.parquet", "data_two.parquet"]
+
+        columns = ["feature_1", "feature_2", "label_column"]
+
+        dtrain = RayDMatrix(
+            files,
+            num_actors=4,  # Will shard the data for four workers
+            label="label_column",  # Will select this column as the label
+            columns=columns,  # Will be passed to `pandas.read_parquet()`
+            filetype=RayFileType.PARQUET)
+
+    """
+
     def __init__(self,
                  data: Data,
                  label: Optional[Data] = None,
                  num_actors: Optional[int] = None,
                  filetype: Optional[RayFileType] = None,
                  sharding: RayShardingMode = RayShardingMode.INTERLEAVED,
+                 lazy: bool = False,
                  **kwargs):
 
         self.memory_node_ip = ray.services.get_node_ip_address()
@@ -169,20 +248,36 @@ class RayDMatrix:
 
         self.loaded = False
 
-        if num_actors is not None:
+        if num_actors is not None and not lazy:
             self.load_data(num_actors)
 
     def load_data(self, num_actors: Optional[int] = None):
         if not self.loaded:
             if num_actors is not None:
+                if self.num_actors is not None:
+                    raise ValueError(
+                        f"The `RayDMatrix` was initialized or `load_data()`"
+                        f"has been called with a different numbers of"
+                        f"`actors`. Existing value: {self.num_actors}. "
+                        f"Current value: {num_actors}."
+                        f"\nFIX THIS by not instantiating the matrix with "
+                        f"`num_actors` and making sure calls to `load_data()` "
+                        f"or `get_data()` use the same numbers of actors "
+                        f"at each call.")
                 self.num_actors = num_actors
+            if self.num_actors is None:
+                raise ValueError(
+                    "Trying to load data for `RayDMatrix` object, but "
+                    "`num_actors` is not set."
+                    "\nFIX THIS by passing `num_actors` on instantiation "
+                    "of the `RayDMatrix` or when calling `load_data()`.")
             self.x_ref, self.y_ref, self.n = self.loader.load_data(
                 self.num_actors, self.sharding)
             self.loaded = True
 
-    def get_data(self, rank: int) -> \
+    def get_data(self, rank: int, num_actors: Optional[int] = None) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        self.load_data()
+        self.load_data(num_actors=num_actors)
 
         x_ref = self.x_ref[rank]
         y_ref = self.y_ref[rank]
@@ -217,7 +312,7 @@ def _get_sharding_indices(sharding: RayShardingMode, rank: int,
     return indices
 
 
-def combine_data(sharding: RayShardingMode, data: Iterable):
+def combine_data(sharding: RayShardingMode, data: Iterable) -> np.ndarray:
     if sharding == RayShardingMode.BATCH:
         np.ravel(data)
     elif sharding == RayShardingMode.INTERLEAVED:
