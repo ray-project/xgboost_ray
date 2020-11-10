@@ -75,11 +75,11 @@ path = list(sorted(glob.glob("/data/nyc-taxi/*/*/*.parquet")))
 
 # This argument will be passed to `pd.read_parquet()`
 columns = [
-    'passenger_count',
-    'trip_distance', 'pickup_longitude', 'pickup_latitude',
-    'dropoff_longitude', 'dropoff_latitude',
-    'fare_amount', 'extra', 'mta_tax', 'tip_amount',
-    'tolls_amount', 'total_amount'
+    "passenger_count",
+    "trip_distance", "pickup_longitude", "pickup_latitude",
+    "dropoff_longitude", "dropoff_latitude",
+    "fare_amount", "extra", "mta_tax", "tip_amount",
+    "tolls_amount", "total_amount"
 ]
 
 dtrain = RayDMatrix(
