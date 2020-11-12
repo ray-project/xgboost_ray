@@ -27,10 +27,12 @@ class _RayDMatrixLoader:
                  data: Data,
                  label: Optional[Data] = None,
                  filetype: Optional[RayFileType] = None,
+                 ignore: Optional[List[str]] = None,
                  **kwargs):
         self.data = data
         self.label = label
         self.filetype = filetype
+        self.ignore = ignore
         self.kwargs = kwargs
 
         if isinstance(data, str):
@@ -90,6 +92,9 @@ class _RayDMatrixLoader:
                 "file, path, consider passing the `filetype` argument to "
                 "specify the type of the source. Use the `RayFileType` "
                 "enum for that.")
+
+        if self.ignore:
+            local_df = local_df[local_df.columns.difference(self.ignore)]
 
         x, y = self._split_dataframe(local_df)
         n = len(local_df)
@@ -193,6 +198,8 @@ class RayDMatrix:
             detected filename. If the filename cannot be determined from
             the ``data`` object, passing this is mandatory. Defaults to
             ``None`` (auto detection).
+        ignore (Optional[List[str]]): Exclude these columns from the
+            dataframe after loading the data.
         sharding (RayShardingMode): How to shard the data for different
             workers. ``RayShardingMode.INTERLEAVED`` will divide the data
             per row, i.e. every i-th row will be passed to the first worker,
@@ -231,6 +238,7 @@ class RayDMatrix:
                  label: Optional[Data] = None,
                  num_actors: Optional[int] = None,
                  filetype: Optional[RayFileType] = None,
+                 ignore: Optional[List[str]] = None,
                  sharding: RayShardingMode = RayShardingMode.INTERLEAVED,
                  lazy: bool = False,
                  **kwargs):
@@ -240,7 +248,7 @@ class RayDMatrix:
         self.sharding = sharding
 
         self.loader = _RayDMatrixLoader(
-            data=data, label=label, filetype=filetype, **kwargs)
+            data=data, label=label, filetype=filetype, ignore=ignore, **kwargs)
 
         self.x_ref = None
         self.y_ref = None
