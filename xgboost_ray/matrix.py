@@ -363,7 +363,6 @@ class RayDMatrix:
         self.distributed = distributed
 
         if self.distributed:
-            print("DISTRIBUTED")
             self.loader = _DistributedRayDMatrixLoader(
                 data=data,
                 label=label,
@@ -371,7 +370,6 @@ class RayDMatrix:
                 ignore=ignore,
                 **kwargs)
         else:
-            print("CENTRAL")
             self.loader = _CentralRayDMatrixLoader(
                 data=data,
                 label=label,
