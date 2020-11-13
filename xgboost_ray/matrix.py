@@ -52,7 +52,8 @@ class _RayDMatrixLoader:
                         "`RayFileType` enum for this.")
 
     def __hash__(self):
-        return hash((id(self.data), id(self.label), self.filetype))
+        return hash((tuple(self.data), tuple(self.label), tuple(self.ignore),
+                     self.filetype))
 
     def _split_dataframe(self, local_data: pd.DataFrame) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
@@ -427,8 +428,7 @@ class RayDMatrix:
         return x_df, y_df
 
     def __hash__(self):
-        return hash((tuple(self.x_ref.values()), tuple(self.y_ref.values()),
-                     self.n, self.sharding))
+        return hash(self.loader)
 
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
