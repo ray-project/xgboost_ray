@@ -52,8 +52,8 @@ class _RayDMatrixLoader:
                         "`RayFileType` enum for this.")
 
     def __hash__(self):
-        return hash((tuple(self.data), tuple(self.label), tuple(self.ignore),
-                     self.filetype))
+        return hash((tuple(self.data), tuple(self.label or []),
+                     tuple(self.ignore or []), self.filetype))
 
     def _split_dataframe(self, local_data: pd.DataFrame) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
@@ -435,7 +435,11 @@ class RayDMatrix:
 
 
 def _can_load_distributed(source: Data):
-    return isinstance(source, Iterable)
+    if isinstance(source, Iterable):
+        if isinstance(source, str):
+            return os.path.isdir(source)
+        return True
+    return False
 
 
 def _get_sharding_indices(sharding: RayShardingMode, rank: int,
