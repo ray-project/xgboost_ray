@@ -154,7 +154,7 @@ class RayXGBoostActor:
     def load_data(self, data: RayDMatrix):
         if data in self._data:
             return
-        x, y = data.get_data(self.rank)
+        x, y = data.get_data(self.rank, self.num_actors)
         matrix = xgb.DMatrix(x, label=y)
         self._data[data] = matrix
 
@@ -387,10 +387,10 @@ def train(params: Dict,
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(
                 type(dtrain)))
 
-    if not dtrain.loaded:
+    if not dtrain.loaded and not dtrain.distributed:
         dtrain.load_data(num_actors)
     for (deval, name) in evals:
-        if not deval.loaded:
+        if not deval.loaded and not deval.distributed:
             deval.load_data(num_actors)
 
     checkpoint_prefix = kwargs.pop("checkpoint_prefix",

@@ -1,6 +1,7 @@
+import glob
 import math
 from enum import Enum
-from typing import Union, Optional, Tuple, Iterable, List
+from typing import Union, Optional, Tuple, Iterable, List, Dict
 
 import numpy as np
 import pandas as pd
@@ -53,7 +54,60 @@ class _RayDMatrixLoader:
     def __hash__(self):
         return hash((id(self.data), id(self.label), self.filetype))
 
-    def load_data(self, num_actors: int, sharding: RayShardingMode):
+    def _split_dataframe(self, local_data: pd.DataFrame) -> \
+            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+        """Split dataframe into `features`, `labels`"""
+        if self.label is not None:
+            if isinstance(self.label, str):
+                x = local_data[local_data.columns.difference([self.label])]
+                y = local_data[self.label]
+            else:
+                x = local_data
+                if not isinstance(self.label, pd.DataFrame):
+                    y = pd.DataFrame(self.label)
+                else:
+                    y = self.label
+            return x, y
+        return local_data, None
+
+    def _load_data_numpy(self, data: Data):
+        return pd.DataFrame(
+            data, columns=[f"f{i}" for i in range(data.shape[1])])
+
+    def _load_data_pandas(self, data: Data):
+        return data
+
+    def _load_data_csv(self, data: Data):
+        if isinstance(data, Iterable) and not isinstance(data, str):
+            return pd.concat([
+                pd.read_csv(data_source, **self.kwargs) for data_source in data
+            ])
+        else:
+            return pd.read_csv(data, **self.kwargs)
+
+    def _load_data_parquet(self, data: Data):
+        if isinstance(data, Iterable) and not isinstance(data, str):
+            return pd.concat([
+                pd.read_parquet(data_source, **self.kwargs)
+                for data_source in data
+            ])
+        else:
+            return pd.read_parquet(data, **self.kwargs)
+
+    def load_data(self,
+                  num_actors: int,
+                  sharding: RayShardingMode,
+                  rank: Optional[int] = None):
+        raise NotImplementedError
+
+
+class _CentralRayDMatrixLoader(_RayDMatrixLoader):
+    """Load full dataset from a central location and put into object store"""
+
+    def load_data(self,
+                  num_actors: int,
+                  sharding: RayShardingMode,
+                  rank: Optional[int] = None):
         """
         Load data into memory
         """
@@ -76,13 +130,13 @@ class _RayDMatrixLoader:
                         type(self.data), type(self.label)))
 
         if isinstance(self.data, np.ndarray):
-            local_df = self._load_data_numpy()
+            local_df = self._load_data_numpy(self.data)
         elif isinstance(self.data, (pd.DataFrame, pd.Series)):
-            local_df = self._load_data_pandas()
+            local_df = self._load_data_pandas(self.data)
         elif self.filetype == RayFileType.CSV:
-            local_df = self._load_data_csv()
+            local_df = self._load_data_csv(self.data)
         elif self.filetype == RayFileType.PARQUET:
-            local_df = self._load_data_parquet()
+            local_df = self._load_data_parquet(self.data)
         else:
             raise ValueError(
                 "Unknown data source type: {} with FileType: {}."
@@ -91,7 +145,7 @@ class _RayDMatrixLoader:
                 "np.ndarray, and CSV/Parquet file paths. If you specify a "
                 "file, path, consider passing the `filetype` argument to "
                 "specify the type of the source. Use the `RayFileType` "
-                "enum for that.")
+                "enum for that.".format(type(self.data), self.filetype))
 
         if self.ignore:
             local_df = local_df[local_df.columns.difference(self.ignore)]
@@ -110,46 +164,88 @@ class _RayDMatrixLoader:
 
         return x_refs, y_refs, n
 
-    def _split_dataframe(self, local_data: pd.DataFrame) -> \
-            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        """Split dataframe into `features`, `labels`"""
-        if self.label is not None:
-            if isinstance(self.label, str):
-                x = local_data[local_data.columns.difference([self.label])]
-                y = local_data[self.label]
-            else:
-                x = local_data
-                if not isinstance(self.label, pd.DataFrame):
-                    y = pd.DataFrame(self.label)
+
+class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
+    """Load each shard individually"""
+
+    def load_data(self,
+                  num_actors: int,
+                  sharding: RayShardingMode,
+                  rank: Optional[int] = None):
+        """
+        Load data into memory
+        """
+        if rank is None or not ray.is_initialized:
+            raise ValueError(
+                "Distributed loading should be done by the actors, not by the"
+                "driver program. "
+                "\nFIX THIS by refraining from calling `RayDMatrix.load()` "
+                "manually for distributed datasets. Hint: You can check if "
+                "`RayDMatrix.distributed` is set to True or False.")
+
+        if "OMP_NUM_THREADS" in os.environ:
+            del os.environ["OMP_NUM_THREADS"]
+
+        invalid_data = False
+        if isinstance(self.data, str):
+            if os.path.isdir(self.data):
+                if self.filetype == RayFileType.PARQUET:
+                    self.data = list(
+                        sorted(glob.glob(f"{self.data}/**/*.parquet")))
+                elif self.filetype == RayFileType.PARQUET:
+                    self.data = list(
+                        sorted(glob.glob(f"{self.data}/**/*.csv")))
                 else:
-                    y = self.label
-            return x, y
-        return local_data, None
+                    invalid_data = True
+            else:
+                invalid_data = True
 
-    def _load_data_numpy(self):
-        return pd.DataFrame(
-            self.data, columns=[f"f{i}" for i in range(self.data.shape[1])])
+        if not isinstance(self.data, (Iterable)) or invalid_data:
+            raise ValueError(
+                "Distributed data loading only works with already "
+                "distributed datasets. These should be specified through a "
+                "list of locations."
+                "\nFIX THIS by passing a list of files (e.g. on S3) to the "
+                "RayDMatrix.")
 
-    def _load_data_pandas(self):
-        return self.data
+        if self.label is not None and not isinstance(self.label, str):
+            raise ValueError(
+                f"Invalid `label` value for distributed datasets: "
+                f"{self.label}. Only strings are supported. "
+                f"\FIX THIS by passing a string indicating the label "
+                f"column of the dataset as the `label` argument.")
 
-    def _load_data_csv(self):
-        if isinstance(self.data, Iterable) and not isinstance(self.data, str):
-            return pd.concat([
-                pd.read_csv(data_source, **self.kwargs)
-                for data_source in self.data
-            ])
+        # Shard input sources
+        input_sources = list(self.data)
+        n = len(input_sources)
+
+        # Get files this worker should load
+        indices = _get_sharding_indices(sharding, rank, num_actors, n)
+        local_input_sources = [input_sources[i] for i in indices]
+
+        if self.filetype == RayFileType.CSV:
+            local_df = self._load_data_csv(local_input_sources)
+        elif self.filetype == RayFileType.PARQUET:
+            local_df = self._load_data_parquet(local_input_sources)
         else:
-            return pd.read_csv(self.data, **self.kwargs)
+            raise ValueError(
+                "Invalid data source type: {} with FileType: {} for a "
+                "distributed dataset."
+                "\nFIX THIS by passing a supported data type. Supported "
+                "data types for distributed datasets are a list of "
+                "CSV or Parquet sources.".format(
+                    type(self.data), self.filetype))
 
-    def _load_data_parquet(self):
-        if isinstance(self.data, Iterable) and not isinstance(self.data, str):
-            return pd.concat([
-                pd.read_parquet(data_source, **self.kwargs)
-                for data_source in self.data
-            ])
-        else:
-            return pd.read_parquet(self.data, **self.kwargs)
+        if self.ignore:
+            local_df = local_df[local_df.columns.difference(self.ignore)]
+
+        x, y = self._split_dataframe(local_df)
+        n = len(local_df)
+
+        x_refs = {rank: ray.put(x)}
+        y_refs = {rank: ray.put(y)}
+
+        return x_refs, y_refs, n
 
 
 class RayDMatrix:
@@ -200,6 +296,11 @@ class RayDMatrix:
             ``None`` (auto detection).
         ignore (Optional[List[str]]): Exclude these columns from the
             dataframe after loading the data.
+        distributed (Optional[bool]): If True, use distributed loading
+            (each worker loads a share of the dataset). If False, use
+            central loading (the head node loads the whole dataset and
+            distributed it). If None, auto-detect and default to
+            distributed loading, if possible.
         sharding (RayShardingMode): How to shard the data for different
             workers. ``RayShardingMode.INTERLEAVED`` will divide the data
             per row, i.e. every i-th row will be passed to the first worker,
@@ -239,6 +340,7 @@ class RayDMatrix:
                  num_actors: Optional[int] = None,
                  filetype: Optional[RayFileType] = None,
                  ignore: Optional[List[str]] = None,
+                 distributed: Optional[bool] = None,
                  sharding: RayShardingMode = RayShardingMode.INTERLEAVED,
                  lazy: bool = False,
                  **kwargs):
@@ -247,19 +349,48 @@ class RayDMatrix:
         self.num_actors = num_actors
         self.sharding = sharding
 
-        self.loader = _RayDMatrixLoader(
-            data=data, label=label, filetype=filetype, ignore=ignore, **kwargs)
+        if distributed is None:
+            distributed = _can_load_distributed(data)
+        else:
+            if distributed and not _can_load_distributed(data):
+                raise ValueError(
+                    f"You passed `distributed=True` to the `RayDMatrix` but "
+                    f"the specified data source of type {type(data)} cannot "
+                    f"be loaded in a distributed fashion. "
+                    f"\FIX THIS by passing a list of sources (e.g. parquet "
+                    f"files stored in a network location) instead.")
 
-        self.x_ref = None
-        self.y_ref = None
+        self.distributed = distributed
+
+        if self.distributed:
+            print("DISTRIBUTED")
+            self.loader = _DistributedRayDMatrixLoader(
+                data=data,
+                label=label,
+                filetype=filetype,
+                ignore=ignore,
+                **kwargs)
+        else:
+            print("CENTRAL")
+            self.loader = _CentralRayDMatrixLoader(
+                data=data,
+                label=label,
+                filetype=filetype,
+                ignore=ignore,
+                **kwargs)
+
+        self.x_ref: Dict[int, ray.ObjectRef] = {}
+        self.y_ref: Dict[int, ray.ObjectRef] = {}
         self.n = None
 
         self.loaded = False
 
-        if num_actors is not None and not lazy:
+        if not distributed and num_actors is not None and not lazy:
             self.load_data(num_actors)
 
-    def load_data(self, num_actors: Optional[int] = None):
+    def load_data(self,
+                  num_actors: Optional[int] = None,
+                  rank: Optional[int] = None):
         if not self.loaded:
             if num_actors is not None:
                 if self.num_actors is not None \
@@ -280,13 +411,15 @@ class RayDMatrix:
                     "`num_actors` is not set."
                     "\nFIX THIS by passing `num_actors` on instantiation "
                     "of the `RayDMatrix` or when calling `load_data()`.")
-            self.x_ref, self.y_ref, self.n = self.loader.load_data(
-                self.num_actors, self.sharding)
+            x_ref, y_ref, self.n = self.loader.load_data(
+                self.num_actors, self.sharding, rank=rank)
+            self.x_ref.update(x_ref)
+            self.y_ref.update(y_ref)
             self.loaded = True
 
     def get_data(self, rank: int, num_actors: Optional[int] = None) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        self.load_data(num_actors=num_actors)
+        self.load_data(num_actors=num_actors, rank=rank)
 
         x_ref = self.x_ref[rank]
         y_ref = self.y_ref[rank]
@@ -301,6 +434,10 @@ class RayDMatrix:
 
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
+
+
+def _can_load_distributed(source: Data):
+    return isinstance(source, Iterable)
 
 
 def _get_sharding_indices(sharding: RayShardingMode, rank: int,
