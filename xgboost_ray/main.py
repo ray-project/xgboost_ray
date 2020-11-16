@@ -136,6 +136,8 @@ class RayXGBoostActor:
 
         self._data: Dict[RayDMatrix, xgb.DMatrix] = {}
 
+        self._local_n = 0
+
         _set_omp_num_threads()
 
     @property
@@ -155,6 +157,7 @@ class RayXGBoostActor:
         if data in self._data:
             return
         x, y = data.get_data(self.rank, self.num_actors)
+        self._local_n = len(x)
         matrix = xgb.DMatrix(x, label=y)
         self._data[data] = matrix
 
@@ -203,7 +206,11 @@ class RayXGBoostActor:
                 evals=local_evals,
                 evals_result=evals_result,
                 **kwargs)
-            return {"bst": bst, "evals_result": evals_result}
+            return {
+                "bst": bst,
+                "evals_result": evals_result,
+                "train_n": self._local_n
+            }
 
     def predict(self, model: xgb.Booster, data: RayDMatrix, **kwargs):
         _set_omp_num_threads()
@@ -326,6 +333,12 @@ def _train(params: Dict,
     res: Dict[str, Any] = ray.get(fut[0])
     bst = res["bst"]
     evals_result = res["evals_result"]
+
+    all_res = ray.get(fut)
+    total_n = sum([res["train_n"] or 0 for res in all_res])
+
+    logger.info(f"[RayXGBoost] Finished XGBoost training on training data "
+                f"with total N={total_n:,}.")
 
     if checkpoint_prefix:
         _cleanup(checkpoint_prefix, checkpoint_path, num_actors)
