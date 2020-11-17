@@ -1,5 +1,6 @@
 import glob
 import math
+import uuid
 from enum import Enum
 from typing import Union, Optional, Tuple, Iterable, List, Dict
 
@@ -50,10 +51,6 @@ class _RayDMatrixLoader:
                         "\nFIX THIS by passing] "
                         "the `filetype` parameter to the RayDMatrix. Use the "
                         "`RayFileType` enum for this.")
-
-    def __hash__(self):
-        return hash((tuple(self.data), tuple(self.label or []),
-                     tuple(self.ignore or []), self.filetype))
 
     def _split_dataframe(self, local_data: pd.DataFrame) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
@@ -346,6 +343,8 @@ class RayDMatrix:
                  lazy: bool = False,
                  **kwargs):
 
+        self._uid = uuid.uuid4().int
+
         self.memory_node_ip = ray.services.get_node_ip_address()
         self.num_actors = num_actors
         self.sharding = sharding
@@ -428,17 +427,20 @@ class RayDMatrix:
         return x_df, y_df
 
     def __hash__(self):
-        return hash(self.loader)
+        return self._uid
 
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
 
 
 def _can_load_distributed(source: Data):
-    if isinstance(source, Iterable):
-        if isinstance(source, str):
-            return os.path.isdir(source)
+    if isinstance(source, str):
+        # Strings should point to files or URLs
         return True
+    elif isinstance(source, list):
+        # List of strings should point to files or URLs
+        return isinstance(source[0], str)
+    # Otherwise assume we already have a data object
     return False
 
 
