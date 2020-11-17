@@ -2,7 +2,7 @@ import glob
 import math
 import uuid
 from enum import Enum
-from typing import Union, Optional, Tuple, Iterable, List, Dict
+from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence
 
 import numpy as np
 import pandas as pd
@@ -37,12 +37,18 @@ class _RayDMatrixLoader:
         self.ignore = ignore
         self.kwargs = kwargs
 
+        check = None
         if isinstance(data, str):
+            check = data
+        if isinstance(data, Sequence) and isinstance(data[0], str):
+            check = data[0]
+
+        if check is not None:
             if not self.filetype:
                 # Try to guess filetype from file ending
-                if data.endswith(".csv"):
+                if check.endswith(".csv"):
                     self.filetype = RayFileType.CSV
-                elif data.endswith(".parquet"):
+                elif check.endswith(".parquet"):
                     self.filetype = RayFileType.PARQUET
                 else:
                     raise ValueError(
@@ -61,8 +67,10 @@ class _RayDMatrixLoader:
                 y = local_data[self.label]
             else:
                 x = local_data
-                if not isinstance(self.label, pd.DataFrame):
-                    y = pd.DataFrame(self.label)
+                if isinstance(self.label, pd.DataFrame):
+                    y = pd.Series(self.label.squeeze())
+                elif not isinstance(self.label, pd.Series):
+                    y = pd.Series(self.label)
                 else:
                     y = self.label
             return x, y
@@ -350,7 +358,7 @@ class RayDMatrix:
         self.sharding = sharding
 
         if distributed is None:
-            distributed = _can_load_distributed(data)
+            distributed = _detect_distributed(data)
         else:
             if distributed and not _can_load_distributed(data):
                 raise ValueError(
@@ -433,15 +441,39 @@ class RayDMatrix:
         return self.__hash__() == other.__hash__()
 
 
-def _can_load_distributed(source: Data):
-    if isinstance(source, str):
+def _can_load_distributed(source: Data) -> bool:
+    """Returns True if it might be possible to use distributed data loading"""
+    if isinstance(source, (int, float, bool)):
+        return False
+    elif isinstance(source, str):
         # Strings should point to files or URLs
         return True
-    elif isinstance(source, list):
-        # List of strings should point to files or URLs
+    elif isinstance(source, Sequence):
+        # Sequence of strings should point to files or URLs
         return isinstance(source[0], str)
-    # Otherwise assume we already have a data object
-    return False
+    elif isinstance(source, Iterable):
+        # If we get an iterable but not a sequence, the best we can do
+        # is check if we have a known non-distributed object
+        if isinstance(source, (pd.DataFrame, pd.Series, np.ndarray)):
+            return False
+
+    # Per default, allow distributed loading.
+    return True
+
+
+def _detect_distributed(source: Data) -> bool:
+    """Returns True if we should try to use distributed data loading"""
+    if not _can_load_distributed(source):
+        return False
+
+    if isinstance(source, Iterable):
+        # This is an iterable but not a Sequence of strings, and not a
+        # pandas dataframe, series, or numpy array.
+        # Detect False per default, can be overridden by passing
+        # `distributed=True` to the RayDMatrix object.
+        return False
+
+    return True
 
 
 def _get_sharding_indices(sharding: RayShardingMode, rank: int,
