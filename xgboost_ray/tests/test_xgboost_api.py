@@ -59,12 +59,17 @@ class XGBoostAPITest(unittest.TestCase):
             "seed": 1000
         }
 
+        self.kwargs = {}
+
+    def _init_ray(self):
+        ray.init(num_cpus=4)
+
     def testCustomObjectiveFunction(self):
         """Ensure that custom objective functions work.
 
         Runs a custom objective function with pure XGBoost and
         XGBoost on Ray and compares the prediction outputs."""
-        ray.init(num_cpus=4)
+        self._init_ray()
 
         params = self.params.copy()
         params.pop("objective", None)
@@ -73,7 +78,11 @@ class XGBoostAPITest(unittest.TestCase):
             params, xgb.DMatrix(self.x, self.y), obj=squared_log)
 
         bst_ray = train(
-            params, RayDMatrix(self.x, self.y), num_actors=2, obj=squared_log)
+            params,
+            RayDMatrix(self.x, self.y),
+            num_actors=2,
+            obj=squared_log,
+            **self.kwargs)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y_xgb = np.round(bst_xgb.predict(x_mat))
@@ -87,7 +96,7 @@ class XGBoostAPITest(unittest.TestCase):
 
         Runs a custom objective function with pure XGBoost and
         XGBoost on Ray and compares the prediction outputs."""
-        ray.init(num_cpus=4)
+        self._init_ray()
 
         params = self.params.copy()
         params.pop("objective", None)
@@ -112,7 +121,8 @@ class XGBoostAPITest(unittest.TestCase):
             obj=squared_log,
             feval=rmsle,
             evals=[(dtrain_ray, "dtrain")],
-            evals_result=evals_result_ray)
+            evals_result=evals_result_ray,
+            **self.kwargs)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y_xgb = np.round(bst_xgb.predict(x_mat))
