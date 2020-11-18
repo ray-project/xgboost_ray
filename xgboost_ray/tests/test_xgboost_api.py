@@ -61,8 +61,13 @@ class XGBoostAPITest(unittest.TestCase):
 
         self.kwargs = {}
 
+    def tearDown(self) -> None:
+        if ray.is_initialized():
+            ray.shutdown()
+
     def _init_ray(self):
-        ray.init(num_cpus=4)
+        if not ray.is_initialized():
+            ray.init(num_cpus=4)
 
     def testCustomObjectiveFunction(self):
         """Ensure that custom objective functions work.
