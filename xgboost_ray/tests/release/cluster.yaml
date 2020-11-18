@@ -35,7 +35,7 @@ file_mounts_sync_continuously: true
 initialization_commands: []
 setup_commands:
     - pip install -U ray
-    - pip install git+https://github.com/ray-project/xgboost_ray#xgboost-ray
+    - pip install -U git+https://github.com/ray-project/xgboost_ray#xgboost-ray
 head_setup_commands: []
 worker_setup_commands: []
 head_start_ray_commands:
