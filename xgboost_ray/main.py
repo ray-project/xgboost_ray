@@ -51,6 +51,9 @@ def _start_rabit_tracker(num_workers: int):
 
     return env
 
+# At each boosting round, add the results to the queue actor.
+# The results in the queue will be consumed by the Trainable to report to tune.
+# TODO: Subclass ray.tune.integrations.xgboost.TuneReportCallback?
 class RayTuneReportCallback:
     def __init__(self, metrics, callback_queue):
         if isinstance(metrics, str):
@@ -222,6 +225,7 @@ class RayXGBoostActor:
         callbacks.append(self._save_checkpoint_callback)
         kwargs["callbacks"] = callbacks
 
+        # If there is a queue set, add a callback for Tune reporting.
         if self.callback_queue is not None:
             # Add callback for Tune only if worker 0.
             callbacks.append(RayTuneReportCallback(metrics=None,
@@ -301,6 +305,7 @@ def _train(params: Dict,
            checkpoint_prefix: Optional[str] = None,
            checkpoint_path: str = "/tmp",
            checkpoint_frequency: int = 5,
+           use_tune: bool = False,
            **kwargs):
     _assert_ray_support()
 
@@ -347,11 +352,13 @@ def _train(params: Dict,
     env = _start_rabit_tracker(num_actors)
     rabit_args = [("%s=%s" % item).encode() for item in env.items()]
 
-    callback_queue = Queue()
+    if use_tune:
+        # Create a Queue actor that will hold the intermediate tune results.
+        callback_queue = Queue()
 
-    # Set the queue actor for worker 0. Assumes intermediate results are all
-    # the same because of Rabit tracking.
-    ray.get(actors[0].set_queue.remote(callback_queue))
+        # Set the queue actor for worker 0. Assumes intermediate results are all
+        # the same because of Rabit tracking.
+        ray.get(actors[0].set_queue.remote(callback_queue))
 
     # Train
     fut = [
@@ -359,13 +366,16 @@ def _train(params: Dict,
         for actor in actors
     ]
 
-    _, not_ready = ray.wait(fut, timeout=0)
-    while not_ready:
-        while not callback_queue.empty():
-            results = callback_queue.get()
-            import pdb; pdb.set_trace()
-            tune.report(**results)
+    if use_tune:
+        # While training has not finished, consume from the queue and report
+        # to Tune.
+        #import pdb; pdb.set_trace()
         _, not_ready = ray.wait(fut, timeout=0)
+        while not_ready:
+            while not callback_queue.empty():
+                results = callback_queue.get()
+                tune.report(**results)
+            _, not_ready = ray.wait(not_ready, timeout=0)
 
     try:
         ray.get(fut)
@@ -402,6 +412,7 @@ def train(params: Dict,
           gpus_per_actor: int = -1,
           resources_per_actor: Optional[Dict] = None,
           max_actor_restarts: int = 0,
+          tune: bool = False,
           **kwargs):
     """Distributed XGBoost training via Ray.
 
@@ -475,6 +486,7 @@ def train(params: Dict,
                 checkpoint_prefix=checkpoint_prefix,
                 checkpoint_path=checkpoint_path,
                 checkpoint_frequency=checkpoint_frequency,
+                use_tune=tune,
                 **kwargs)
             break
         except RayActorError:
