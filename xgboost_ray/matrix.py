@@ -190,7 +190,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 if self.filetype == RayFileType.PARQUET:
                     self.data = list(
                         sorted(glob.glob(f"{self.data}/**/*.parquet")))
-                elif self.filetype == RayFileType.PARQUET:
+                elif self.filetype == RayFileType.CSV:
                     self.data = list(
                         sorted(glob.glob(f"{self.data}/**/*.csv")))
                 else:
@@ -306,7 +306,10 @@ class RayDMatrix:
             ``RayShardingMode.BATCH`` will divide the data in batches, i.e.
             the first 0-(m-1) rows will be passed to the first worker, the
             m-(2m-1) rows to the second worker, etc. Defaults to
-            ``RayShardingMode.INTERLEAVED``.
+            ``RayShardingMode.INTERLEAVED``. If using distributed data
+            loading, sharding happens on a per-file basis, and not on a
+            per-row basis, i.e. For interleaved every ith *file* will be
+            passed into the first worker, etc.
         lazy (bool): If ``num_actors`` is passed, setting this to ``True``
             will defer data loading and storing until ``load_data()`` or
             ``get_data()`` is called. Defaults to ``False``.

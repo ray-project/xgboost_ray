@@ -27,13 +27,13 @@ def train_breast_cancer(config):
         max_actor_restarts=1,
         gpus_per_actor=0,
         cpus_per_actor=1,
-        num_actors=4,
+        num_actors=2,
         verbose_eval=False,
         callbacks=[TuneReportCallback()])
 
-    error = evals_result["eval"]["error"][-1]
-    accuracy = 1. - error
-    tune.report(mean_accuracy=accuracy, done=True)
+    # error = evals_result["eval"]["error"][-1]
+    # accuracy = 1. - error
+    # tune.report(mean_accuracy=accuracy, done=True)
 
 config = {
          "objective": "binary:logistic",
@@ -46,7 +46,7 @@ config = {
 
 analysis = tune.run(
      train_breast_cancer,
-     resources_per_trial={"cpu": 0, "extra_cpu": 4},
+     resources_per_trial={"cpu": 0, "extra_cpu": 2},
      config=config,
-     num_samples=4)
+     num_samples=1)
 

@@ -5,12 +5,14 @@ import time
 from threading import Thread
 from typing import Tuple, Dict, Any, List, Optional
 
-from ray.exceptions import RayActorError
-
 try:
     import ray
     from ray import logger
     from ray.services import get_node_ip_address
+    from ray.exceptions import RayActorError
+    from ray.util.queue import Queue
+    from ray import tune
+    from ray.tune.integration.xgboost import TuneReportCallback
     RAY_INSTALLED = True
 except ImportError:
     ray = None
@@ -49,6 +51,26 @@ def _start_rabit_tracker(num_workers: int):
 
     return env
 
+class RayTuneReportCallback:
+    def __init__(self, metrics, callback_queue):
+        if isinstance(metrics, str):
+            metrics = [metrics]
+        self._metrics = metrics
+        self.callback_queue = callback_queue
+
+    def __call__(self, env):
+        result_dict = dict(env.evaluation_result_list)
+        if not self._metrics:
+            report_dict = result_dict
+        else:
+            report_dict = {}
+            for key in self._metrics:
+                if isinstance(self._metrics, dict):
+                    metric = self._metrics[key]
+                else:
+                    metric = key
+                report_dict[key] = result_dict[metric]
+        self.callback_queue.put(report_dict)
 
 class RabitContext:
     """Context to connect a worker to a rabit tracker"""
@@ -138,6 +160,8 @@ class RayXGBoostActor:
 
         self._local_n = 0
 
+        self.callback_queue = None
+
         _set_omp_num_threads()
 
     @property
@@ -198,6 +222,12 @@ class RayXGBoostActor:
         callbacks.append(self._save_checkpoint_callback)
         kwargs["callbacks"] = callbacks
 
+        if self.callback_queue is not None:
+            # Add callback for Tune only if worker 0.
+            callbacks.append(RayTuneReportCallback(metrics=None,
+                                                   callback_queue=self.callback_queue))
+
+
         with RabitContext(str(id(self)), rabit_args):
             bst = xgb.train(
                 local_params,
@@ -222,6 +252,8 @@ class RayXGBoostActor:
         predictions = model.predict(local_data, **kwargs)
         return predictions
 
+    def set_queue(self, queue):
+        self.callback_queue = queue
 
 def _create_actor(rank: int,
                   num_actors: int,
@@ -315,11 +347,25 @@ def _train(params: Dict,
     env = _start_rabit_tracker(num_actors)
     rabit_args = [("%s=%s" % item).encode() for item in env.items()]
 
+    callback_queue = Queue()
+
+    # Set the queue actor for worker 0. Assumes intermediate results are all
+    # the same because of Rabit tracking.
+    ray.get(actors[0].set_queue.remote(callback_queue))
+
     # Train
     fut = [
         actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
         for actor in actors
     ]
+
+    _, not_ready = ray.wait(fut, timeout=0)
+    while not_ready:
+        while not callback_queue.empty():
+            results = callback_queue.get()
+            import pdb; pdb.set_trace()
+            tune.report(**results)
+        _, not_ready = ray.wait(fut, timeout=0)
 
     try:
         ray.get(fut)
