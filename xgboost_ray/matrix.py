@@ -477,7 +477,8 @@ def _detect_distributed(source: Data) -> bool:
     if not _can_load_distributed(source):
         return False
 
-    if isinstance(source, Iterable):
+    if isinstance(source, Iterable) and not isinstance(source, str) and \
+       not (isinstance(source, Sequence) and isinstance(source[0], str)):
         # This is an iterable but not a Sequence of strings, and not a
         # pandas dataframe, series, or numpy array.
         # Detect False per default, can be overridden by passing

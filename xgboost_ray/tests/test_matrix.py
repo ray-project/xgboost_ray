@@ -115,6 +115,13 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
             self._testMatrixCreation([data_file_1, data_file_2], "label")
 
+    def testDetectDistributed(self):
+        mat = RayDMatrix("file.parquet", lazy=True)
+        self.assertTrue(mat.distributed)
+
+        mat = RayDMatrix(["file.parquet"] * 3, lazy=True)
+        self.assertTrue(mat.distributed)
+
 
 if __name__ == "__main__":
     import pytest
