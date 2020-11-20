@@ -348,7 +348,7 @@ def _train(params: Dict,
         # Once everything is ready
         ray.get(fut)
     except RayActorError:
-        for actor in actors:
+        for (actor, _) in actors:
             ray.kill(actor)
         raise
 
