@@ -15,11 +15,22 @@ Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series]
 
 
 class RayFileType(Enum):
+    """Enum for different file types (used for overrides)."""
     CSV = 1
     PARQUET = 2
 
 
 class RayShardingMode(Enum):
+    """Enum for different modes of sharding the data.
+
+    ``RayShardingMode.INTERLEAVED`` will divide the data
+    per row, i.e. every i-th row will be passed to the first worker,
+    every (i+1)th row to the second worker, etc.
+
+    ``RayShardingMode.BATCH`` will divide the data in batches, i.e.
+    the first 0-(m-1) rows will be passed to the first worker, the
+    m-(2m-1) rows to the second worker, etc.
+    """
     INTERLEAVED = 1
     BATCH = 2
 
@@ -292,14 +303,14 @@ class RayDMatrix:
             after initialization. If this is None, it will be set by
             the ``xgboost_ray.train()`` function, and it will be loaded and
             stored in the object store then. Defaults to None (
-        filetype (RayFileType): Type of data to read. This is disregarded if
-            a data object like a pandas dataframe is passed as the ``data``
-            argument. For filenames, the filetype is automaticlly detected
-            via the file name (e.g. ``.csv`` will be detected as
-            ``RayFileType.CSV``). Passing this argument will overwrite the
-            detected filename. If the filename cannot be determined from
-            the ``data`` object, passing this is mandatory. Defaults to
-            ``None`` (auto detection).
+        filetype (Optional[RayFileType]): Type of data to read.
+            This is disregarded if a data object like a pandas dataframe
+            is passed as the ``data`` argument. For filenames,
+            the filetype is automaticlly detected via the file name
+            (e.g. ``.csv`` will be detected as ``RayFileType.CSV``).
+            Passing this argument will overwrite the detected filename.
+            If the filename cannot be determined from the ``data`` object,
+            passing this is mandatory. Defaults to ``None`` (auto detection).
         ignore (Optional[List[str]]): Exclude these columns from the
             dataframe after loading the data.
         distributed (Optional[bool]): If True, use distributed loading
