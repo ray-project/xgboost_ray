@@ -3,7 +3,7 @@ import argparse
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
 
-from xgboost_ray import RayDMatrix, train
+from xgboost_ray import RayDMatrix, train, hyperparameter_search
 
 def train_breast_cancer(config, cpus_per_actor=1, num_actors=1,
                         use_tune=False):
@@ -20,17 +20,20 @@ def train_breast_cancer(config, cpus_per_actor=1, num_actors=1,
 
 
     # Train the classifier
-    bst = train(
-        config,
-        train_set,
-        evals=[(test_set, "eval")],
-        evals_result=evals_result,
-        max_actor_restarts=1,
-        gpus_per_actor=0,
-        cpus_per_actor=cpus_per_actor,
-        num_actors=num_actors,
-        verbose_eval=False,
-        tune=use_tune)
+    train_args = {
+        "params": config,
+        "dtrain": train_set,
+        "evals": [(test_set, "eval")],
+        "max_actor_restarts": 1,
+        "gpus_per_actor": 0,
+        "cpus_per_actor": cpus_per_actor,
+        "num_actors": num_actors,
+        "verbose_eval": False
+    }
+    if not use_tune:
+        bst = train(**train_args)
+    else:
+        bst = hyperparameter_search(**train_args)
 
     if not use_tune:
         bst.save_model("simple.xgb")
@@ -57,6 +60,11 @@ if __name__ == "__main__":
         help="Sets number of xgboost workers to use.")
     parser.add_argument(
         "--tune", action="store_true", default=False, help="Tune training")
+    parser.add_argument("--num_samples", type=int, default=4, help="Number "
+                                                                   "of "
+                                                                   "samples "
+                                                                   "to use "
+                                                                   "for Tune.")
 
     args, _ = parser.parse_known_args()
 
@@ -82,7 +90,7 @@ if __name__ == "__main__":
                                       num_actors=args.num_actors,
                                       use_tune=True), resources_per_trial={
             "cpu": 0, "extra_cpu": args.cpus_per_actor*args.num_actors},
-            config=config, num_samples=4)
+            config=config, num_samples=args.num_samples)
     else:
         train_breast_cancer(config, cpus_per_actor=args.cpus_per_actor,
                             num_actors=args.num_actors, use_tune=False)

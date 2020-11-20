@@ -9,9 +9,11 @@ import ray
 
 from xgboost_ray import RayDMatrix, train
 
-
 # From XGBoost documentation:
 # https://xgboost.readthedocs.io/en/latest/tutorials/custom_metric_obj.html
+from xgboost_ray.session import get_actor_rank, put_queue
+
+
 def gradient(predt: np.ndarray, dtrain: xgb.DMatrix) -> np.ndarray:
     y = dtrain.get_label()
     return (np.log1p(predt) - np.log1p(y)) / (predt + 1)
@@ -55,16 +57,26 @@ class XGBoostAPITest(unittest.TestCase):
             "tree_method": "hist",
             "nthread": 1,
             "max_depth": 2,
-            "objective": "binary:logloss",
+            "objective": "binary:logistic",
             "seed": 1000
         }
+
+        self.kwargs = {}
+
+    def tearDown(self) -> None:
+        if ray.is_initialized():
+            ray.shutdown()
+
+    def _init_ray(self):
+        if not ray.is_initialized():
+            ray.init(num_cpus=4)
 
     def testCustomObjectiveFunction(self):
         """Ensure that custom objective functions work.
 
         Runs a custom objective function with pure XGBoost and
         XGBoost on Ray and compares the prediction outputs."""
-        ray.init(num_cpus=4)
+        self._init_ray()
 
         params = self.params.copy()
         params.pop("objective", None)
@@ -73,7 +85,11 @@ class XGBoostAPITest(unittest.TestCase):
             params, xgb.DMatrix(self.x, self.y), obj=squared_log)
 
         bst_ray = train(
-            params, RayDMatrix(self.x, self.y), num_actors=2, obj=squared_log)
+            params,
+            RayDMatrix(self.x, self.y),
+            num_actors=2,
+            obj=squared_log,
+            **self.kwargs)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y_xgb = np.round(bst_xgb.predict(x_mat))
@@ -87,7 +103,7 @@ class XGBoostAPITest(unittest.TestCase):
 
         Runs a custom objective function with pure XGBoost and
         XGBoost on Ray and compares the prediction outputs."""
-        ray.init(num_cpus=4)
+        self._init_ray()
 
         params = self.params.copy()
         params.pop("objective", None)
@@ -112,7 +128,8 @@ class XGBoostAPITest(unittest.TestCase):
             obj=squared_log,
             feval=rmsle,
             evals=[(dtrain_ray, "dtrain")],
-            evals_result=evals_result_ray)
+            evals_result=evals_result_ray,
+            **self.kwargs)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y_xgb = np.round(bst_xgb.predict(x_mat))
@@ -126,6 +143,28 @@ class XGBoostAPITest(unittest.TestCase):
                 evals_result_xgb["dtrain"]["PyRMSLE"],
                 evals_result_ray["dtrain"]["PyRMSLE"],
                 atol=0.1))
+
+    def testCallbacks(self):
+        def callback(env):
+            print(f"My rank: {get_actor_rank()}")
+            put_queue(("rank", get_actor_rank()))
+
+        additional_results = {}
+        train(
+            self.params,
+            RayDMatrix(self.x, self.y),
+            num_actors=2,
+            callbacks=[callback],
+            additional_results=additional_results,
+            **self.kwargs)
+
+        self.assertEqual(len(additional_results["callback_returns"]), 2)
+        self.assertTrue(
+            all(rank == 0
+                for (_, rank) in additional_results["callback_returns"][0]))
+        self.assertTrue(
+            all(rank == 1
+                for (_, rank) in additional_results["callback_returns"][1]))
 
 
 if __name__ == "__main__":

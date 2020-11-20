@@ -2,7 +2,7 @@ import glob
 import math
 import uuid
 from enum import Enum
-from typing import Union, Optional, Tuple, Iterable, List, Dict
+from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence
 
 import numpy as np
 import pandas as pd
@@ -15,11 +15,22 @@ Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series]
 
 
 class RayFileType(Enum):
+    """Enum for different file types (used for overrides)."""
     CSV = 1
     PARQUET = 2
 
 
 class RayShardingMode(Enum):
+    """Enum for different modes of sharding the data.
+
+    ``RayShardingMode.INTERLEAVED`` will divide the data
+    per row, i.e. every i-th row will be passed to the first worker,
+    every (i+1)th row to the second worker, etc.
+
+    ``RayShardingMode.BATCH`` will divide the data in batches, i.e.
+    the first 0-(m-1) rows will be passed to the first worker, the
+    m-(2m-1) rows to the second worker, etc.
+    """
     INTERLEAVED = 1
     BATCH = 2
 
@@ -37,20 +48,26 @@ class _RayDMatrixLoader:
         self.ignore = ignore
         self.kwargs = kwargs
 
+        check = None
         if isinstance(data, str):
+            check = data
+        elif isinstance(data, Sequence) and isinstance(data[0], str):
+            check = data[0]
+
+        if check is not None:
             if not self.filetype:
                 # Try to guess filetype from file ending
-                if data.endswith(".csv"):
+                if check.endswith(".csv"):
                     self.filetype = RayFileType.CSV
-                elif data.endswith(".parquet"):
+                elif check.endswith(".parquet"):
                     self.filetype = RayFileType.PARQUET
                 else:
                     raise ValueError(
                         "File or stream specified as data source, but "
                         "filetype could not be detected. "
-                        "\nFIX THIS by passing] "
-                        "the `filetype` parameter to the RayDMatrix. Use the "
-                        "`RayFileType` enum for this.")
+                        "\nFIX THIS by passing the `filetype` parameter to "
+                        "the RayDMatrix. "
+                        "Use the `RayFileType` enum for this.")
 
     def _split_dataframe(self, local_data: pd.DataFrame) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
@@ -61,8 +78,10 @@ class _RayDMatrixLoader:
                 y = local_data[self.label]
             else:
                 x = local_data
-                if not isinstance(self.label, pd.DataFrame):
-                    y = pd.DataFrame(self.label)
+                if isinstance(self.label, pd.DataFrame):
+                    y = pd.Series(self.label.squeeze())
+                elif not isinstance(self.label, pd.Series):
+                    y = pd.Series(self.label)
                 else:
                     y = self.label
             return x, y
@@ -164,7 +183,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
 
 
 class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
-    """Load each shard individually"""
+    """Load each shard individually."""
 
     def load_data(self,
                   num_actors: int,
@@ -284,14 +303,14 @@ class RayDMatrix:
             after initialization. If this is None, it will be set by
             the ``xgboost_ray.train()`` function, and it will be loaded and
             stored in the object store then. Defaults to None (
-        filetype (RayFileType): Type of data to read. This is disregarded if
-            a data object like a pandas dataframe is passed as the ``data``
-            argument. For filenames, the filetype is automaticlly detected
-            via the file name (e.g. ``.csv`` will be detected as
-            ``RayFileType.CSV``). Passing this argument will overwrite the
-            detected filename. If the filename cannot be determined from
-            the ``data`` object, passing this is mandatory. Defaults to
-            ``None`` (auto detection).
+        filetype (Optional[RayFileType]): Type of data to read.
+            This is disregarded if a data object like a pandas dataframe
+            is passed as the ``data`` argument. For filenames,
+            the filetype is automaticlly detected via the file name
+            (e.g. ``.csv`` will be detected as ``RayFileType.CSV``).
+            Passing this argument will overwrite the detected filename.
+            If the filename cannot be determined from the ``data`` object,
+            passing this is mandatory. Defaults to ``None`` (auto detection).
         ignore (Optional[List[str]]): Exclude these columns from the
             dataframe after loading the data.
         distributed (Optional[bool]): If True, use distributed loading
@@ -353,7 +372,7 @@ class RayDMatrix:
         self.sharding = sharding
 
         if distributed is None:
-            distributed = _can_load_distributed(data)
+            distributed = _detect_distributed(data)
         else:
             if distributed and not _can_load_distributed(data):
                 raise ValueError(
@@ -436,15 +455,40 @@ class RayDMatrix:
         return self.__hash__() == other.__hash__()
 
 
-def _can_load_distributed(source: Data):
-    if isinstance(source, str):
+def _can_load_distributed(source: Data) -> bool:
+    """Returns True if it might be possible to use distributed data loading"""
+    if isinstance(source, (int, float, bool)):
+        return False
+    elif isinstance(source, str):
         # Strings should point to files or URLs
         return True
-    elif isinstance(source, list):
-        # List of strings should point to files or URLs
+    elif isinstance(source, Sequence):
+        # Sequence of strings should point to files or URLs
         return isinstance(source[0], str)
-    # Otherwise assume we already have a data object
-    return False
+    elif isinstance(source, Iterable):
+        # If we get an iterable but not a sequence, the best we can do
+        # is check if we have a known non-distributed object
+        if isinstance(source, (pd.DataFrame, pd.Series, np.ndarray)):
+            return False
+
+    # Per default, allow distributed loading.
+    return True
+
+
+def _detect_distributed(source: Data) -> bool:
+    """Returns True if we should try to use distributed data loading"""
+    if not _can_load_distributed(source):
+        return False
+
+    if isinstance(source, Iterable) and not isinstance(source, str) and \
+       not (isinstance(source, Sequence) and isinstance(source[0], str)):
+        # This is an iterable but not a Sequence of strings, and not a
+        # pandas dataframe, series, or numpy array.
+        # Detect False per default, can be overridden by passing
+        # `distributed=True` to the RayDMatrix object.
+        return False
+
+    return True
 
 
 def _get_sharding_indices(sharding: RayShardingMode, rank: int,
