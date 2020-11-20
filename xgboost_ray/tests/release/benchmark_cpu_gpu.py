@@ -42,6 +42,7 @@ def train_ray(num_workers, num_boost_rounds, num_files=0, use_gpu=False):
         num_boost_round=num_boost_rounds,
         num_actors=num_workers,
         cpus_per_actor=4,
+        gpus_per_actor=0 if not use_gpu else 1,
         resources_per_actor={
             "actor_cpus": 4,
             "actor_gpus": 0 if not use_gpu else 1
