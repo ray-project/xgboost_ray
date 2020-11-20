@@ -1,0 +1,51 @@
+from typing import Optional
+from ray.util.queue import Queue
+
+
+class RayXGBoostSession:
+    def __init__(self, rank: int, queue: Optional[Queue]):
+        self._rank = rank
+        self._queue = queue
+
+    def get_actor_rank(self):
+        return self._rank
+
+    def put_queue(self, *args, **kwargs):
+        if self._queue is None:
+            raise ValueError(
+                "Trying to put something into session queue, but queue "
+                "was not initialized. This is probably a bug, please raise "
+                "an issue at https://github.com/ray-project/xgboost_ray")
+        self._queue.put(*args, **kwargs)
+
+
+_session = None
+
+
+def init_session(*args, **kwargs):
+    global _session
+    if _session:
+        raise ValueError(
+            "Trying to initialize RayXGBoostSession twice."
+            "\nFIX THIS by not calling `init_session()` manually.")
+    _session = RayXGBoostSession(*args, **kwargs)
+
+
+def get_session() -> RayXGBoostSession:
+    global _session
+    if not _session or not isinstance(_session, RayXGBoostSession):
+        raise ValueError(
+            "Trying to access RayXGBoostSession from outside an XGBoost run."
+            "\nFIX THIS by calling function in `session.py` like "
+            "`get_actor_rank()` only from within an XGBoost actor session.")
+    return _session
+
+
+def get_actor_rank() -> int:
+    session = get_session()
+    return session.get_actor_rank()
+
+
+def put_queue(*args, **kwargs):
+    session = get_session()
+    session.put_queue(*args, **kwargs)

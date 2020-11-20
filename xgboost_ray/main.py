@@ -3,7 +3,7 @@ import os
 import time
 
 from threading import Thread
-from typing import Tuple, Dict, Any, List, Optional
+from typing import Tuple, Dict, Any, List, Optional, Callable
 
 from ray.exceptions import RayActorError
 
@@ -11,16 +11,19 @@ try:
     import ray
     from ray import logger
     from ray.services import get_node_ip_address
+    from ray.util.queue import Queue
     RAY_INSTALLED = True
 except ImportError:
     ray = None
     logger = None
     get_node_ip_address = None
+    Queue = None
     RAY_INSTALLED = False
 
 import xgboost as xgb
 
 from xgboost_ray.matrix import RayDMatrix, combine_data
+from xgboost_ray.session import init_session
 
 
 def _assert_ray_support():
@@ -113,6 +116,7 @@ class RayXGBoostActor:
     Args:
         rank (int): Rank of the actor. Must be ``0 <= rank < num_actors``.
         num_actors (int): Total number of actors.
+        queue (Queue): Ray queue to communicate with main process.
         checkpoint_prefix (str): Prefix for checkpoint files.
         checkpoint_path (str): Path to store checkpoints at. Defaults to
             ``/tmp``
@@ -124,9 +128,14 @@ class RayXGBoostActor:
     def __init__(self,
                  rank: int,
                  num_actors: int,
+                 queue: Optional[Queue] = None,
                  checkpoint_prefix: Optional[str] = None,
                  checkpoint_path: str = "/tmp",
                  checkpoint_frequency: int = 5):
+        self.queue = queue
+
+        init_session(rank, queue)
+
         self.rank = rank
         self.num_actors = num_actors
 
@@ -223,24 +232,27 @@ class RayXGBoostActor:
         return predictions
 
 
-def _create_actor(rank: int,
-                  num_actors: int,
-                  num_cpus_per_actor: int,
-                  num_gpus_per_actor: int,
-                  resources_per_actor: Optional[Dict] = None,
-                  checkpoint_prefix: Optional[str] = None,
-                  checkpoint_path: str = "/tmp",
-                  checkpoint_frequency: int = 5):
+def _create_actor(
+        rank: int,
+        num_actors: int,
+        num_cpus_per_actor: int,
+        num_gpus_per_actor: int,
+        resources_per_actor: Optional[Dict] = None,
+        checkpoint_prefix: Optional[str] = None,
+        checkpoint_path: str = "/tmp",
+        checkpoint_frequency: int = 5) -> Tuple[RayXGBoostActor, Queue]:
 
+    queue = Queue()
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
         resources=resources_per_actor).remote(
             rank=rank,
             num_actors=num_actors,
+            queue=queue,
             checkpoint_prefix=checkpoint_prefix,
             checkpoint_path=checkpoint_path,
-            checkpoint_frequency=checkpoint_frequency)
+            checkpoint_frequency=checkpoint_frequency), queue
 
 
 def _trigger_data_load(actor, dtrain, evals):
@@ -269,7 +281,7 @@ def _train(params: Dict,
            checkpoint_prefix: Optional[str] = None,
            checkpoint_path: str = "/tmp",
            checkpoint_frequency: int = 5,
-           **kwargs):
+           **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
     _assert_ray_support()
 
     if not ray.is_initialized():
@@ -304,7 +316,7 @@ def _train(params: Dict,
 
     # Split data across workers
     wait_load = []
-    for _, actor in enumerate(actors):
+    for _, (actor, _) in enumerate(actors):
         wait_load.extend(_trigger_data_load(actor, dtrain, evals))
 
     ray.get(wait_load)
@@ -318,10 +330,22 @@ def _train(params: Dict,
     # Train
     fut = [
         actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
-        for actor in actors
+        for (actor, _) in actors
     ]
 
+    callback_returns = [list() for _ in range(len(actors))]
     try:
+        ready, not_ready = ray.wait(fut, num_returns=len(fut), timeout=0)
+        while not_ready:
+            for i, (actor, queue) in enumerate(actors):
+                while not queue.empty():
+                    item = queue.get()
+                    if isinstance(item, Callable):
+                        item()
+                    else:
+                        callback_returns[i].append(item)
+            ready, not_ready = ray.wait(fut, num_returns=len(fut), timeout=0)
+        # Once everything is ready
         ray.get(fut)
     except RayActorError:
         for actor in actors:
@@ -333,6 +357,10 @@ def _train(params: Dict,
     res: Dict[str, Any] = ray.get(fut[0])
     bst = res["bst"]
     evals_result = res["evals_result"]
+    additional_results = {}
+
+    if callback_returns:
+        additional_results["callback_returns"] = callback_returns
 
     all_res = ray.get(fut)
     total_n = sum([res["train_n"] or 0 for res in all_res])
@@ -343,7 +371,7 @@ def _train(params: Dict,
     if checkpoint_prefix:
         _cleanup(checkpoint_prefix, checkpoint_path, num_actors)
 
-    return bst, evals_result
+    return bst, evals_result, additional_results
 
 
 def train(params: Dict,
@@ -351,6 +379,7 @@ def train(params: Dict,
           *args,
           evals=(),
           evals_result: Optional[Dict] = None,
+          additional_results: Optional[Dict] = None,
           num_actors: int = 4,
           cpus_per_actor: int = 0,
           gpus_per_actor: int = -1,
@@ -370,6 +399,7 @@ def train(params: Dict,
         evals (Union[List[Tuple], Tuple]): ``evals`` tuple passed to
             ``xgboost.train()``.
         evals_result (Optional[Dict]): Dict to store evaluation results in.
+        additional_results (Optional[Dict]): Dict to store additional results.
         num_actors (int): Number of parallel Ray actors.
         cpus_per_actor (int): Number of CPUs to be used per Ray actor.
         gpus_per_actor (int): Number of GPUs to be used per Ray actor.
@@ -413,11 +443,12 @@ def train(params: Dict,
 
     bst = None
     train_evals_result = {}
+    train_additional_results = {}
 
     tries = 0
     while tries <= max_actor_restarts:
         try:
-            bst, train_evals_result = _train(
+            bst, train_evals_result, train_additional_results = _train(
                 params,
                 dtrain,
                 *args,
@@ -448,6 +479,8 @@ def train(params: Dict,
             tries += 1
     if isinstance(evals_result, dict):
         evals_result.update(train_evals_result)
+    if isinstance(additional_results, dict):
+        additional_results.update(train_additional_results)
     return bst
 
 
@@ -472,7 +505,7 @@ def _predict(model: xgb.Booster,
 
     # Split data across workers
     wait_load = []
-    for _, actor in enumerate(actors):
+    for _, (actor, _) in enumerate(actors):
         wait_load.extend(_trigger_data_load(actor, data, []))
 
     ray.get(wait_load)
@@ -483,7 +516,10 @@ def _predict(model: xgb.Booster,
     logger.info("[RayXGBoost] Starting XGBoost prediction.")
 
     # Train
-    fut = [actor.predict.remote(model_ref, data, **kwargs) for actor in actors]
+    fut = [
+        actor.predict.remote(model_ref, data, **kwargs)
+        for (actor, _) in actors
+    ]
 
     try:
         actor_results = ray.get(fut)
