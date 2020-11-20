@@ -80,4 +80,4 @@ def hyperparameter_search(params: Dict,
           num_actors=num_actors, cpus_per_actor=cpus_per_actor,
           gpus_per_actor=gpus_per_actor,
           resources_per_actor=resources_per_actor,
-          max_actor_restarts=max_actor_restarts, callbacks=callbacks)
+          max_actor_restarts=max_actor_restarts, callbacks=callbacks, **kwargs)
