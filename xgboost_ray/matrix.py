@@ -183,7 +183,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
 
 
 class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
-    """Load each shard individually"""
+    """Load each shard individually."""
 
     def load_data(self,
                   num_actors: int,
