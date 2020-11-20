@@ -25,7 +25,8 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testSameObject(self):
         """Test that matrices are recognized as the same in an actor task."""
-        ray.init(num_cpus=1)
+        if not ray.is_initialized():
+            ray.init(num_cpus=1)
 
         @ray.remote
         def same(one, two):

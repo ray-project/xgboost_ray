@@ -51,7 +51,7 @@ class _RayDMatrixLoader:
         check = None
         if isinstance(data, str):
             check = data
-        if isinstance(data, Sequence) and isinstance(data[0], str):
+        elif isinstance(data, Sequence) and isinstance(data[0], str):
             check = data[0]
 
         if check is not None:
@@ -65,9 +65,9 @@ class _RayDMatrixLoader:
                     raise ValueError(
                         "File or stream specified as data source, but "
                         "filetype could not be detected. "
-                        "\nFIX THIS by passing] "
-                        "the `filetype` parameter to the RayDMatrix. Use the "
-                        "`RayFileType` enum for this.")
+                        "\nFIX THIS by passing the `filetype` parameter to "
+                        "the RayDMatrix. "
+                        "Use the `RayFileType` enum for this.")
 
     def _split_dataframe(self, local_data: pd.DataFrame) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
