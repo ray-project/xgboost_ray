@@ -1,3 +1,4 @@
 flake8==3.7.7
 yapf==0.23.0
 pytest
+pyarrow
