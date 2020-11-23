@@ -85,7 +85,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         self.assertSequenceEqual(list(self.y), list(pred_y))
 
     def testTrainingStop(self):
-        """This should now continue training after one actor died."""
+        """This should now stop training after one actor died."""
         # The `train()` function raises a RuntimeError
         with self.assertRaises(RuntimeError):
             bst = train(

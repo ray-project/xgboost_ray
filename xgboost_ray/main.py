@@ -247,12 +247,12 @@ def _create_actor(
         num_actors: int,
         num_cpus_per_actor: int,
         num_gpus_per_actor: int,
+        queue: Queue,
         resources_per_actor: Optional[Dict] = None,
         checkpoint_prefix: Optional[str] = None,
         checkpoint_path: str = "/tmp",
-        checkpoint_frequency: int = 5) -> Tuple[RayXGBoostActor, Queue]:
+        checkpoint_frequency: int = 5,) -> Tuple[RayXGBoostActor, Queue]:
 
-    queue = Queue() if rank == 0 else None
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
@@ -316,9 +316,12 @@ def _train(params: Dict,
     else:
         params["nthread"] = cpus_per_actor
 
+    # Create queue for communication from worker to caller.
+    queue = Queue()
+
     # Create remote actors
     actors = [
-        _create_actor(i, num_actors, cpus_per_actor, gpus_per_actor,
+        _create_actor(i, num_actors, cpus_per_actor, gpus_per_actor, queue,
                       resources_per_actor, checkpoint_prefix, checkpoint_path,
                       checkpoint_frequency) for i in range(num_actors)
     ]
@@ -343,21 +346,16 @@ def _train(params: Dict,
         for (actor, _) in actors
     ]
 
-    num_counters = 0
-
-    callback_returns = [list() for _ in range(len(actors))]
+    callback_returns = []
     try:
         ready, not_ready = ray.wait(fut, num_returns=len(fut), timeout=0)
         while not_ready:
-            for i, (actor, queue) in enumerate(actors):
-                if queue is not None:
-                    while not queue.empty():
-                        item = queue.get()
-                        if isinstance(item, Callable):
-                            num_counters+=1
-                            item()
-                        else:
-                            callback_returns[i].append(item)
+            while not queue.empty():
+                item = queue.get()
+                if isinstance(item, Callable):
+                    item()
+                else:
+                    callback_returns.append(item)
             ready, not_ready = ray.wait(fut, num_returns=len(fut), timeout=0)
         # Once everything is ready
         ray.get(fut)
@@ -365,8 +363,6 @@ def _train(params: Dict,
         for (actor, _) in actors:
             ray.kill(actor)
         raise
-
-    assert num_counters == 10
 
     # All results should be the same because of Rabit tracking. So we just
     # return the first one.

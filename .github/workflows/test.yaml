@@ -62,3 +62,4 @@ jobs:
         popd
         pushd examples/
         for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
+        echo "running xgboost-tune" && python simple.py --tune

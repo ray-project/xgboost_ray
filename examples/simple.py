@@ -78,7 +78,6 @@ if __name__ == "__main__":
         "tree_method": "approx",
         "objective": "binary:logistic",
         "eval_metric": ["logloss", "error"],
-        "max_depth": 3,
     }
 
     if args.tune:
@@ -86,13 +85,14 @@ if __name__ == "__main__":
         # Set config for tune.
         config.update({
             "eta": tune.loguniform(1e-4, 1e-1),
-            "subsample": tune.uniform(0.5, 1.0)
+            "subsample": tune.uniform(0.5, 1.0),
+            "max_depth": tune.randint(1, 9)
         })
         tune.run(tune.with_parameters(train_breast_cancer,
                                       cpus_per_actor=args.cpus_per_actor,
                                       num_actors=args.num_actors,
                                       use_tune=True), resources_per_trial={
-            "cpu": 1, "extra_cpu": args.cpus_per_actor*args.num_actors+1},
+            "cpu": 1, "extra_cpu": args.cpus_per_actor*args.num_actors},
             config=config, num_samples=args.num_samples)
     else:
         train_breast_cancer(config, cpus_per_actor=args.cpus_per_actor,
