@@ -534,11 +534,15 @@ def _predict(model: xgb.Booster,
     ]
 
     try:
-        actor_results = ray.get(fut)
+        ray.get(fut)
     except RayActorError:
+        logger.info("Caught an RayActorError")
         for actor in actors:
             ray.kill(actor)
         raise
+    except Exception as exc:
+        logger.info(f"Caught unknown error: {str(exc)}")
+        import ipdb ;ipdb.set_trace()
 
     return combine_data(data.sharding, actor_results)
 
