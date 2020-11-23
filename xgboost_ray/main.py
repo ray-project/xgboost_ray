@@ -357,6 +357,8 @@ def _train(params: Dict,
                     else:
                         callback_returns[i].append(item)
             ready, not_ready = ray.wait(not_ready, timeout=0)
+            logger.info("[RayXGBoost] Spinning...")
+            time.sleep(1)
             ray.get(ready)
         # Once everything is ready
         ray.get(fut)
