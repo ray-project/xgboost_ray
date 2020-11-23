@@ -1,8 +1,13 @@
 from typing import Dict, Optional
 
-from ray import tune
+try:
+    from ray import tune
+    TUNE_INSTALLED = True
+except ImportError:
+    TUNE_INSTALLED = False
+
 from xgboost_ray.session import get_actor_rank, put_queue
-from xgboost_ray import train, RayDMatrix
+from xgboost_ray import train
 
 # At each boosting round, add the results to the queue actor.
 # The results in the queue will be consumed by the Trainable to report to tune.
@@ -28,19 +33,8 @@ class RayTuneReportCallback:
                     report_dict[key] = result_dict[metric]
             put_queue(lambda: tune.report(**report_dict))
 
-def hyperparameter_search(params: Dict,
-          dtrain: RayDMatrix,
-          *args,
-          evals=(),
-          evals_result: Optional[Dict] = None,
-          additional_results: Optional[Dict] = None,
-          num_actors: int = 4,
-          cpus_per_actor: int = 0,
-          gpus_per_actor: int = -1,
-          resources_per_actor: Optional[Dict] = None,
-          max_actor_restarts: int = 0,
-          **kwargs):
-    """Distributed XGBoost tuning via Ray and Ray Tune.
+def hyperparameter_search(*args, metrics=None, **kwargs):
+    """Distributed XGBoost hyperparameter tuning via Ray and Ray Tune.
 
     This function will connect to a Ray cluster, create ``num_actors``
     remote actors, send data shards to them, and have them train an
@@ -49,35 +43,21 @@ def hyperparameter_search(params: Dict,
     reporting results to Ray Tune for hyperparameter search.
 
     Args:
-        params (Dict): parameter dict passed to ``xgboost.train()``
-        dtrain (RayDMatrix): Data object containing the training data.
-        evals (Union[List[Tuple], Tuple]): ``evals`` tuple passed to
-            ``xgboost.train()``.
-        evals_result (Optional[Dict]): Dict to store evaluation results in.
-        additional_results (Optional[Dict]): Dict to store additional results.
-        num_actors (int): Number of parallel Ray actors.
-        cpus_per_actor (int): Number of CPUs to be used per Ray actor.
-        gpus_per_actor (int): Number of GPUs to be used per Ray actor.
-        resources_per_actor (Optional[Dict]): Dict of additional resources
-            required per Ray actor.
-        max_actor_restarts (int): Number of retries when Ray actors fail.
-            Defaults to 0 (no retries). Set to -1 for unlimited retries.
-
-    Keyword Args:
-        checkpoint_prefix (str): Prefix for the checkpoint filenames.
-            Defaults to ``.xgb_ray_{time.time()}``.
-        checkpoint_path (str): Path to store checkpoints at. Defaults to
-            ``/tmp``
-        checkpoint_frequency (int): How often to save checkpoints. Defaults
-            to ``5``.
+        Same as ``xgboost_ray.train``.
+        metrics (str|list|dict): Metrics to report to Tune. If this is a list,
+            each item describes the metric key reported to XGBoost,
+            and it will reported under the same name to Tune. If this is a
+            dict, each key will be the name reported to Tune and the respective
+            value will be the metric key reported to XGBoost. If this is None,
+            all metrics will be reported to Tune under their default names as
+            obtained from XGBoost.
 
     Returns: An ``xgboost.Booster`` object.
     """
-    callbacks =kwargs.get("callbacks", [])
-    callbacks.append(RayTuneReportCallback(metrics=None))
-    train(params, dtrain, *args, evals=evals, evals_result=evals_result,
-          additional_results=additional_results,
-          num_actors=num_actors, cpus_per_actor=cpus_per_actor,
-          gpus_per_actor=gpus_per_actor,
-          resources_per_actor=resources_per_actor,
-          max_actor_restarts=max_actor_restarts, callbacks=callbacks, **kwargs)
+    if not TUNE_INSTALLED:
+        raise ImportError("To use Tune with XGBoost, Tune dependencies need "
+                          "to be installed. Please run `pip install ray["
+                          "tune]` and try again.")
+    callbacks = kwargs.get("callbacks", [])
+    callbacks.append(RayTuneReportCallback(metrics=metrics))
+    train(*args, **kwargs, callbacks=callbacks)

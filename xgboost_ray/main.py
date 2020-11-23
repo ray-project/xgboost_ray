@@ -11,12 +11,14 @@ try:
     from ray.services import get_node_ip_address
     from ray.exceptions import RayActorError
     from ray.util.queue import Queue
+    from ray.actor import ActorHandle
     RAY_INSTALLED = True
 except ImportError:
     ray = None
     logger = None
     get_node_ip_address = None
     Queue = None
+    ActorHandle = None
     RAY_INSTALLED = False
 
 import xgboost as xgb
@@ -262,7 +264,7 @@ def _create_actor(
             queue=queue,
             checkpoint_prefix=checkpoint_prefix,
             checkpoint_path=checkpoint_path,
-            checkpoint_frequency=checkpoint_frequency), queue
+            checkpoint_frequency=checkpoint_frequency)
 
 
 def _trigger_data_load(actor, dtrain, evals):
@@ -278,6 +280,22 @@ def _cleanup(checkpoint_prefix: str, checkpoint_path: str, num_actors: int):
                                            i)
         if os.path.exists(checkpoint_file):
             os.remove(checkpoint_file)
+
+def _shutdown(remote_workers: List[ActorHandle], force: bool = False):
+    if not force:
+        for worker in remote_workers:
+            logger.debug(f"Killing worker {worker}.")
+            ray.kill(worker)
+    else:
+        try:
+            [
+                worker.__ray_terminate__.remote()
+                for worker in remote_workers
+            ]
+        except RayActorError:
+            logger.warning("Failed to shutdown gracefully, forcing a "
+                           "shutdown.")
+            _shutdown(remote_workers, force=True)
 
 
 def _train(params: Dict,
@@ -329,7 +347,7 @@ def _train(params: Dict,
 
     # Split data across workers
     wait_load = []
-    for _, (actor, _) in enumerate(actors):
+    for _, actor in enumerate(actors):
         wait_load.extend(_trigger_data_load(actor, dtrain, evals))
 
     ray.get(wait_load)
@@ -343,7 +361,7 @@ def _train(params: Dict,
     # Train
     fut = [
         actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
-        for (actor, _) in actors
+        for actor in actors
     ]
 
     callback_returns = []
@@ -360,8 +378,7 @@ def _train(params: Dict,
         # Once everything is ready
         ray.get(fut)
     except RayActorError:
-        for (actor, _) in actors:
-            ray.kill(actor)
+        _shutdown(remote_workers=actors, force=True)
         raise
 
     # All results should be the same because of Rabit tracking. So we just
@@ -383,8 +400,9 @@ def _train(params: Dict,
     if checkpoint_prefix:
         _cleanup(checkpoint_prefix, checkpoint_path, num_actors)
 
-    return bst, evals_result, additional_results
+    _shutdown(remote_workers=actors, force=False)
 
+    return bst, evals_result, additional_results
 
 def train(params: Dict,
           dtrain: RayDMatrix,
@@ -517,7 +535,7 @@ def _predict(model: xgb.Booster,
 
     # Split data across workers
     wait_load = []
-    for _, (actor, _) in enumerate(actors):
+    for _, actor in enumerate(actors):
         wait_load.extend(_trigger_data_load(actor, data, []))
 
     ray.get(wait_load)
@@ -530,15 +548,16 @@ def _predict(model: xgb.Booster,
     # Train
     fut = [
         actor.predict.remote(model_ref, data, **kwargs)
-        for (actor, _) in actors
+        for actor in actors
     ]
 
     try:
         actor_results = ray.get(fut)
     except RayActorError:
-        for actor in actors:
-            ray.kill(actor)
+        _shutdown(remote_workers=actors, force=True)
         raise
+
+    _shutdown(remote_workers=actors, force=False)
 
     return combine_data(data.sharding, actor_results)
 
