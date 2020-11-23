@@ -38,10 +38,11 @@ def train_ray(num_workers, num_boost_rounds, num_files=0, use_gpu=False):
         config,
         dtrain,
         evals_result=evals_result,
-        max_actor_restarts=0,
+        max_actor_restarts=2,
         num_boost_round=num_boost_rounds,
         num_actors=num_workers,
         cpus_per_actor=4,
+        checkpoint_path="/tmp/checkpoint/",
         gpus_per_actor=0 if not use_gpu else 1,
         resources_per_actor={
             "actor_cpus": 4,
