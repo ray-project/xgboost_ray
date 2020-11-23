@@ -347,8 +347,7 @@ def _train(params: Dict,
 
     callback_returns = [list() for _ in range(len(actors))]
     try:
-        ready, not_ready = ray.wait(fut, timeout=5)
-        logger.info("[RayXGBoost] waiting...")
+        not_ready = fut
         while not_ready:
             for i, (actor, queue) in enumerate(actors):
                 while not queue.empty():
@@ -357,8 +356,8 @@ def _train(params: Dict,
                         item()
                     else:
                         callback_returns[i].append(item)
-            ready, not_ready = ray.wait(fut, timeout=5)
-            logger.info("[RayXGBoost] spinning...")
+            ready, not_ready = ray.wait(not_ready, timeout=0)
+            ray.get(ready)
         # Once everything is ready
         ray.get(fut)
     except RayActorError:
