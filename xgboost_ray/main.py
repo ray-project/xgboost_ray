@@ -347,7 +347,7 @@ def _train(params: Dict,
 
     callback_returns = [list() for _ in range(len(actors))]
     try:
-        ready, not_ready = ray.wait(fut, num_returns=len(fut), timeout=0)
+        ready, not_ready = ray.wait(fut, timeout=5)
         while not_ready:
             for i, (actor, queue) in enumerate(actors):
                 while not queue.empty():
@@ -356,13 +356,17 @@ def _train(params: Dict,
                         item()
                     else:
                         callback_returns[i].append(item)
-            ready, not_ready = ray.wait(fut, num_returns=len(fut), timeout=0)
+            ready, not_ready = ray.wait(fut, timeout=5)
+            logger.info("[RayXGBoost] spinning...")
         # Once everything is ready
         ray.get(fut)
     except RayActorError:
         for (actor, _) in actors:
             ray.kill(actor)
         raise
+    except Exception as exc:
+        print("bad exception")
+        import ipdb; ipdb.set_trace()
 
     # All results should be the same because of Rabit tracking. So we just
     # return the first one.
@@ -489,6 +493,7 @@ def train(params: Dict,
                     "the training.".format(max_actor_restarts, checkpoint_path,
                                            checkpoint_prefix))
             tries += 1
+
     if isinstance(evals_result, dict):
         evals_result.update(train_evals_result)
     if isinstance(additional_results, dict):
