@@ -230,9 +230,6 @@ class RayXGBoostActor:
         predictions = model.predict(local_data, **kwargs)
         return predictions
 
-    def set_queue(self, queue):
-        self.callback_queue = queue
-
 def _create_actor(
         rank: int,
         num_actors: int,
@@ -243,7 +240,7 @@ def _create_actor(
         checkpoint_path: str = "/tmp",
         checkpoint_frequency: int = 5) -> Tuple[RayXGBoostActor, Queue]:
 
-    queue = Queue()
+    queue = Queue() if rank == 0 else None
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
@@ -334,17 +331,21 @@ def _train(params: Dict,
         for (actor, _) in actors
     ]
 
+    num_counters = 0
+
     callback_returns = [list() for _ in range(len(actors))]
     try:
         ready, not_ready = ray.wait(fut, num_returns=len(fut), timeout=0)
         while not_ready:
             for i, (actor, queue) in enumerate(actors):
-                while not queue.empty():
-                    item = queue.get()
-                    if isinstance(item, Callable):
-                        item()
-                    else:
-                        callback_returns[i].append(item)
+                if queue is not None:
+                    while not queue.empty():
+                        item = queue.get()
+                        if isinstance(item, Callable):
+                            num_counters+=1
+                            item()
+                        else:
+                            callback_returns[i].append(item)
             ready, not_ready = ray.wait(fut, num_returns=len(fut), timeout=0)
         # Once everything is ready
         ray.get(fut)
@@ -352,6 +353,8 @@ def _train(params: Dict,
         for (actor, _) in actors:
             ray.kill(actor)
         raise
+
+    assert num_counters == 10
 
     # All results should be the same because of Rabit tracking. So we just
     # return the first one.

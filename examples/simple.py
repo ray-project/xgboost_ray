@@ -24,11 +24,13 @@ def train_breast_cancer(config, cpus_per_actor=1, num_actors=1,
         "params": config,
         "dtrain": train_set,
         "evals": [(test_set, "eval")],
+        "evals_result": evals_result,
         "max_actor_restarts": 1,
         "gpus_per_actor": 0,
         "cpus_per_actor": cpus_per_actor,
         "num_actors": num_actors,
-        "verbose_eval": False
+        "verbose_eval": False,
+        "num_boost_round": 100,
     }
     if not use_tune:
         bst = train(**train_args)
@@ -60,7 +62,7 @@ if __name__ == "__main__":
         help="Sets number of xgboost workers to use.")
     parser.add_argument(
         "--tune", action="store_true", default=False, help="Tune training")
-    parser.add_argument("--num_samples", type=int, default=4, help="Number "
+    parser.add_argument("--num-samples", type=int, default=4, help="Number "
                                                                    "of "
                                                                    "samples "
                                                                    "to use "
@@ -89,7 +91,7 @@ if __name__ == "__main__":
                                       cpus_per_actor=args.cpus_per_actor,
                                       num_actors=args.num_actors,
                                       use_tune=True), resources_per_trial={
-            "cpu": 0, "extra_cpu": args.cpus_per_actor*args.num_actors},
+            "cpu": 1, "extra_cpu": args.cpus_per_actor*args.num_actors+1},
             config=config, num_samples=args.num_samples)
     else:
         train_breast_cancer(config, cpus_per_actor=args.cpus_per_actor,
