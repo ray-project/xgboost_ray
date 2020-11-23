@@ -195,8 +195,20 @@ class RayXGBoostActor:
         evals_result = dict()
 
         # Load model
+        checkpoint_dir = os.path.dirname(self.checkpoint_file)
         if os.path.exists(self.checkpoint_file):
             kwargs.update({"xgb_model": self.checkpoint_file})
+        elif not os.path.exists(checkpoint_dir):
+            try:
+                os.makedirs(checkpoint_dir, 0o755, exist_ok=True)
+            except Exception as e:
+                raise ValueError(
+                    f"Checkpoint directory {checkpoint_dir} could not be "
+                    f"created."
+                    f"\nFIX THIS by passing a valid (existing) location "
+                    f"as the `checkpoint_path` parameter and omit using "
+                    f"path separators (usually `/`) in the "
+                    f"`checkpoint_prefix` parameter.") from e
 
         if "callbacks" in kwargs:
             callbacks = kwargs["callbacks"]
