@@ -31,6 +31,7 @@ def main():
         evals=[(test_set, "eval")],
         evals_result=evals_result,
         max_actor_restarts=1,
+        checkpoint_path="/tmp/checkpoint/",
         verbose_eval=False)
 
     bst.save_model("simple.xgb")
