@@ -370,8 +370,8 @@ def _train(params: Dict,
             ray.kill(actor)
         raise
     except Exception as exc:
-        print("bad exception")
         import ipdb; ipdb.set_trace()
+        print("bad exception")
 
     # All results should be the same because of Rabit tracking. So we just
     # return the first one.
