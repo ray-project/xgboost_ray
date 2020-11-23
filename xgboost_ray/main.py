@@ -133,8 +133,8 @@ class RayXGBoostActor:
                  checkpoint_path: str = "/tmp",
                  checkpoint_frequency: int = 5):
         self.queue = queue
-
-        init_session(rank, queue)
+        if queue:
+            init_session(rank, queue)
 
         self.rank = rank
         self.num_actors = num_actors
@@ -250,11 +250,11 @@ def _create_actor(
         num_cpus_per_actor: int,
         num_gpus_per_actor: int,
         resources_per_actor: Optional[Dict] = None,
+        queue: Queue = None,
         checkpoint_prefix: Optional[str] = None,
         checkpoint_path: str = "/tmp",
         checkpoint_frequency: int = 5) -> Tuple[RayXGBoostActor, Queue]:
 
-    queue = Queue()
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
@@ -293,6 +293,7 @@ def _train(params: Dict,
            checkpoint_prefix: Optional[str] = None,
            checkpoint_path: str = "/tmp",
            checkpoint_frequency: int = 5,
+           enable_queue: bool = False,
            **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
     _assert_ray_support()
 
@@ -319,9 +320,11 @@ def _train(params: Dict,
         params["nthread"] = cpus_per_actor
 
     # Create remote actors
+    queue = Queue() if enable_queue else None
+
     actors = [
         _create_actor(i, num_actors, cpus_per_actor, gpus_per_actor,
-                      resources_per_actor, checkpoint_prefix, checkpoint_path,
+                      resources_per_actor, queue, checkpoint_prefix, checkpoint_path,
                       checkpoint_frequency) for i in range(num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
