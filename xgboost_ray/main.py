@@ -253,7 +253,7 @@ def _create_actor(
         queue: Queue = None,
         checkpoint_prefix: Optional[str] = None,
         checkpoint_path: str = "/tmp",
-        checkpoint_frequency: int = 5) -> Tuple[RayXGBoostActor, Queue]:
+        checkpoint_frequency: int = 5) -> RayXGBoostActor:
 
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
@@ -264,7 +264,7 @@ def _create_actor(
             queue=queue,
             checkpoint_prefix=checkpoint_prefix,
             checkpoint_path=checkpoint_path,
-            checkpoint_frequency=checkpoint_frequency), queue
+            checkpoint_frequency=checkpoint_frequency)
 
 
 def _trigger_data_load(actor, dtrain, evals):
@@ -331,7 +331,7 @@ def _train(params: Dict,
 
     # Split data across workers
     wait_load = []
-    for _, (actor, _) in enumerate(actors):
+    for _, actor in enumerate(actors):
         wait_load.extend(_trigger_data_load(actor, dtrain, evals))
 
     ray.get(wait_load)
@@ -345,14 +345,14 @@ def _train(params: Dict,
     # Train
     fut = [
         actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
-        for (actor, _) in actors
+        for actor in actors
     ]
 
     callback_returns = [list() for _ in range(len(actors))]
     try:
         not_ready = fut
         while not_ready:
-            for i, (actor, queue) in enumerate(actors):
+            if queue:
                 while not queue.empty():
                     item = queue.get()
                     if isinstance(item, Callable):
@@ -366,8 +366,10 @@ def _train(params: Dict,
         # Once everything is ready
         ray.get(fut)
     except RayActorError:
-        for (actor, _) in actors:
+        for actor in actors:
             ray.kill(actor)
+        if queue:
+            ray.kill(queue)
         raise
     except Exception as exc:
         import ipdb; ipdb.set_trace()
