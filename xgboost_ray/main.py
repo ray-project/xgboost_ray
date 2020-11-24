@@ -332,7 +332,14 @@ def _train(params: Dict,
     for _, actor in enumerate(actors):
         wait_load.extend(_trigger_data_load(actor, dtrain, evals))
 
-    ray.get(wait_load)
+    try:
+        ray.get(wait_load)
+    except Exception:
+        for actor in actors:
+            ray.kill(actor)
+        if queue:
+            ray.kill(queue)
+        raise
 
     logger.info("[RayXGBoost] Starting XGBoost training.")
 
@@ -527,7 +534,13 @@ def _predict(model: xgb.Booster,
     for _, (actor, _) in enumerate(actors):
         wait_load.extend(_trigger_data_load(actor, data, []))
 
-    ray.get(wait_load)
+    try:
+        ray.get(wait_load)
+    except Exception as exc:
+        logger.warning(f"Caught an error during prediction: {str(exc)}")
+        for actor in actors:
+            ray.kill(actor)
+        raise
 
     # Put model into object store
     model_ref = ray.put(model)
