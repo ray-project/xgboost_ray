@@ -133,8 +133,8 @@ class RayXGBoostActor:
                  checkpoint_path: str = "/tmp",
                  checkpoint_frequency: int = 5):
         self.queue = queue
-
-        init_session(rank, queue)
+        if queue:
+            init_session(rank, queue)
 
         self.rank = rank
         self.num_actors = num_actors
@@ -250,11 +250,11 @@ def _create_actor(
         num_cpus_per_actor: int,
         num_gpus_per_actor: int,
         resources_per_actor: Optional[Dict] = None,
+        queue: Queue = None,
         checkpoint_prefix: Optional[str] = None,
         checkpoint_path: str = "/tmp",
-        checkpoint_frequency: int = 5) -> Tuple[RayXGBoostActor, Queue]:
+        checkpoint_frequency: int = 5) -> RayXGBoostActor:
 
-    queue = Queue()
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
@@ -264,7 +264,7 @@ def _create_actor(
             queue=queue,
             checkpoint_prefix=checkpoint_prefix,
             checkpoint_path=checkpoint_path,
-            checkpoint_frequency=checkpoint_frequency), queue
+            checkpoint_frequency=checkpoint_frequency)
 
 
 def _trigger_data_load(actor, dtrain, evals):
@@ -293,6 +293,7 @@ def _train(params: Dict,
            checkpoint_prefix: Optional[str] = None,
            checkpoint_path: str = "/tmp",
            checkpoint_frequency: int = 5,
+           enable_queue: bool = False,
            **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
     _assert_ray_support()
 
@@ -319,16 +320,18 @@ def _train(params: Dict,
         params["nthread"] = cpus_per_actor
 
     # Create remote actors
+    queue = Queue() if enable_queue else None
+
     actors = [
         _create_actor(i, num_actors, cpus_per_actor, gpus_per_actor,
-                      resources_per_actor, checkpoint_prefix, checkpoint_path,
+                      resources_per_actor, queue, checkpoint_prefix, checkpoint_path,
                       checkpoint_frequency) for i in range(num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
 
     # Split data across workers
     wait_load = []
-    for _, (actor, _) in enumerate(actors):
+    for _, actor in enumerate(actors):
         wait_load.extend(_trigger_data_load(actor, dtrain, evals))
 
     ray.get(wait_load)
@@ -342,27 +345,35 @@ def _train(params: Dict,
     # Train
     fut = [
         actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
-        for (actor, _) in actors
+        for actor in actors
     ]
 
     callback_returns = [list() for _ in range(len(actors))]
     try:
-        ready, not_ready = ray.wait(fut, num_returns=len(fut), timeout=0)
+        not_ready = fut
         while not_ready:
-            for i, (actor, queue) in enumerate(actors):
+            if queue:
                 while not queue.empty():
                     item = queue.get()
                     if isinstance(item, Callable):
                         item()
                     else:
                         callback_returns[i].append(item)
-            ready, not_ready = ray.wait(fut, num_returns=len(fut), timeout=0)
+            ready, not_ready = ray.wait(not_ready, timeout=0)
+            logger.debug("[RayXGBoost] Waiting for results...")
+            time.sleep(0.5)
+            ray.get(ready)
         # Once everything is ready
         ray.get(fut)
     except RayActorError:
-        for (actor, _) in actors:
+        for actor in actors:
             ray.kill(actor)
+        if queue:
+            ray.kill(queue)
         raise
+    except Exception as exc:
+        import ipdb; ipdb.set_trace()
+        logger.exception("Bad exception. This should not be reached.")
 
     # All results should be the same because of Rabit tracking. So we just
     # return the first one.
@@ -489,6 +500,7 @@ def train(params: Dict,
                     "the training.".format(max_actor_restarts, checkpoint_path,
                                            checkpoint_prefix))
             tries += 1
+
     if isinstance(evals_result, dict):
         evals_result.update(train_evals_result)
     if isinstance(additional_results, dict):
@@ -535,10 +547,14 @@ def _predict(model: xgb.Booster,
 
     try:
         actor_results = ray.get(fut)
-    except RayActorError:
+    except RayActorError as exc:
+        logger.warning(f"Caught an RayActorError: {str(exc)}")
         for actor in actors:
             ray.kill(actor)
         raise
+    except Exception as exc:
+        import ipdb; ipdb.set_trace()
+        logger.error(f"Caught unknown error: {str(exc)}")
 
     return combine_data(data.sharding, actor_results)
 
