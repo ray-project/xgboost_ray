@@ -94,12 +94,14 @@ Hyperparameter Tuning
 
 `xgboost_ray` integrates with [Ray Tune](https://tune.io) to provide distributed hyperparameter tuning for your
 distributed XGBoost models. You can run multiple `xgboost_ray` training runs in parallel, each with a different
-hyperparameter configuration, and each training run parallelized by itself.
+hyperparameter configuration, and each training run parallelized by itself. All you have to do is move your training
+code to a function, and pass the function to `tune.run`. Internally, `train` will detect if `tune` is being used and will
+automatically report results to tune.
 
 Example using `xgboost_ray` with Tune:
 
 ```python
-from xgboost_ray import RayDMatrix, train, hyperparameter_search
+from xgboost_ray import RayDMatrix, train
 
 num_actors = 4
 num_cpus_per_actor = 4
@@ -109,7 +111,7 @@ def train_model(config):
     train_set = RayDMatrix(train_x, train_y)
 
     evals_result = {}
-    bst = hyperparameter_search(
+    bst = train(
         {
             "objective": "binary:logistic",
             "eval_metric": ["logloss", "error"],

@@ -23,6 +23,14 @@ except ImportError:
     ActorHandle = None
     RAY_INSTALLED = False
 
+# Tune imports.
+try:
+    from ray import tune
+    from xgboost_ray.tune import RayTuneReportCallback
+    TUNE_INSTALLED = True
+except ImportError:
+    TUNE_INSTALLED = False
+
 import xgboost as xgb
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
@@ -103,6 +111,16 @@ def _checkpoint_file(path: str, prefix: str, rank: int):
     if not prefix:
         return None
     return os.path.join(path, f"{prefix}_{rank:05d}.xgb")
+
+def _add_tune_callback(kwargs: Dict):
+    if TUNE_INSTALLED and tune.is_session_enabled():
+        callbacks = kwargs.get("callbacks", [])
+        for callback in callbacks:
+            if isinstance(callback, RayTuneReportCallback):
+                return
+        callbacks.append(RayTuneReportCallback(metrics=None))
+        kwargs["callbacks"] = callbacks
+
 
 
 @ray.remote
@@ -475,6 +493,9 @@ def train(params: Dict,
     XGBoost classifier. The XGBoost parameters will be shared and combined
     via Rabit's all-reduce protocol.
 
+    If running inside a Ray Tune session, this function will automatically
+    handle results to tune for hyperparameter search.
+
     Args:
         params (Dict): parameter dict passed to ``xgboost.train()``
         dtrain (RayDMatrix): Data object containing the training data.
@@ -511,6 +532,8 @@ def train(params: Dict,
             "\nFIX THIS by instantiating a RayDMatrix first: "
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(
                 type(dtrain)))
+
+    _add_tune_callback(kwargs)
 
     if not dtrain.loaded and not dtrain.distributed:
         dtrain.load_data(num_actors)

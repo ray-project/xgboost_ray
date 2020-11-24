@@ -5,7 +5,7 @@ from ray import tune
 
 import xgboost as xgb
 
-from xgboost_ray import hyperparameter_search
+from xgboost_ray import train
 
 from examples.simple import create_train_args
 
@@ -16,7 +16,7 @@ def train_breast_cancer(config, cpus_per_actor=1, num_actors=1):
                                    cpus_per_actor=cpus_per_actor,
                                    num_actors=num_actors)
 
-    bst = hyperparameter_search(**train_args, metrics=["eval-error"])
+    bst = train(**train_args)
 
     model_path = "simple.xgb"
     with tune.checkpoint_dir(step=0) as checkpoint_dir:
