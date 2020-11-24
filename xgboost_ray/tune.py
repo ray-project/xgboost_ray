@@ -60,4 +60,4 @@ def hyperparameter_search(*args, metrics=None, **kwargs):
                           "tune]` and try again.")
     callbacks = kwargs.get("callbacks", [])
     callbacks.append(RayTuneReportCallback(metrics=metrics))
-    train(*args, **kwargs, callbacks=callbacks)
+    return train(*args, **kwargs, callbacks=callbacks)

@@ -38,10 +38,13 @@ def train_breast_cancer(config, cpus_per_actor=1, num_actors=1,
     else:
         bst = hyperparameter_search(**train_args, metrics=["eval-error"])
 
-    if not use_tune:
-        bst.save_model("simple.xgb")
-        print("Final validation error: {:.4f}".format(
-            evals_result["eval"]["error"][-1]))
+    model_path = "simple.xgb"
+    if use_tune:
+        with tune.checkpoint_dir(step=0) as checkpoint_dir:
+            model_path = checkpoint_dir+"/"+model_path
+    bst.save_model(model_path)
+    print("Final validation error: {:.4f}".format(
+        evals_result["eval"]["error"][-1]))
 
 
 if __name__ == "__main__":
@@ -82,18 +85,29 @@ if __name__ == "__main__":
 
     if args.tune:
         from ray import tune
+        import os
+        import xgboost as xgb
         # Set config for tune.
         config.update({
             "eta": tune.loguniform(1e-4, 1e-1),
             "subsample": tune.uniform(0.5, 1.0),
             "max_depth": tune.randint(1, 9)
         })
-        tune.run(tune.with_parameters(train_breast_cancer,
+        analysis = tune.run(tune.with_parameters(train_breast_cancer,
                                       cpus_per_actor=args.cpus_per_actor,
                                       num_actors=args.num_actors,
                                       use_tune=True), resources_per_trial={
             "cpu": 1, "extra_cpu": args.cpus_per_actor*args.num_actors},
-            config=config, num_samples=args.num_samples)
+            config=config, num_samples=args.num_samples,
+                            metric="eval-error", mode="min")
+
+        # Load the best model checkpoint
+        best_bst = xgb.Booster()
+        best_bst.load_model(
+            os.path.join(analysis.best_checkpoint, "simple.xgb"))
+        accuracy = 1. - analysis.best_result["eval-error"]
+        print(f"Best model parameters: {analysis.best_config}")
+        print(f"Best model total accuracy: {accuracy:.4f}")
     else:
         train_breast_cancer(config, cpus_per_actor=args.cpus_per_actor,
                             num_actors=args.num_actors, use_tune=False)
