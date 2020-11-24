@@ -492,7 +492,9 @@ def train(params: Dict,
                 logger.warning(
                     f"A Ray actor died during training. Trying to restart "
                     f"and continue training from last checkpoint "
-                    f"(restart {tries + 1} of {max_actor_restarts}).")
+                    f"(restart {tries + 1} of {max_actor_restarts}). "
+                    f"Sleeping for 10 seconds for cleanup.")
+                time.sleep(10)
             else:
                 raise RuntimeError(
                     "A Ray actor died during training and the maximum number "
@@ -620,7 +622,9 @@ def predict(model: xgb.Booster,
             if tries + 1 <= max_actor_restarts:
                 logger.warning(
                     "A Ray actor died during prediction. Trying to restart "
-                    "prediction from scratch.")
+                    "prediction from scratch. "
+                    "Sleeping for 10 seconds for cleanup.")
+                time.sleep(10)
             else:
                 raise RuntimeError(
                     "A Ray actor died during prediction and the maximum "
