@@ -22,7 +22,8 @@ except ImportError:
 
 import xgboost as xgb
 
-from xgboost_ray.matrix import RayDMatrix, combine_data
+from xgboost_ray.matrix import RayDMatrix, combine_data, \
+    RayDeviceQuantileDMatrix, DataChain
 from xgboost_ray.session import init_session
 
 
@@ -164,9 +165,19 @@ class RayXGBoostActor:
     def load_data(self, data: RayDMatrix):
         if data in self._data:
             return
-        x, y = data.get_data(self.rank, self.num_actors)
-        self._local_n = len(x)
-        matrix = xgb.DMatrix(x, label=y)
+        param = data.get_data(self.rank, self.num_actors)
+        self._local_n = len(param["data"])
+
+        ll = param.pop("label_lower_bound", None)
+        lu = param.pop("label_upper_bound", None)
+
+        if isinstance(data, RayDeviceQuantileDMatrix):
+            matrix = xgb.DeviceQuantileDMatrix(**param)
+        else:
+            matrix = xgb.DMatrix(**param)
+
+        matrix.set_info(label_lower_bound=ll, label_upper_bound=lu)
+
         self._data[data] = matrix
 
     def train(self, rabit_args: List[str], params: Dict[str, Any],
