@@ -321,17 +321,17 @@ def _cleanup(checkpoint_prefix: str, checkpoint_path: str, num_actors: int):
 def _shutdown(remote_workers: List[ActorHandle], queue: Optional[Queue] = None,
               force: bool
 = False):
-    if not force:
-        logger.debug(f"Killing worker {len(remote_workers)} workers.")
+    if force:
+        logger.debug(f"Killing {len(remote_workers)} workers.")
         for worker in remote_workers:
             ray.kill(worker)
-        if queue:
-            logger.debug("Killing Queue actor.")
+        if queue is not None:
+            logger.debug("Killing Queue.")
             ray.kill(queue.actor)
     else:
         try:
             [worker.__ray_terminate__.remote() for worker in remote_workers]
-            if queue:
+            if queue is not None:
                 queue.actor.__ray_terminate__.remote()
         except RayActorError:
             logger.warning("Failed to shutdown gracefully, forcing a "
@@ -396,10 +396,7 @@ def _train(params: Dict,
     try:
         ray.get(wait_load)
     except Exception:
-        for actor in actors:
-            ray.kill(actor)
-        if queue:
-            ray.kill(queue)
+        _shutdown(actors, queue, force=True)
         raise
 
     logger.info("[RayXGBoost] Starting XGBoost training.")
@@ -601,8 +598,7 @@ def _predict(model: xgb.Booster,
         ray.get(wait_load)
     except Exception as exc:
         logger.warning(f"Caught an error during prediction: {str(exc)}")
-        for actor in actors:
-            ray.kill(actor)
+        _shutdown(actors, force=True)
         raise
 
     # Put model into object store
