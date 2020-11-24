@@ -2,7 +2,8 @@ import glob
 import math
 import uuid
 from enum import Enum
-from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence
+from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence, \
+    Callable
 
 import numpy as np
 import pandas as pd
@@ -10,8 +11,15 @@ import pandas as pd
 import os
 
 import ray
+from xgboost.core import DataIter
 
 Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series]
+
+
+def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
+    if any(df is None for df in dfs):
+        return None
+    return pd.concat(dfs, copy=False)
 
 
 class RayFileType(Enum):
@@ -35,15 +43,106 @@ class RayShardingMode(Enum):
     BATCH = 2
 
 
+class _ShardChain:
+    def __init__(self, shards: List[Tuple[pd.DataFrame, Optional[
+            pd.Series], Optional[pd.Series], Optional[pd.Series], Optional[
+                pd.Series], Optional[pd.Series]]]):
+        x, y, w, b, ll, lu = [], [], [], [], [], []
+        for shard in shards:
+            for i, a in enumerate([x, y, w, b, ll, lu]):
+                a.append(shard[i])
+
+        self.x = x
+        self.y = y
+        self.w = w
+        self.b = b
+        self.ll = ll
+        self.lu = lu
+
+    def __len__(self):
+        return len(self.x)
+
+    def __iter__(self):
+        yield self.x
+        yield self.y
+        yield self.w
+        yield self.b
+        yield self.ll
+        yield self.lu
+
+
+class RayDataIter(DataIter):
+    def __init__(
+            self,
+            data: Data,
+            label: List[Optional[Data]],
+            missing: Optional[float],
+            weight: List[Optional[Data]],
+            base_margin: List[Optional[Data]],
+            label_lower_bound: List[Optional[Data]],
+            label_upper_bound: List[Optional[Data]],
+            feature_names: Optional[List[str]],
+            feature_types: Optional[List[np.dtype]],
+    ):
+        super(RayDataIter, self).__init__()
+
+        self._data = data
+        self._label = label
+        self._missing = missing
+        self._weight = weight
+        self._base_margin = base_margin
+        self._label_lower_bound = label_lower_bound
+        self._label_upper_bound = label_upper_bound
+        self._feature_names = feature_names
+        self._feature_types = feature_types
+
+        self._iter = 0
+
+    def __len__(self):
+        return sum([len(shard) for shard in self._data])
+
+    def reset(self):
+        self._iter = 0
+
+    def next(self, input_data: Callable):
+        if self._iter >= len(self._data):
+            return 0
+        input_data(
+            data=self._data[self._iter],
+            label=self._label[self._iter],
+            weight=self._weight[self._iter],
+            group=None,
+            label_lower_bound=self._label_lower_bound[self._iter],
+            label_upper_bound=self._label_upper_bound[self._iter],
+            feature_names=self._feature_names,
+            feature_types=self._feature_types)
+        self._iter += 1
+
+
 class _RayDMatrixLoader:
     def __init__(self,
                  data: Data,
                  label: Optional[Data] = None,
+                 missing: Optional[float] = None,
+                 weight: Optional[Data] = None,
+                 base_margin: Optional[Data] = None,
+                 label_lower_bound: Optional[Data] = None,
+                 label_upper_bound: Optional[Data] = None,
+                 feature_names: Optional[List[str]] = None,
+                 feature_types: Optional[List[np.dtype]] = None,
                  filetype: Optional[RayFileType] = None,
                  ignore: Optional[List[str]] = None,
                  **kwargs):
         self.data = data
         self.label = label
+        self.missing = missing
+        self.weight = weight
+        self.base_margin = base_margin
+        self.label_lower_bound = label_lower_bound
+        self.label_upper_bound = label_upper_bound
+        self.feature_names = feature_names
+        self.feature_types = feature_types
+
         self.filetype = filetype
         self.ignore = ignore
         self.kwargs = kwargs
@@ -63,58 +162,113 @@ class _RayDMatrixLoader:
                     self.filetype = RayFileType.PARQUET
                 else:
                     raise ValueError(
-                        "File or stream specified as data source, but "
-                        "filetype could not be detected. "
-                        "\nFIX THIS by passing the `filetype` parameter to "
-                        "the RayDMatrix. "
-                        "Use the `RayFileType` enum for this.")
+                        f"File or stream ({check}) specified as data source, "
+                        "but filetype could not be detected. "
+                        "\nFIX THIS by passing "
+                        "the `filetype` parameter to the RayDMatrix. Use the "
+                        "`RayFileType` enum for this.")
+
+    def _get_column(self, local_data: pd.DataFrame,
+                    column: Data) -> Tuple[pd.Series, Optional[str]]:
+        if isinstance(column, str):
+            return local_data[column], column
+        elif column is not None:
+            if isinstance(column, pd.DataFrame):
+                col = pd.Series(column.squeeze())
+            elif not isinstance(column, pd.Series):
+                col = pd.Series(column)
+            else:
+                col = column
+            return col, None
+        return column, None
 
     def _split_dataframe(self, local_data: pd.DataFrame) -> \
-            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
-        """Split dataframe into `features`, `labels`"""
-        if self.label is not None:
-            if isinstance(self.label, str):
-                x = local_data[local_data.columns.difference([self.label])]
-                y = local_data[self.label]
-            else:
-                x = local_data
-                if isinstance(self.label, pd.DataFrame):
-                    y = pd.Series(self.label.squeeze())
-                elif not isinstance(self.label, pd.Series):
-                    y = pd.Series(self.label)
-                else:
-                    y = self.label
-            return x, y
-        return local_data, None
+            Tuple[pd.DataFrame,
+                  Optional[pd.Series],
+                  Optional[pd.Series],
+                  Optional[pd.Series],
+                  Optional[pd.Series],
+                  Optional[pd.Series]]:
+        """
+        Split dataframe into
+
+        `features`, `labels`, `weight`, `base_margin`, `label_lower_bound`,
+        `label_upper_bound`
+
+        """
+        exclude_cols: List[str] = []  # Exclude these columns from `x`
+
+        label, exclude = self._get_column(local_data, self.label)
+        if exclude:
+            exclude_cols.append(exclude)
+
+        weight, exclude = self._get_column(local_data, self.weight)
+        if exclude:
+            exclude_cols.append(exclude)
+
+        base_margin, exclude = self._get_column(local_data, self.base_margin)
+        if exclude:
+            exclude_cols.append(exclude)
+
+        label_lower_bound, exclude = self._get_column(local_data,
+                                                      self.label_lower_bound)
+        if exclude:
+            exclude_cols.append(exclude)
+
+        label_upper_bound, exclude = self._get_column(local_data,
+                                                      self.label_upper_bound)
+        if exclude:
+            exclude_cols.append(exclude)
+
+        x = local_data
+        if exclude_cols:
+            x = x[x.columns.difference(exclude_cols)]
+
+        return x, label, weight, base_margin, label_lower_bound, \
+            label_upper_bound
 
     def _load_data_numpy(self, data: Data):
-        return pd.DataFrame(
+        local_df = pd.DataFrame(
             data, columns=[f"f{i}" for i in range(data.shape[1])])
+        return self._load_data_pandas(local_df)
 
     def _load_data_pandas(self, data: Data):
-        return data
+        local_df = data
+
+        if self.ignore:
+            local_df = local_df[local_df.columns.difference(self.ignore)]
+
+        x, y, w, b, ll, lu = self._split_dataframe(local_df)
+        return x, y, w, b, ll, lu
 
     def _load_data_csv(self, data: Data):
         if isinstance(data, Iterable) and not isinstance(data, str):
-            return pd.concat([
-                pd.read_csv(data_source, **self.kwargs) for data_source in data
-            ])
+            shards = []
+            for shard in data:
+                shard_df = pd.read_csv(shard, **self.kwargs)
+                shard_tuple = self._load_data_pandas(shard_df)
+                shards.append(shard_tuple)
+            return _ShardChain(shards)
         else:
-            return pd.read_csv(data, **self.kwargs)
+            local_df = pd.read_csv(data, **self.kwargs)
+            return self._load_data_pandas(local_df)
 
     def _load_data_parquet(self, data: Data):
         if isinstance(data, Iterable) and not isinstance(data, str):
-            return pd.concat([
-                pd.read_parquet(data_source, **self.kwargs)
-                for data_source in data
-            ])
+            shards = []
+            for shard in data:
+                shard_df = pd.read_parquet(shard, **self.kwargs)
+                shard_tuple = self._load_data_pandas(shard_df)
+                shards.append(shard_tuple)
+            return _ShardChain(shards)
         else:
-            return pd.read_parquet(data, **self.kwargs)
+            local_df = pd.read_parquet(data, **self.kwargs)
+            return self._load_data_pandas(local_df)
 
     def load_data(self,
                   num_actors: int,
                   sharding: RayShardingMode,
-                  rank: Optional[int] = None):
+                  rank: Optional[int] = None) -> Tuple[Dict, int]:
         raise NotImplementedError
 
 
@@ -124,7 +278,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
     def load_data(self,
                   num_actors: int,
                   sharding: RayShardingMode,
-                  rank: Optional[int] = None):
+                  rank: Optional[int] = None) -> Tuple[Dict, int]:
         """
         Load data into memory
         """
@@ -147,13 +301,13 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                         type(self.data), type(self.label)))
 
         if isinstance(self.data, np.ndarray):
-            local_df = self._load_data_numpy(self.data)
+            x, y, w, b, ll, lu = self._load_data_numpy(self.data)
         elif isinstance(self.data, (pd.DataFrame, pd.Series)):
-            local_df = self._load_data_pandas(self.data)
+            x, y, w, b, ll, lu = self._load_data_pandas(self.data)
         elif self.filetype == RayFileType.CSV:
-            local_df = self._load_data_csv(self.data)
+            x, y, w, b, ll, lu = self._load_data_csv(self.data)
         elif self.filetype == RayFileType.PARQUET:
-            local_df = self._load_data_parquet(self.data)
+            x, y, w, b, ll, lu = self._load_data_parquet(self.data)
         else:
             raise ValueError(
                 "Unknown data source type: {} with FileType: {}."
@@ -164,22 +318,25 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 "specify the type of the source. Use the `RayFileType` "
                 "enum for that.".format(type(self.data), self.filetype))
 
-        if self.ignore:
-            local_df = local_df[local_df.columns.difference(self.ignore)]
+        n = len(x)
 
-        x, y = self._split_dataframe(local_df)
-        n = len(local_df)
-
-        x_refs = {}
-        y_refs = {}
+        refs = {}
         for i in range(num_actors):
             indices = _get_sharding_indices(sharding, i, num_actors, n)
-            actor_x = x.iloc[indices]
-            actor_y = y.iloc[indices]
-            x_refs[i] = ray.put(actor_x)
-            y_refs[i] = ray.put(actor_y)
+            actor_refs = {
+                "data": ray.put(x.iloc[indices]),
+                "label": ray.put(y.iloc[indices] if y is not None else None),
+                "weight": ray.put(w.iloc[indices] if w is not None else None),
+                "base_margin": ray.put(b.iloc[indices]
+                                       if b is not None else None),
+                "label_lower_bound": ray.put(ll.iloc[indices]
+                                             if ll is not None else None),
+                "label_upper_bound": ray.put(lu.iloc[indices]
+                                             if lu is not None else None)
+            }
+            refs[i] = actor_refs
 
-        return x_refs, y_refs, n
+        return refs, n
 
 
 class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
@@ -188,7 +345,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
     def load_data(self,
                   num_actors: int,
                   sharding: RayShardingMode,
-                  rank: Optional[int] = None):
+                  rank: Optional[int] = None) -> Tuple[Dict, int]:
         """
         Load data into memory
         """
@@ -212,22 +369,25 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                     self.data = sorted(glob.glob(f"{self.data}/**/*.csv"))
                 else:
                     invalid_data = True
+            elif os.path.exists(self.data):
+                self.data = [self.data]
             else:
                 invalid_data = True
 
         if not isinstance(self.data, (Iterable)) or invalid_data:
             raise ValueError(
-                "Distributed data loading only works with already "
-                "distributed datasets. These should be specified through a "
-                "list of locations."
-                "\nFIX THIS by passing a list of files (e.g. on S3) to the "
-                "RayDMatrix.")
+                f"Distributed data loading only works with already "
+                f"distributed datasets. These should be specified through a "
+                f"list of locations (or single string). "
+                f"Got: {type(self.data)}."
+                f"\nFIX THIS by passing a list of files (e.g. on S3) to the "
+                f"RayDMatrix.")
 
         if self.label is not None and not isinstance(self.label, str):
             raise ValueError(
                 f"Invalid `label` value for distributed datasets: "
                 f"{self.label}. Only strings are supported. "
-                f"\FIX THIS by passing a string indicating the label "
+                f"\nFIX THIS by passing a string indicating the label "
                 f"column of the dataset as the `label` argument.")
 
         # Shard input sources
@@ -239,9 +399,9 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
         local_input_sources = [input_sources[i] for i in indices]
 
         if self.filetype == RayFileType.CSV:
-            local_df = self._load_data_csv(local_input_sources)
+            x, y, w, b, ll, lu = self._load_data_csv(local_input_sources)
         elif self.filetype == RayFileType.PARQUET:
-            local_df = self._load_data_parquet(local_input_sources)
+            x, y, w, b, ll, lu = self._load_data_parquet(local_input_sources)
         else:
             raise ValueError(
                 "Invalid data source type: {} with FileType: {} for a "
@@ -251,16 +411,20 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 "CSV or Parquet sources.".format(
                     type(self.data), self.filetype))
 
-        if self.ignore:
-            local_df = local_df[local_df.columns.difference(self.ignore)]
+        n = len(x)
 
-        x, y = self._split_dataframe(local_df)
-        n = len(local_df)
+        refs = {
+            rank: {
+                "data": ray.put(x),
+                "label": ray.put(y),
+                "weight": ray.put(w),
+                "base_margin": ray.put(b),
+                "label_lower_bound": ray.put(ll),
+                "label_upper_bound": ray.put(lu)
+            }
+        }
 
-        x_refs = {rank: ray.put(x)}
-        y_refs = {rank: ray.put(y)}
-
-        return x_refs, y_refs, n
+        return refs, n
 
 
 class RayDMatrix:
@@ -355,6 +519,13 @@ class RayDMatrix:
     def __init__(self,
                  data: Data,
                  label: Optional[Data] = None,
+                 missing: Optional[float] = None,
+                 weight: Optional[Data] = None,
+                 base_margin: Optional[Data] = None,
+                 label_lower_bound: Optional[Data] = None,
+                 label_upper_bound: Optional[Data] = None,
+                 feature_names: Optional[List[str]] = None,
+                 feature_types: Optional[List[np.dtype]] = None,
                  num_actors: Optional[int] = None,
                  filetype: Optional[RayFileType] = None,
                  ignore: Optional[List[str]] = None,
@@ -364,6 +535,10 @@ class RayDMatrix:
                  **kwargs):
 
         self._uid = uuid.uuid4().int
+
+        self.feature_names = feature_names
+        self.feature_types = feature_types
+        self.missing = missing
 
         self.memory_node_ip = ray.services.get_node_ip_address()
         self.num_actors = num_actors
@@ -377,7 +552,7 @@ class RayDMatrix:
                     f"You passed `distributed=True` to the `RayDMatrix` but "
                     f"the specified data source of type {type(data)} cannot "
                     f"be loaded in a distributed fashion. "
-                    f"\FIX THIS by passing a list of sources (e.g. parquet "
+                    f"\nFIX THIS by passing a list of sources (e.g. parquet "
                     f"files stored in a network location) instead.")
 
         self.distributed = distributed
@@ -386,6 +561,13 @@ class RayDMatrix:
             self.loader = _DistributedRayDMatrixLoader(
                 data=data,
                 label=label,
+                missing=missing,
+                weight=weight,
+                base_margin=base_margin,
+                label_lower_bound=label_lower_bound,
+                label_upper_bound=label_upper_bound,
+                feature_names=feature_names,
+                feature_types=feature_types,
                 filetype=filetype,
                 ignore=ignore,
                 **kwargs)
@@ -393,12 +575,18 @@ class RayDMatrix:
             self.loader = _CentralRayDMatrixLoader(
                 data=data,
                 label=label,
+                missing=missing,
+                weight=weight,
+                base_margin=base_margin,
+                label_lower_bound=label_lower_bound,
+                label_upper_bound=label_upper_bound,
+                feature_names=feature_names,
+                feature_types=feature_types,
                 filetype=filetype,
                 ignore=ignore,
                 **kwargs)
 
-        self.x_ref: Dict[int, ray.ObjectRef] = {}
-        self.y_ref: Dict[int, ray.ObjectRef] = {}
+        self.refs: Dict[int, Dict[str, ray.ObjectRef]] = {}
         self.n = None
 
         self.loaded = False
@@ -429,28 +617,33 @@ class RayDMatrix:
                     "`num_actors` is not set."
                     "\nFIX THIS by passing `num_actors` on instantiation "
                     "of the `RayDMatrix` or when calling `load_data()`.")
-            x_ref, y_ref, self.n = self.loader.load_data(
+            refs, self.n = self.loader.load_data(
                 self.num_actors, self.sharding, rank=rank)
-            self.x_ref.update(x_ref)
-            self.y_ref.update(y_ref)
+            self.refs.update(refs)
             self.loaded = True
 
-    def get_data(self, rank: int, num_actors: Optional[int] = None) -> \
-            Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+    def get_data(
+            self, rank: int, num_actors: Optional[int] = None
+    ) -> Dict[str, Union[None, pd.DataFrame, List[Optional[pd.DataFrame]]]]:
         self.load_data(num_actors=num_actors, rank=rank)
 
-        x_ref = self.x_ref[rank]
-        y_ref = self.y_ref[rank]
+        refs = self.refs[rank]
+        ray.get(list(refs.values()))
 
-        x_df, y_df = ray.get([x_ref, y_ref])
+        data = {k: ray.get(v) for k, v in refs.items()}
 
-        return x_df, y_df
+        return data
 
     def __hash__(self):
         return self._uid
 
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
+
+
+class RayDeviceQuantileDMatrix(RayDMatrix):
+    """Currently just a thin wrapper for type detection"""
+    pass
 
 
 def _can_load_distributed(source: Data) -> bool:
@@ -477,7 +670,6 @@ def _detect_distributed(source: Data) -> bool:
     """Returns True if we should try to use distributed data loading"""
     if not _can_load_distributed(source):
         return False
-
     if isinstance(source, Iterable) and not isinstance(source, str) and \
        not (isinstance(source, Sequence) and isinstance(source[0], str)):
         # This is an iterable but not a Sequence of strings, and not a

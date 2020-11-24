@@ -10,13 +10,13 @@ class RayXGBoostSession:
     def get_actor_rank(self):
         return self._rank
 
-    def put_queue(self, *args, **kwargs):
+    def put_queue(self, item):
         if self._queue is None:
             raise ValueError(
                 "Trying to put something into session queue, but queue "
                 "was not initialized. This is probably a bug, please raise "
                 "an issue at https://github.com/ray-project/xgboost_ray")
-        self._queue.put(*args, **kwargs)
+        self._queue.put((self._rank, item))
 
 
 _session = None
