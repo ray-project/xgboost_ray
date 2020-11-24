@@ -1,9 +1,11 @@
+from typing import Tuple, Dict, Any, List, Optional, Callable
+
 import numpy as np
+
 import os
 import time
 
 from threading import Thread
-from typing import Tuple, Dict, Any, List, Optional, Callable
 
 from ray.exceptions import RayActorError
 
@@ -22,7 +24,8 @@ except ImportError:
 
 import xgboost as xgb
 
-from xgboost_ray.matrix import RayDMatrix, combine_data
+from xgboost_ray.matrix import RayDMatrix, combine_data, \
+    RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
 from xgboost_ray.session import init_session
 
 
@@ -164,9 +167,43 @@ class RayXGBoostActor:
     def load_data(self, data: RayDMatrix):
         if data in self._data:
             return
-        x, y = data.get_data(self.rank, self.num_actors)
-        self._local_n = len(x)
-        matrix = xgb.DMatrix(x, label=y)
+        param = data.get_data(self.rank, self.num_actors)
+        self._local_n = len(param["data"])
+
+        if isinstance(data, RayDeviceQuantileDMatrix):
+            if isinstance(param["data"], list):
+                dm_param = {
+                    "feature_names": data.feature_names,
+                    "feature_types": data.feature_types,
+                    "missing": data.missing,
+                }
+                if not isinstance(data, xgb.DeviceQuantileDMatrix):
+                    pass
+                param.update(dm_param)
+                it = RayDataIter(**param)
+                matrix = xgb.DeviceQuantileDMatrix(it, **dm_param)
+            else:
+                matrix = xgb.DeviceQuantileDMatrix(**param)
+        else:
+            if isinstance(param["data"], list):
+                dm_param = {
+                    "data": concat_dataframes(param["data"]),
+                    "label": concat_dataframes(param["label"]),
+                    "weight": concat_dataframes(param["weight"]),
+                    "base_margin": concat_dataframes(param["base_margin"]),
+                    "label_lower_bound": concat_dataframes(
+                        param["label_lower_bound"]),
+                    "label_upper_bound": concat_dataframes(
+                        param["label_upper_bound"]),
+                }
+                param.update(dm_param)
+
+            ll = param.pop("label_lower_bound", None)
+            lu = param.pop("label_upper_bound", None)
+
+            matrix = xgb.DMatrix(**param)
+            matrix.set_info(label_lower_bound=ll, label_upper_bound=lu)
+
         self._data[data] = matrix
 
     def train(self, rabit_args: List[str], params: Dict[str, Any],
