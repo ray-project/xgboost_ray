@@ -63,11 +63,11 @@ class _RayDMatrixLoader:
                     self.filetype = RayFileType.PARQUET
                 else:
                     raise ValueError(
-                        "File or stream specified as data source, but "
-                        "filetype could not be detected. "
-                        "\nFIX THIS by passing the `filetype` parameter to "
-                        "the RayDMatrix. "
-                        "Use the `RayFileType` enum for this.")
+                        f"File or stream ({check}) specified as data source, "
+                        "but filetype could not be detected. "
+                        "\nFIX THIS by passing "
+                        "the `filetype` parameter to the RayDMatrix. Use the "
+                        "`RayFileType` enum for this.")
 
     def _split_dataframe(self, local_data: pd.DataFrame) -> \
             Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
@@ -209,11 +209,13 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 if self.filetype == RayFileType.PARQUET:
                     self.data = list(
                         sorted(glob.glob(f"{self.data}/**/*.parquet")))
-                elif self.filetype == RayFileType.PARQUET:
+                elif self.filetype == RayFileType.CSV:
                     self.data = list(
                         sorted(glob.glob(f"{self.data}/**/*.csv")))
                 else:
                     invalid_data = True
+            elif os.path.exists(self.data):
+                self.data = [self.data]
             else:
                 invalid_data = True
 
@@ -221,7 +223,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             raise ValueError(
                 "Distributed data loading only works with already "
                 "distributed datasets. These should be specified through a "
-                "list of locations."
+                f"list of locations (or single string). Got: {type(self.data)}."
                 "\nFIX THIS by passing a list of files (e.g. on S3) to the "
                 "RayDMatrix.")
 
@@ -229,7 +231,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             raise ValueError(
                 f"Invalid `label` value for distributed datasets: "
                 f"{self.label}. Only strings are supported. "
-                f"\FIX THIS by passing a string indicating the label "
+                f"\nFIX THIS by passing a string indicating the label "
                 f"column of the dataset as the `label` argument.")
 
         # Shard input sources
@@ -376,7 +378,7 @@ class RayDMatrix:
                     f"You passed `distributed=True` to the `RayDMatrix` but "
                     f"the specified data source of type {type(data)} cannot "
                     f"be loaded in a distributed fashion. "
-                    f"\FIX THIS by passing a list of sources (e.g. parquet "
+                    f"\nFIX THIS by passing a list of sources (e.g. parquet "
                     f"files stored in a network location) instead.")
 
         self.distributed = distributed
@@ -476,9 +478,8 @@ def _detect_distributed(source: Data) -> bool:
     """Returns True if we should try to use distributed data loading"""
     if not _can_load_distributed(source):
         return False
-
     if isinstance(source, Iterable) and not isinstance(source, str) and \
-       not (isinstance(source, Sequence) and isinstance(source[0], str)):
+        not (isinstance(source, Sequence) and isinstance(source[0], str)):
         # This is an iterable but not a Sequence of strings, and not a
         # pandas dataframe, series, or numpy array.
         # Detect False per default, can be overridden by passing
