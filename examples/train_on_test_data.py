@@ -1,7 +1,7 @@
 import os
 import time
 
-from xgboost_ray import train, RayDMatrix, RayDeviceQuantileDMatrix
+from xgboost_ray import train, RayDeviceQuantileDMatrix
 
 
 def main():

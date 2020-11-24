@@ -23,7 +23,7 @@ except ImportError:
 import xgboost as xgb
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
-    RayDeviceQuantileDMatrix, DataChain
+    RayDeviceQuantileDMatrix
 from xgboost_ray.session import init_session
 
 
