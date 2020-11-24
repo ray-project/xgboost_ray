@@ -23,11 +23,16 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         ] * repeat)
         self.y = np.array([0, 1, 2, 3] * repeat)
 
+    @classmethod
+    def setUpClass(cls):
+        ray.init(num_cpus=1, local_mode=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        ray.shutdown()
+
     def testSameObject(self):
         """Test that matrices are recognized as the same in an actor task."""
-        if not ray.is_initialized():
-            ray.init(num_cpus=1)
-
         @ray.remote
         def same(one, two):
             return one == two
@@ -38,9 +43,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
     def _testMatrixCreation(self, in_x, in_y, **kwargs):
         mat = RayDMatrix(in_x, in_y, **kwargs)
         x, y = mat.get_data(rank=0, num_actors=1)
-        print(type(x), x)
         self.assertTrue(np.allclose(self.x, x))
-        print(type(y), y)
         self.assertTrue(np.allclose(self.y, y))
 
     def testFromNumpy(self):
