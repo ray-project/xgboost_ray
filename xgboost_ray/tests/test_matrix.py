@@ -8,6 +8,7 @@ import pandas as pd
 import ray
 
 from xgboost_ray import RayDMatrix
+from xgboost_ray.matrix import concat_dataframes
 
 
 class XGBoostRayDMatrixTest(unittest.TestCase):
@@ -33,6 +34,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testSameObject(self):
         """Test that matrices are recognized as the same in an actor task."""
+
         @ray.remote
         def same(one, two):
             return one == two
@@ -42,7 +44,16 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def _testMatrixCreation(self, in_x, in_y, **kwargs):
         mat = RayDMatrix(in_x, in_y, **kwargs)
-        x, y = mat.get_data(rank=0, num_actors=1)
+        params = mat.get_data(rank=0, num_actors=1)
+
+        x = params["data"]
+        y = params["label"]
+
+        if isinstance(x, list):
+            x = concat_dataframes(x)
+        if isinstance(y, list):
+            y = concat_dataframes(y)
+
         self.assertTrue(np.allclose(self.x, x))
         self.assertTrue(np.allclose(self.y, y))
 
