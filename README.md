@@ -137,7 +137,7 @@ config = {
 tune.run(train_model, config=config, resources_per_trial={"cpu": 1, "extra_cpu": num_actors*num_cpus_per_actor})
 ```
 
-Also see examples/simple.py for another example.
+Also see examples/simple_tune.py for another example.
 
 Resources
 ---------
