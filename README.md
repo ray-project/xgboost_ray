@@ -89,6 +89,53 @@ dtrain = RayDMatrix(
     filetype=RayFileType.PARQUET)
 ```
 
+Hyperparameter Tuning
+---------------------
+
+`xgboost_ray` integrates with [Ray Tune](https://tune.io) to provide distributed hyperparameter tuning for your
+distributed XGBoost models. You can run multiple `xgboost_ray` training runs in parallel, each with a different
+hyperparameter configuration, and each training run parallelized by itself.
+
+Example using `xgboost_ray` with Tune:
+
+```python
+from xgboost_ray import RayDMatrix, train, hyperparameter_search
+
+num_actors = 4
+num_cpus_per_actor = 4
+
+def train_model(config):
+    train_x, train_y = None, None  # Load data here
+    train_set = RayDMatrix(train_x, train_y)
+
+    evals_result = {}
+    bst = hyperparameter_search(
+        {
+            "objective": "binary:logistic",
+            "eval_metric": ["logloss", "error"],
+        },
+        train_set,
+        evals_result=evals_result,
+        evals=[(train_set, "train")],
+        verbose_eval=False,
+        num_actors=num_actors,
+        cpus_per_actor=num_cpus_per_actor)
+
+from ray import tune
+
+# Specify the hyperparameter search space.
+config = {
+    "tree_method": "approx",
+    "objective": "binary:logistic",
+    "eval_metric": ["logloss", "error"],
+    "eta": tune.loguniform(1e-4, 1e-1),
+    "subsample": tune.uniform(0.5, 1.0),
+    "max_depth": tune.randint(1, 9)
+}
+
+# Make sure to specify how many actors each training run will create via the "extra_cpu" field.
+tune.run(train_model, config=config, resources_per_trial={"cpu": 1, "extra_cpu": num_actors*num_cpus_per_actor})
+```
 
 
 Resources
