@@ -285,7 +285,7 @@ def _cleanup(checkpoint_prefix: str, checkpoint_path: str, num_actors: int):
 
 
 def _shutdown(remote_workers: List[ActorHandle], force: bool = False):
-    if not force:
+    if force:
         for worker in remote_workers:
             logger.debug(f"Killing worker {worker}.")
             ray.kill(worker)
