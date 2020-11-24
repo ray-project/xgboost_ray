@@ -92,7 +92,7 @@ if __name__ == "__main__":
                                       cpus_per_actor=args.cpus_per_actor,
                                       num_actors=args.num_actors,
                                       use_tune=True), resources_per_trial={
-            "cpu": 1, "extra_cpu": args.cpus_per_actor*args.num_actors+1},
+            "cpu": 1, "extra_cpu": args.cpus_per_actor*args.num_actors},
             config=config, num_samples=args.num_samples)
     else:
         train_breast_cancer(config, cpus_per_actor=args.cpus_per_actor,
