@@ -360,8 +360,8 @@ def _train(params: Dict,
                     else:
                         callback_returns[i].append(item)
             ready, not_ready = ray.wait(not_ready, timeout=0)
-            logger.info("[RayXGBoost] Spinning...")
-            time.sleep(1)
+            logger.debug("[RayXGBoost] Waiting for results...")
+            time.sleep(0.5)
             ray.get(ready)
         # Once everything is ready
         ray.get(fut)
@@ -373,7 +373,7 @@ def _train(params: Dict,
         raise
     except Exception as exc:
         import ipdb; ipdb.set_trace()
-        print("bad exception")
+        logger.exception("Bad exception. This should not be reached.")
 
     # All results should be the same because of Rabit tracking. So we just
     # return the first one.
@@ -546,15 +546,15 @@ def _predict(model: xgb.Booster,
     ]
 
     try:
-        ray.get(fut)
-    except RayActorError:
-        logger.info("Caught an RayActorError")
+        actor_results = ray.get(fut)
+    except RayActorError as exc:
+        logger.warning(f"Caught an RayActorError: {str(exc)}")
         for actor in actors:
             ray.kill(actor)
         raise
     except Exception as exc:
-        logger.info(f"Caught unknown error: {str(exc)}")
-        import ipdb ;ipdb.set_trace()
+        import ipdb; ipdb.set_trace()
+        logger.error(f"Caught unknown error: {str(exc)}")
 
     return combine_data(data.sharding, actor_results)
 
