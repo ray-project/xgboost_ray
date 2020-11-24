@@ -3,3 +3,4 @@ yapf==0.23.0
 pytest
 pyarrow
 ray[tune]
+scikit-learn
