@@ -133,8 +133,7 @@ class RayXGBoostActor:
                  checkpoint_path: str = "/tmp",
                  checkpoint_frequency: int = 5):
         self.queue = queue
-        if queue:
-            init_session(rank, queue)
+        init_session(rank, queue)
 
         self.rank = rank
         self.num_actors = num_actors
@@ -244,16 +243,15 @@ class RayXGBoostActor:
         return predictions
 
 
-def _create_actor(
-        rank: int,
-        num_actors: int,
-        num_cpus_per_actor: int,
-        num_gpus_per_actor: int,
-        resources_per_actor: Optional[Dict] = None,
-        queue: Queue = None,
-        checkpoint_prefix: Optional[str] = None,
-        checkpoint_path: str = "/tmp",
-        checkpoint_frequency: int = 5) -> RayXGBoostActor:
+def _create_actor(rank: int,
+                  num_actors: int,
+                  num_cpus_per_actor: int,
+                  num_gpus_per_actor: int,
+                  resources_per_actor: Optional[Dict] = None,
+                  queue: Queue = None,
+                  checkpoint_prefix: Optional[str] = None,
+                  checkpoint_path: str = "/tmp",
+                  checkpoint_frequency: int = 5) -> RayXGBoostActor:
 
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
@@ -293,7 +291,6 @@ def _train(params: Dict,
            checkpoint_prefix: Optional[str] = None,
            checkpoint_path: str = "/tmp",
            checkpoint_frequency: int = 5,
-           enable_queue: bool = False,
            **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
     _assert_ray_support()
 
@@ -320,12 +317,13 @@ def _train(params: Dict,
         params["nthread"] = cpus_per_actor
 
     # Create remote actors
-    queue = Queue() if enable_queue else None
+    queue = Queue()  # Always create queue
 
     actors = [
         _create_actor(i, num_actors, cpus_per_actor, gpus_per_actor,
-                      resources_per_actor, queue, checkpoint_prefix, checkpoint_path,
-                      checkpoint_frequency) for i in range(num_actors)
+                      resources_per_actor, queue, checkpoint_prefix,
+                      checkpoint_path, checkpoint_frequency)
+        for i in range(num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
 
@@ -354,26 +352,23 @@ def _train(params: Dict,
         while not_ready:
             if queue:
                 while not queue.empty():
-                    item = queue.get()
+                    (actor_rank, item) = queue.get()
                     if isinstance(item, Callable):
                         item()
                     else:
-                        callback_returns[i].append(item)
+                        callback_returns[actor_rank].append(item)
             ready, not_ready = ray.wait(not_ready, timeout=0)
             logger.debug("[RayXGBoost] Waiting for results...")
-            time.sleep(0.5)
             ray.get(ready)
         # Once everything is ready
         ray.get(fut)
-    except RayActorError:
+    # The inner loop should catch all exceptions
+    except Exception:
         for actor in actors:
             ray.kill(actor)
         if queue:
             ray.kill(queue)
         raise
-    except Exception as exc:
-        import ipdb; ipdb.set_trace()
-        logger.exception("Bad exception. This should not be reached.")
 
     # All results should be the same because of Rabit tracking. So we just
     # return the first one.
@@ -547,14 +542,11 @@ def _predict(model: xgb.Booster,
 
     try:
         actor_results = ray.get(fut)
-    except RayActorError as exc:
-        logger.warning(f"Caught an RayActorError: {str(exc)}")
+    except Exception as exc:
+        logger.warning(f"Caught an error during prediction: {str(exc)}")
         for actor in actors:
             ray.kill(actor)
         raise
-    except Exception as exc:
-        import ipdb; ipdb.set_trace()
-        logger.error(f"Caught unknown error: {str(exc)}")
 
     return combine_data(data.sharding, actor_results)
 
