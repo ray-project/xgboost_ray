@@ -1,14 +1,14 @@
 import os
 import time
 
-from xgboost_ray import train, RayDeviceQuantileDMatrix
+from xgboost_ray import train, RayDMatrix
 
 
 def main():
     # Run `create_test_data.py` first to create fake data.
     fname = "parted.parquet"
 
-    dtrain = RayDeviceQuantileDMatrix(
+    dtrain = RayDMatrix(
         os.path.abspath(fname), label="labels", ignore=["partition"])
 
     config = {

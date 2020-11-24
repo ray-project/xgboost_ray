@@ -16,6 +16,12 @@ from xgboost.core import DataIter
 Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series]
 
 
+def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
+    if any(df is None for df in dfs):
+        return None
+    return pd.concat(dfs, copy=False)
+
+
 class RayFileType(Enum):
     """Enum for different file types (used for overrides)."""
     CSV = 1
@@ -46,12 +52,12 @@ class _ShardChain:
             for i, a in enumerate([x, y, w, b, ll, lu]):
                 a.append(shard[i])
 
-        self.x = _DataChain(x)
-        self.y = _DataChain(y)
-        self.w = _DataChain(w)
-        self.b = _DataChain(b)
-        self.ll = _DataChain(ll)
-        self.lu = _DataChain(lu)
+        self.x = x
+        self.y = y
+        self.w = w
+        self.b = b
+        self.ll = ll
+        self.lu = lu
 
     def __len__(self):
         return len(self.x)
@@ -65,41 +71,51 @@ class _ShardChain:
         yield self.lu
 
 
-class _DataChain:
-    def __init__(self, data: List[pd.DataFrame]):
+class RayDataIter(DataIter):
+    def __init__(
+            self,
+            data: Data,
+            label: List[Optional[Data]],
+            missing: Optional[float],
+            weight: List[Optional[Data]],
+            base_margin: List[Optional[Data]],
+            label_lower_bound: List[Optional[Data]],
+            label_upper_bound: List[Optional[Data]],
+            feature_names: Optional[List[str]],
+            feature_types: Optional[List[np.dtype]],
+    ):
+        super(RayDataIter, self).__init__()
+
         self._data = data
+        self._label = label
+        self._missing = missing
+        self._weight = weight
+        self._base_margin = base_margin
+        self._label_lower_bound = label_lower_bound
+        self._label_upper_bound = label_upper_bound
+        self._feature_names = feature_names
+        self._feature_types = feature_types
+
+        self._iter = 0
 
     def __len__(self):
         return sum([len(shard) for shard in self._data])
-
-
-class RayDataIter(DataIter):
-    def __init__(self, x: _ShardChain, y: _ShardChain):
-        super(DataIter, self).__init__()
-        self._iter = 0
-        self._x = x
-        self._y = y
-
-    def __len__(self):
-        return len(self._x)
 
     def reset(self):
         self._iter = 0
 
     def next(self, input_data: Callable):
-        if self._iter >= len(self._x):
+        if self._iter >= len(self._data):
             return 0
-        x = self._x[self._iter]
-        y = self._y[self._iter]
         input_data(
-            data=x,
-            label=y,
-            weight=None,
+            data=self._data[self._iter],
+            label=self._label[self._iter],
+            weight=self._weight[self._iter],
             group=None,
-            label_lower_bound=None,
-            label_upper_bound=None,
-            feature_names=None,
-            feature_types=None)
+            label_lower_bound=self._label_lower_bound[self._iter],
+            label_upper_bound=self._label_upper_bound[self._iter],
+            feature_names=self._feature_names,
+            feature_types=self._feature_types)
         self._iter += 1
 
 
@@ -519,6 +535,10 @@ class RayDMatrix:
 
         self._uid = uuid.uuid4().int
 
+        self.feature_names = feature_names
+        self.feature_types = feature_types
+        self.missing = missing
+
         self.memory_node_ip = ray.services.get_node_ip_address()
         self.num_actors = num_actors
         self.sharding = sharding
@@ -601,8 +621,9 @@ class RayDMatrix:
             self.refs.update(refs)
             self.loaded = True
 
-    def get_data(self, rank: int, num_actors: Optional[int] = None) -> \
-            Dict[str, Optional[pd.DataFrame]]:
+    def get_data(
+            self, rank: int, num_actors: Optional[int] = None
+    ) -> Dict[str, Union[None, pd.DataFrame, List[Optional[pd.DataFrame]]]]:
         self.load_data(num_actors=num_actors, rank=rank)
 
         refs = self.refs[rank]
