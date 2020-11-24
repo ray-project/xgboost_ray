@@ -207,11 +207,9 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
         if isinstance(self.data, str):
             if os.path.isdir(self.data):
                 if self.filetype == RayFileType.PARQUET:
-                    self.data = list(
-                        sorted(glob.glob(f"{self.data}/**/*.parquet")))
+                    self.data = sorted(glob.glob(f"{self.data}/**/*.parquet"))
                 elif self.filetype == RayFileType.CSV:
-                    self.data = list(
-                        sorted(glob.glob(f"{self.data}/**/*.csv")))
+                    self.data = sorted(glob.glob(f"{self.data}/**/*.csv"))
                 else:
                     invalid_data = True
             else:
@@ -514,7 +512,7 @@ def combine_data(sharding: RayShardingMode, data: Iterable) -> np.ndarray:
         np.ravel(data)
     elif sharding == RayShardingMode.INTERLEAVED:
         # Sometimes the lengths are off by 1 for uneven divisions
-        min_len = min([len(d) for d in data])
+        min_len = min(len(d) for d in data)
         res = np.ravel(np.column_stack([d[0:min_len] for d in data]))
         # Append these here
         res = np.concatenate([res] +

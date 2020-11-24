@@ -1,5 +1,3 @@
-from typing import Dict, Optional
-
 try:
     from ray import tune
     TUNE_INSTALLED = True
@@ -8,6 +6,7 @@ except ImportError:
 
 from xgboost_ray.session import get_actor_rank, put_queue
 from xgboost_ray import train
+
 
 # At each boosting round, add the results to the queue actor.
 # The results in the queue will be consumed by the Trainable to report to tune.
@@ -32,6 +31,7 @@ class RayTuneReportCallback:
                         metric = key
                     report_dict[key] = result_dict[metric]
             put_queue(lambda: tune.report(**report_dict))
+
 
 def hyperparameter_search(*args, metrics=None, **kwargs):
     """Distributed XGBoost hyperparameter tuning via Ray and Ray Tune.

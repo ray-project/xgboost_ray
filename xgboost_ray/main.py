@@ -53,6 +53,7 @@ def _start_rabit_tracker(num_workers: int):
 
     return env
 
+
 class RabitContext:
     """Context to connect a worker to a rabit tracker"""
 
@@ -219,7 +220,6 @@ class RayXGBoostActor:
         callbacks.append(self._save_checkpoint_callback)
         kwargs["callbacks"] = callbacks
 
-
         with RabitContext(str(id(self)), rabit_args):
             bst = xgb.train(
                 local_params,
@@ -244,6 +244,7 @@ class RayXGBoostActor:
         predictions = model.predict(local_data, **kwargs)
         return predictions
 
+
 def _create_actor(
         rank: int,
         num_actors: int,
@@ -253,7 +254,8 @@ def _create_actor(
         resources_per_actor: Optional[Dict] = None,
         checkpoint_prefix: Optional[str] = None,
         checkpoint_path: str = "/tmp",
-        checkpoint_frequency: int = 5,) -> Tuple[RayXGBoostActor, Queue]:
+        checkpoint_frequency: int = 5,
+) -> Tuple[RayXGBoostActor, Queue]:
 
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
@@ -281,6 +283,7 @@ def _cleanup(checkpoint_prefix: str, checkpoint_path: str, num_actors: int):
         if os.path.exists(checkpoint_file):
             os.remove(checkpoint_file)
 
+
 def _shutdown(remote_workers: List[ActorHandle], force: bool = False):
     if not force:
         for worker in remote_workers:
@@ -288,10 +291,7 @@ def _shutdown(remote_workers: List[ActorHandle], force: bool = False):
             ray.kill(worker)
     else:
         try:
-            [
-                worker.__ray_terminate__.remote()
-                for worker in remote_workers
-            ]
+            [worker.__ray_terminate__.remote() for worker in remote_workers]
         except RayActorError:
             logger.warning("Failed to shutdown gracefully, forcing a "
                            "shutdown.")
@@ -392,7 +392,7 @@ def _train(params: Dict,
         additional_results["callback_returns"] = callback_returns
 
     all_res = ray.get(fut)
-    total_n = sum([res["train_n"] or 0 for res in all_res])
+    total_n = sum(res["train_n"] or 0 for res in all_res)
 
     logger.info(f"[RayXGBoost] Finished XGBoost training on training data "
                 f"with total N={total_n:,}.")
@@ -403,6 +403,7 @@ def _train(params: Dict,
     _shutdown(remote_workers=actors, force=False)
 
     return bst, evals_result, additional_results
+
 
 def train(params: Dict,
           dtrain: RayDMatrix,
@@ -546,10 +547,7 @@ def _predict(model: xgb.Booster,
     logger.info("[RayXGBoost] Starting XGBoost prediction.")
 
     # Train
-    fut = [
-        actor.predict.remote(model_ref, data, **kwargs)
-        for actor in actors
-    ]
+    fut = [actor.predict.remote(model_ref, data, **kwargs) for actor in actors]
 
     try:
         actor_results = ray.get(fut)
