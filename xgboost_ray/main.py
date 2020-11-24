@@ -490,8 +490,9 @@ def train(params: Dict,
         except RayActorError:
             if tries + 1 <= max_actor_restarts:
                 logger.warning(
-                    "A Ray actor died during training. Trying to restart "
-                    "and continue training from last checkpoint.")
+                    f"A Ray actor died during training. Trying to restart "
+                    f"and continue training from last checkpoint "
+                    f"(restart {tries + 1} of {max_actor_restarts}).")
             else:
                 raise RuntimeError(
                     "A Ray actor died during training and the maximum number "
