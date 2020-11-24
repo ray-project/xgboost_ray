@@ -12,9 +12,8 @@ from examples.simple import create_train_args
 
 def train_breast_cancer(config, cpus_per_actor=1, num_actors=1):
 
-    train_args = create_train_args(params=config,
-                                   cpus_per_actor=cpus_per_actor,
-                                   num_actors=num_actors)
+    train_args = create_train_args(
+        params=config, cpus_per_actor=cpus_per_actor, num_actors=num_actors)
 
     bst = train(**train_args)
 
@@ -24,6 +23,7 @@ def train_breast_cancer(config, cpus_per_actor=1, num_actors=1):
     bst.save_model(model_path)
     print("Final validation error: {:.4f}".format(
         train_args["evals_result"]["eval"]["error"][-1]))
+
 
 def main(cpus_per_actor, num_actors, num_samples):
     # Set XGBoost config.
@@ -52,8 +52,7 @@ def main(cpus_per_actor, num_actors, num_samples):
 
     # Load the best model checkpoint
     best_bst = xgb.Booster()
-    best_bst.load_model(
-        os.path.join(analysis.best_checkpoint, "simple.xgb"))
+    best_bst.load_model(os.path.join(analysis.best_checkpoint, "simple.xgb"))
     accuracy = 1. - analysis.best_result["eval-error"]
     print(f"Best model parameters: {analysis.best_config}")
     print(f"Best model total accuracy: {accuracy:.4f}")

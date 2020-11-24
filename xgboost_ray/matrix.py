@@ -99,7 +99,7 @@ class RayDataIter(DataIter):
         self._iter = 0
 
     def __len__(self):
-        return sum([len(shard) for shard in self._data])
+        return sum(len(shard) for shard in self._data)
 
     def reset(self):
         self._iter = 0

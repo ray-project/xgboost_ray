@@ -112,6 +112,7 @@ def _checkpoint_file(path: str, prefix: str, rank: int):
         return None
     return os.path.join(path, f"{prefix}_{rank:05d}.xgb")
 
+
 def _add_tune_callback(kwargs: Dict):
     if TUNE_INSTALLED and tune.is_session_enabled():
         callbacks = kwargs.get("callbacks", [])
@@ -120,7 +121,6 @@ def _add_tune_callback(kwargs: Dict):
                 return
         callbacks.append(RayTuneReportCallback(metrics=None))
         kwargs["callbacks"] = callbacks
-
 
 
 @ray.remote
@@ -336,9 +336,9 @@ def _cleanup(checkpoint_prefix: str, checkpoint_path: str, num_actors: int):
             os.remove(checkpoint_file)
 
 
-def _shutdown(remote_workers: List[ActorHandle], queue: Optional[Queue] = None,
-              force: bool
-= False):
+def _shutdown(remote_workers: List[ActorHandle],
+              queue: Optional[Queue] = None,
+              force: bool = False):
     if force:
         logger.debug(f"Killing {len(remote_workers)} workers.")
         for worker in remote_workers:
