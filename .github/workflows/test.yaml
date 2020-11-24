@@ -30,8 +30,8 @@ jobs:
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
         popd
-        pushd examples/
-        for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
+      # pushd examples/
+      # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
 
   test_linux_ray_release:
 
@@ -60,5 +60,5 @@ jobs:
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
         popd
-        pushd examples/
-        for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
+      # pushd examples/
+      # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
