@@ -309,7 +309,10 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 "specify the type of the source. Use the `RayFileType` "
                 "enum for that.".format(type(self.data), self.filetype))
 
-        n = len(x)
+        if isinstance(x, list):
+            n = sum([len(a) for a in x])
+        else:
+            n = len(x)
 
         refs = {}
         for i in range(num_actors):
