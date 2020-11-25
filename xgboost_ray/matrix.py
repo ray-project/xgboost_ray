@@ -19,7 +19,7 @@ Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series]
 def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
     if any(df is None for df in dfs):
         return None
-    return pd.concat(dfs, copy=False)
+    return pd.concat(dfs, ignore_index=True, copy=False)
 
 
 class RayFileType(Enum):
@@ -41,34 +41,6 @@ class RayShardingMode(Enum):
     """
     INTERLEAVED = 1
     BATCH = 2
-
-
-class _ShardChain:
-    def __init__(self, shards: List[Tuple[pd.DataFrame, Optional[
-            pd.Series], Optional[pd.Series], Optional[pd.Series], Optional[
-                pd.Series], Optional[pd.Series]]]):
-        x, y, w, b, ll, lu = [], [], [], [], [], []
-        for shard in shards:
-            for i, a in enumerate([x, y, w, b, ll, lu]):
-                a.append(shard[i])
-
-        self.x = x
-        self.y = y
-        self.w = w
-        self.b = b
-        self.ll = ll
-        self.lu = lu
-
-    def __len__(self):
-        return len(self.x)
-
-    def __iter__(self):
-        yield self.x
-        yield self.y
-        yield self.w
-        yield self.b
-        yield self.ll
-        yield self.lu
 
 
 class RayDataIter(DataIter):
@@ -243,24 +215,26 @@ class _RayDMatrixLoader:
 
     def _load_data_csv(self, data: Data):
         if isinstance(data, Iterable) and not isinstance(data, str):
-            shards = []
+            x_s, y_s, w_s, b_s, ll_s, lu_s = [], [], [], [], [], []
             for shard in data:
                 shard_df = pd.read_csv(shard, **self.kwargs)
                 shard_tuple = self._load_data_pandas(shard_df)
-                shards.append(shard_tuple)
-            return _ShardChain(shards)
+                for i, s in enumerate([x_s, y_s, w_s, b_s, ll_s, lu_s]):
+                    s.append(shard_tuple[i])
+            return x_s, y_s, w_s, b_s, ll_s, lu_s
         else:
             local_df = pd.read_csv(data, **self.kwargs)
             return self._load_data_pandas(local_df)
 
     def _load_data_parquet(self, data: Data):
         if isinstance(data, Iterable) and not isinstance(data, str):
-            shards = []
+            x_s, y_s, w_s, b_s, ll_s, lu_s = [], [], [], [], [], []
             for shard in data:
                 shard_df = pd.read_parquet(shard, **self.kwargs)
                 shard_tuple = self._load_data_pandas(shard_df)
-                shards.append(shard_tuple)
-            return _ShardChain(shards)
+                for i, s in enumerate([x_s, y_s, w_s, b_s, ll_s, lu_s]):
+                    s.append(shard_tuple[i])
+            return x_s, y_s, w_s, b_s, ll_s, lu_s
         else:
             local_df = pd.read_parquet(data, **self.kwargs)
             return self._load_data_pandas(local_df)
@@ -376,7 +350,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             else:
                 invalid_data = True
 
-        if not isinstance(self.data, (Iterable)) or invalid_data:
+        if not isinstance(self.data, Iterable) or invalid_data:
             raise ValueError(
                 f"Distributed data loading only works with already "
                 f"distributed datasets. These should be specified through a "
@@ -632,6 +606,13 @@ class RayDMatrix:
         data = {k: ray.get(v) for k, v in refs.items()}
 
         return data
+
+    def unload_data(self):
+        """Delete object references to clear object store"""
+        for rank in list(self.refs.keys()):
+            for name in list(self.refs[rank].keys()):
+                del self.refs[rank][name]
+        self.loaded = False
 
     def __hash__(self):
         return self._uid

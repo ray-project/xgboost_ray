@@ -168,6 +168,7 @@ class RayXGBoostActor:
         if data in self._data:
             return
         param = data.get_data(self.rank, self.num_actors)
+        data.unload_data()  # Free object store
         self._local_n = len(param["data"])
 
         if isinstance(data, RayDeviceQuantileDMatrix):
