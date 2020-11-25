@@ -106,6 +106,7 @@ class RayDataIter(DataIter):
             feature_names=self._feature_names,
             feature_types=self._feature_types)
         self._iter += 1
+        return 1
 
 
 class _RayDMatrixLoader:

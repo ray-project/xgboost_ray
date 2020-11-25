@@ -1,7 +1,7 @@
-cluster_name: xgboost_ray_release_tests_gpu
-min_workers: 3
-max_workers: 3
-initial_workers: 3
+cluster_name: xgboost_ray_release_tests_gpu_single
+min_workers: 0
+max_workers: 0
+initial_workers: 0
 autoscaling_mode: default
 docker:
     image: "rayproject/ray:latest-gpu"
@@ -19,7 +19,7 @@ provider:
 auth:
     ssh_user: ubuntu
 head_node:
-    InstanceType: m5.xlarge
+    InstanceType: p2.xlarge
     ImageId: ami-0a2363a9cff180a64 # Deep Learning AMI (Ubuntu) Version 30
 
 worker_nodes:
@@ -47,7 +47,7 @@ worker_setup_commands: []
 #  - if ! `ls /data/lost+found`; then mount /dev/nvme1n1 /data; fi
 head_start_ray_commands:
     - ray stop
-    - "ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --resources='{\"actor_cpus\": 0, \"actor_gpus\": 0}'"
+    - "ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --resources='{\"actor_cpus\": 4, \"actor_gpus\": 1}'"
 worker_start_ray_commands:
     - ray stop
     - "ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 --resources='{\"actor_cpus\": 4, \"actor_gpus\": 1}'"

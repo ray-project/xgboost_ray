@@ -21,7 +21,15 @@ def train_ray(num_workers, num_boost_rounds, num_files=0, use_gpu=False):
             files = files + files
         path = files[0:num_files]
 
+    use_device_matrix = False
     if use_gpu:
+        try:
+            import cupy  # noqa: F401
+            use_device_matrix = True
+        except ImportError:
+            use_device_matrix = False
+
+    if use_device_matrix:
         dtrain = RayDeviceQuantileDMatrix(
             path,
             num_actors=num_workers,
