@@ -46,7 +46,7 @@ class RayShardingMode(Enum):
 class RayDataIter(DataIter):
     def __init__(
             self,
-            data: Data,
+            data: List[Data],
             label: List[Optional[Data]],
             missing: Optional[float],
             weight: List[Optional[Data]],
