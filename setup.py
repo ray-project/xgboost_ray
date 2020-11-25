@@ -9,4 +9,4 @@ setup(
     long_description="A distributed backend for XGBoost built on top of "
     "distributed computing framework Ray.",
     url="https://github.com/ray-project/xgboost_ray",
-    install_requires=["xgboost", "ray", "numpy>=1.16", "pandas"])
+    install_requires=["xgboost", "ray", "numpy>=1.16", "pandas", "pyarrow"])
