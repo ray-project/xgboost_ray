@@ -38,6 +38,7 @@ setup_commands:
   - pip install -U pyarrow
   - mkdir -p /data
   - apt update && apt install -y nfs-common vim
+  # /data/parted.parquet. 1.5B rows, 4 features, 2 labels
   - mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport fs-f788aaf2.efs.us-west-2.amazonaws.com:/ /data
 head_setup_commands: []
 #  - if ! `ls /data/lost+found`; then mount /dev/nvme0n1 /data; fi

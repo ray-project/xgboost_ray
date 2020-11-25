@@ -5,7 +5,8 @@ import argparse
 import time
 
 import ray
-from xgboost_ray import train, RayDMatrix, RayFileType
+from xgboost_ray import train, RayDMatrix, RayFileType, \
+    RayDeviceQuantileDMatrix
 
 if "OMP_NUM_THREADS" in os.environ:
     del os.environ["OMP_NUM_THREADS"]
@@ -20,12 +21,20 @@ def train_ray(num_workers, num_boost_rounds, num_files=0, use_gpu=False):
             files = files + files
         path = files[0:num_files]
 
-    dtrain = RayDMatrix(
-        path,
-        num_actors=num_workers,
-        label="labels",
-        ignore=["partition"],
-        filetype=RayFileType.PARQUET)
+    if use_gpu:
+        dtrain = RayDeviceQuantileDMatrix(
+            path,
+            num_actors=num_workers,
+            label="labels",
+            ignore=["partition"],
+            filetype=RayFileType.PARQUET)
+    else:
+        dtrain = RayDMatrix(
+            path,
+            num_actors=num_workers,
+            label="labels",
+            ignore=["partition"],
+            filetype=RayFileType.PARQUET)
 
     config = {
         "tree_method": "hist" if not use_gpu else "gpu_hist",
