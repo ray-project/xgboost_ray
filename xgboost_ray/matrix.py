@@ -5,6 +5,11 @@ from enum import Enum
 from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence, \
     Callable
 
+try:
+    import cupy as cp
+except ImportError:
+    cp = None
+
 import numpy as np
 import pandas as pd
 
@@ -58,6 +63,8 @@ class RayDataIter(DataIter):
     ):
         super(RayDataIter, self).__init__()
 
+        assert cp is not None
+
         self._data = data
         self._label = label
         self._missing = missing
@@ -76,18 +83,26 @@ class RayDataIter(DataIter):
     def reset(self):
         self._iter = 0
 
+    def _prop(self, ref):
+        if ref is None:
+            return None
+        item = ref[self._iter]
+        if not isinstance(item, cp.ndarray):
+            item = cp.array(item.values)
+        return item
+
     def next(self, input_data: Callable):
         if self._iter >= len(self._data):
             return 0
         input_data(
-            data=self._data[self._iter],
-            label=self._label[self._iter],
-            weight=self._weight[self._iter],
+            data=self._prop(self._data),
+            label=self._prop(self._label),
+            weight=self._prop(self._weight),
             group=None,
-            label_lower_bound=self._label_lower_bound[self._iter],
-            label_upper_bound=self._label_upper_bound[self._iter],
-            feature_names=self._feature_names,
-            feature_types=self._feature_types)
+            label_lower_bound=self._prop(self._label_lower_bound),
+            label_upper_bound=self._prop(self._label_upper_bound),
+            feature_names=self._prop(self._feature_names),
+            feature_types=self._prop(self._feature_types))
         self._iter += 1
 
 
@@ -623,7 +638,13 @@ class RayDMatrix:
 
 class RayDeviceQuantileDMatrix(RayDMatrix):
     """Currently just a thin wrapper for type detection"""
-    pass
+
+    def __init__(self, *args, **kwargs):
+        if cp is None:
+            raise RuntimeError(
+                "RayDeviceQuantileDMatrix requires cupy to be installed."
+                "\nFIX THIS by installing cupy: `pip install cupy`")
+        super(RayDeviceQuantileDMatrix, self).__init__(*args, **kwargs)
 
 
 def _can_load_distributed(source: Data) -> bool:
