@@ -205,8 +205,11 @@ class RayXGBoostActor:
         if data in self._data:
             return
         param = data.get_data(self.rank, self.num_actors)
+        if isinstance(param["data"], list):
+            self._local_n = sum([len(a) for a in param["data"]])
+        else:
+            self._local_n = len(param["data"])
         data.unload_data()  # Free object store
-        self._local_n = len(param["data"])
 
         matrix = _get_dmatrix(data, param)
 

@@ -408,7 +408,10 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 "CSV or Parquet sources.".format(
                     type(self.data), self.filetype))
 
-        n = len(x)
+        if isinstance(x, list):
+            n = sum([len(a) for a in x])
+        else:
+            n = len(x)
 
         refs = {
             rank: {
