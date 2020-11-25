@@ -87,6 +87,8 @@ class RayDataIter(DataIter):
         if ref is None:
             return None
         item = ref[self._iter]
+        if item is None:
+            return None
         if not isinstance(item, cp.ndarray):
             item = cp.array(item.values)
         return item
@@ -101,8 +103,8 @@ class RayDataIter(DataIter):
             group=None,
             label_lower_bound=self._prop(self._label_lower_bound),
             label_upper_bound=self._prop(self._label_upper_bound),
-            feature_names=self._prop(self._feature_names),
-            feature_types=self._prop(self._feature_types))
+            feature_names=self._feature_names,
+            feature_types=self._feature_types)
         self._iter += 1
 
 
