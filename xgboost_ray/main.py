@@ -115,7 +115,7 @@ def _checkpoint_file(path: str, prefix: str, rank: int):
     return os.path.join(path, f"{prefix}_{rank:05d}.xgb")
 
 
-def _add_tune_callback(kwargs: Dict):
+def _try_add_tune_callback(kwargs: Dict):
     if TUNE_INSTALLED and tune.is_session_enabled():
         callbacks = kwargs.get("callbacks", [])
         for callback in callbacks:
@@ -544,7 +544,7 @@ def train(params: Dict,
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(
                 type(dtrain)))
 
-    _add_tune_callback(kwargs)
+    _try_add_tune_callback(kwargs)
 
     if not dtrain.loaded and not dtrain.distributed:
         dtrain.load_data(num_actors)
