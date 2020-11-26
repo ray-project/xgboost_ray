@@ -36,8 +36,6 @@ def train_breast_cancer(config, cpus_per_actor=1, num_actors=1):
         num_boost_round=10)
 
     model_path = "simple.xgb"
-    # with tune.checkpoint_dir(step=0) as checkpoint_dir:
-    #     model_path = checkpoint_dir + "/" + model_path
     bst.save_model(model_path)
     print("Final validation error: {:.4f}".format(
         evals_result["eval"]["error"][-1]))
