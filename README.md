@@ -122,6 +122,7 @@ def train_model(config):
         verbose_eval=False,
         num_actors=num_actors,
         cpus_per_actor=num_cpus_per_actor)
+    bst.save_model("model.xgb")
 
 from ray import tune
 
