@@ -29,6 +29,7 @@ jobs:
         python -m pytest -v --durations=0 -x test_xgboost_api.py
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
+        python -m pytest -v --durations=0 -x test_tune.py
         popd
         pushd examples/
         echo "running simple.py" && python simple.py
@@ -61,6 +62,7 @@ jobs:
         python -m pytest -v --durations=0 -x test_xgboost_api.py
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
+        python -m pytest -v --durations=0 -x test_tune.py
         popd
         pushd examples/
         echo "running simple.py" && python simple.py
