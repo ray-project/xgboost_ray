@@ -16,7 +16,7 @@ def train_ray(num_workers, num_boost_rounds, num_files=0, use_gpu=False):
     path = "/data/parted.parquet"
 
     if num_files:
-        files = list(sorted(glob.glob(f"{path}/**/*.parquet")))
+        files = sorted(glob.glob(f"{path}/**/*.parquet"))
         while num_files > len(files):
             files = files + files
         path = files[0:num_files]
