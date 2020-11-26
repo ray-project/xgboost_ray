@@ -8,7 +8,7 @@ from ray import tune
 from xgboost_ray import RayDMatrix, train
 
 
-class XGBoostRayDMatrixTest(unittest.TestCase):
+class XGBoostRayTuneTest(unittest.TestCase):
     def setUp(self):
         ray.init(num_cpus=4)
         repeat = 8  # Repeat data a couple of times for stability
