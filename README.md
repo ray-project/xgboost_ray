@@ -138,7 +138,7 @@ analysis = tune.run(
     train_model, 
     config=config,
     metric="eval-error", 
-    mode="min" 
+    mode="min", 
     resources_per_trial={"cpu": 1, "extra_cpu": num_actors * num_cpus_per_actor})
 print("Best hyperparameters", analysis.best_config)
 ```
