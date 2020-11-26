@@ -112,7 +112,6 @@ def _checkpoint_file(path: str, prefix: str, rank: int):
         return None
     return os.path.join(path, f"{prefix}_{rank:05d}.xgb")
 
-
 def _add_tune_callback(kwargs: Dict):
     if TUNE_INSTALLED and tune.is_session_enabled():
         callbacks = kwargs.get("callbacks", [])
@@ -121,6 +120,42 @@ def _add_tune_callback(kwargs: Dict):
                 return
         callbacks.append(RayTuneReportCallback())
         kwargs["callbacks"] = callbacks
+
+def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
+    if isinstance(data, RayDeviceQuantileDMatrix):
+        if isinstance(param["data"], list):
+            dm_param = {
+                "feature_names": data.feature_names,
+                "feature_types": data.feature_types,
+                "missing": data.missing,
+            }
+            if not isinstance(data, xgb.DeviceQuantileDMatrix):
+                pass
+            param.update(dm_param)
+            it = RayDataIter(**param)
+            matrix = xgb.DeviceQuantileDMatrix(it, **dm_param)
+        else:
+            matrix = xgb.DeviceQuantileDMatrix(**param)
+    else:
+        if isinstance(param["data"], list):
+            dm_param = {
+                "data": concat_dataframes(param["data"]),
+                "label": concat_dataframes(param["label"]),
+                "weight": concat_dataframes(param["weight"]),
+                "base_margin": concat_dataframes(param["base_margin"]),
+                "label_lower_bound": concat_dataframes(
+                    param["label_lower_bound"]),
+                "label_upper_bound": concat_dataframes(
+                    param["label_upper_bound"]),
+            }
+            param.update(dm_param)
+
+        ll = param.pop("label_lower_bound", None)
+        lu = param.pop("label_upper_bound", None)
+
+        matrix = xgb.DMatrix(**param)
+        matrix.set_info(label_lower_bound=ll, label_upper_bound=lu)
+    return matrix
 
 
 @ray.remote
@@ -187,41 +222,13 @@ class RayXGBoostActor:
         if data in self._data:
             return
         param = data.get_data(self.rank, self.num_actors)
-        self._local_n = len(param["data"])
-
-        if isinstance(data, RayDeviceQuantileDMatrix):
-            if isinstance(param["data"], list):
-                dm_param = {
-                    "feature_names": data.feature_names,
-                    "feature_types": data.feature_types,
-                    "missing": data.missing,
-                }
-                if not isinstance(data, xgb.DeviceQuantileDMatrix):
-                    pass
-                param.update(dm_param)
-                it = RayDataIter(**param)
-                matrix = xgb.DeviceQuantileDMatrix(it, **dm_param)
-            else:
-                matrix = xgb.DeviceQuantileDMatrix(**param)
+        if isinstance(param["data"], list):
+            self._local_n = sum([len(a) for a in param["data"]])
         else:
-            if isinstance(param["data"], list):
-                dm_param = {
-                    "data": concat_dataframes(param["data"]),
-                    "label": concat_dataframes(param["label"]),
-                    "weight": concat_dataframes(param["weight"]),
-                    "base_margin": concat_dataframes(param["base_margin"]),
-                    "label_lower_bound": concat_dataframes(
-                        param["label_lower_bound"]),
-                    "label_upper_bound": concat_dataframes(
-                        param["label_upper_bound"]),
-                }
-                param.update(dm_param)
+            self._local_n = len(param["data"])
+        data.unload_data()  # Free object store
 
-            ll = param.pop("label_lower_bound", None)
-            lu = param.pop("label_upper_bound", None)
-
-            matrix = xgb.DMatrix(**param)
-            matrix.set_info(label_lower_bound=ll, label_upper_bound=lu)
+        matrix = _get_dmatrix(data, param)
 
         self._data[data] = matrix
 
