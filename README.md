@@ -137,7 +137,13 @@ config = {
 }
 
 # Make sure to specify how many actors each training run will create via the "extra_cpu" field.
-tune.run(train_model, config=config, resources_per_trial={"cpu": 1, "extra_cpu": num_actors*num_cpus_per_actor})
+analysis = tune.run(
+    train_model, 
+    config=config,
+    metric="eval-error", 
+    mode="min" 
+    resources_per_trial={"cpu": 1, "extra_cpu": num_actors*num_cpus_per_actor})
+print("Best hyperparameters", analysis.best_config)
 ```
 
 Also see examples/simple_tune.py for another example.
