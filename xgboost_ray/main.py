@@ -29,6 +29,8 @@ try:
     from xgboost_ray.tune import RayTuneReportCallback
     TUNE_INSTALLED = True
 except ImportError:
+    tune = None
+    RayTuneReportCallback = None
     TUNE_INSTALLED = False
 
 import xgboost as xgb
