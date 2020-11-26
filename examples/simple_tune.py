@@ -59,6 +59,8 @@ def main(cpus_per_actor, num_actors, num_samples):
             train_breast_cancer,
             cpus_per_actor=cpus_per_actor,
             num_actors=num_actors),
+        # extra_cpu is used if the trainable creates additional remote actors.
+        # https://docs.ray.io/en/master/tune/api_docs/trainable.html#advanced-resource-allocation
         resources_per_trial={
             "cpu": 1,
             "extra_cpu": cpus_per_actor * num_actors
