@@ -19,7 +19,7 @@ jobs:
         python -m pip install -U yapf==0.23.0 flake8==3.7.7 flake8-comprehensions flake8-quotes==2.0.0
     - name: Run format script
       run: |
-        ./format.sh
+        ./format.sh --all
 
   test_linux_ray_master:
 
