@@ -713,8 +713,7 @@ def predict(model: xgb.Booster,
                     "prediction from scratch. "
                     "Sleeping for 10 seconds for cleanup.")
                 from collections import UserDict
-                time.sleep(
-                    10)
+                time.sleep(10)
             else:
                 raise RuntimeError(
                     "A Ray actor died during prediction and the maximum "
