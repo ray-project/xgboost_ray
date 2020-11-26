@@ -112,11 +112,8 @@ def train_model(config):
 
     evals_result = {}
     bst = train(
-        {
-            "objective": "binary:logistic",
-            "eval_metric": ["logloss", "error"],
-        },
-        train_set,
+        params=config,
+        dtrain=train_set,
         evals_result=evals_result,
         evals=[(train_set, "train")],
         verbose_eval=False,
