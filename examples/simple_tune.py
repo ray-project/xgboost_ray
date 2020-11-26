@@ -22,12 +22,18 @@ def train_breast_cancer(config, cpus_per_actor=1, num_actors=1):
 
     evals_result = {}
 
-    bst = train(params=config, dtrain=train_set, evals=[(test_set,
-                                                                 "eval")],
-                evals_result=evals_result,
-                max_actor_restarts=1, checkpoint_path="/tmp/checkpoint/",
-                gpus_per_actor=0, cpus_per_actor=cpus_per_actor,
-                num_actors=num_actors, verbose_eval=False, num_boost_round=10)
+    bst = train(
+        params=config,
+        dtrain=train_set,
+        evals=[(test_set, "eval")],
+        evals_result=evals_result,
+        max_actor_restarts=1,
+        checkpoint_path="/tmp/checkpoint/",
+        gpus_per_actor=0,
+        cpus_per_actor=cpus_per_actor,
+        num_actors=num_actors,
+        verbose_eval=False,
+        num_boost_round=10)
 
     model_path = "simple.xgb"
     # with tune.checkpoint_dir(step=0) as checkpoint_dir:

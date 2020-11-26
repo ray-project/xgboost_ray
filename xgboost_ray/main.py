@@ -114,6 +114,7 @@ def _checkpoint_file(path: str, prefix: str, rank: int):
         return None
     return os.path.join(path, f"{prefix}_{rank:05d}.xgb")
 
+
 def _add_tune_callback(kwargs: Dict):
     if TUNE_INSTALLED and tune.is_session_enabled():
         callbacks = kwargs.get("callbacks", [])
@@ -122,6 +123,7 @@ def _add_tune_callback(kwargs: Dict):
                 return
         callbacks.append(RayTuneReportCallback())
         kwargs["callbacks"] = callbacks
+
 
 def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
     if isinstance(data, RayDeviceQuantileDMatrix):
@@ -225,7 +227,7 @@ class RayXGBoostActor:
             return
         param = data.get_data(self.rank, self.num_actors)
         if isinstance(param["data"], list):
-            self._local_n = sum([len(a) for a in param["data"]])
+            self._local_n = sum(len(a) for a in param["data"])
         else:
             self._local_n = len(param["data"])
         data.unload_data()  # Free object store

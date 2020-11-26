@@ -26,12 +26,18 @@ def main(cpus_per_actor, num_actors):
     }
 
     # Train the classifier
-    bst = train(params=xgboost_params, dtrain=train_set, evals=[(test_set,
-                                                                 "eval")],
-                evals_result=evals_result,
-                max_actor_restarts=1, checkpoint_path="/tmp/checkpoint/",
-                gpus_per_actor=0, cpus_per_actor=cpus_per_actor,
-                num_actors=num_actors, verbose_eval=False, num_boost_round=10)
+    bst = train(
+        params=xgboost_params,
+        dtrain=train_set,
+        evals=[(test_set, "eval")],
+        evals_result=evals_result,
+        max_actor_restarts=1,
+        checkpoint_path="/tmp/checkpoint/",
+        gpus_per_actor=0,
+        cpus_per_actor=cpus_per_actor,
+        num_actors=num_actors,
+        verbose_eval=False,
+        num_boost_round=10)
 
     model_path = "simple.xgb"
     bst.save_model(model_path)

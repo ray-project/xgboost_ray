@@ -311,7 +311,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 "enum for that.".format(type(self.data), self.filetype))
 
         if isinstance(x, list):
-            n = sum([len(a) for a in x])
+            n = sum(len(a) for a in x)
         else:
             n = len(x)
 
@@ -407,7 +407,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                     type(self.data), self.filetype))
 
         if isinstance(x, list):
-            n = sum([len(a) for a in x])
+            n = sum(len(a) for a in x)
         else:
             n = len(x)
 
