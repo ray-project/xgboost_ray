@@ -3,26 +3,21 @@ from ray import tune
 from xgboost_ray.session import get_actor_rank, put_queue
 
 
-# At each boosting round, add the results to the queue actor.
-# The results in the queue will be consumed by the Trainable to report to tune.
-# TODO: Subclass ray.tune.integrations.xgboost.TuneReportCallback?
 class RayTuneReportCallback:
-    def __init__(self, metrics):
-        if isinstance(metrics, str):
-            metrics = [metrics]
-        self._metrics = metrics
+    """xgboost-ray to Ray Tune reporting callback
+
+    Reports metrics to Ray Tune. When calling xgboost_ray.train inside a
+    Tune session, this callback is passed to xgboost. At the end of each
+    boosting round, the rank 0 worker sends its results to the
+    worker-driver communication Queue, and the results are reported to
+    tune from the driver via tune.report. The callback is a no-op for all
+    other workers. Only the rank 0 worker needs to send results to the
+    queue since Rabit all-reduce ensures that all workers are in sync.
+
+
+    """
 
     def __call__(self, env):
         if get_actor_rank() == 0:
             result_dict = dict(env.evaluation_result_list)
-            if not self._metrics:
-                report_dict = result_dict
-            else:
-                report_dict = {}
-                for key in self._metrics:
-                    if isinstance(self._metrics, dict):
-                        metric = self._metrics[key]
-                    else:
-                        metric = key
-                    report_dict[key] = result_dict[metric]
-            put_queue(lambda: tune.report(**report_dict))
+            put_queue(lambda: tune.report(**result_dict))

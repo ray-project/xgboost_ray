@@ -119,7 +119,7 @@ def _add_tune_callback(kwargs: Dict):
         for callback in callbacks:
             if isinstance(callback, RayTuneReportCallback):
                 return
-        callbacks.append(RayTuneReportCallback(metrics=None))
+        callbacks.append(RayTuneReportCallback())
         kwargs["callbacks"] = callbacks
 
 

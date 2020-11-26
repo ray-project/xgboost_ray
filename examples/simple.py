@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from xgboost_ray import RayDMatrix, train
 
 
-def create_train_args(params, cpus_per_actor=1, num_actors=1):
+def main(cpus_per_actor, num_actors):
     # Load dataset
     data, labels = datasets.load_breast_cancer(return_X_y=True)
     # Split into train and test set
@@ -18,25 +18,6 @@ def create_train_args(params, cpus_per_actor=1, num_actors=1):
 
     evals_result = {}
 
-    # Train the classifier
-    train_args = {
-        "params": params,
-        "dtrain": train_set,
-        "evals": [(test_set, "eval")],
-        "evals_result": evals_result,
-        "max_actor_restarts": 1,
-        "checkpoint_path": "/tmp/checkpoint/",
-        "gpus_per_actor": 0,
-        "cpus_per_actor": cpus_per_actor,
-        "num_actors": num_actors,
-        "verbose_eval": False,
-        "num_boost_round": 10,
-    }
-
-    return train_args
-
-
-def main(cpus_per_actor, num_actors):
     # Set XGBoost config.
     xgboost_params = {
         "tree_method": "approx",
@@ -44,14 +25,18 @@ def main(cpus_per_actor, num_actors):
         "eval_metric": ["logloss", "error"],
     }
 
-    train_args = create_train_args(xgboost_params, cpus_per_actor, num_actors)
-
-    bst = train(**train_args)
+    # Train the classifier
+    bst = train(params=xgboost_params, dtrain=train_set, evals=[(test_set,
+                                                                 "eval")],
+                evals_result=evals_result,
+                max_actor_restarts=1, checkpoint_path="/tmp/checkpoint/",
+                gpus_per_actor=0, cpus_per_actor=cpus_per_actor,
+                num_actors=num_actors, verbose_eval=False, num_boost_round=10)
 
     model_path = "simple.xgb"
     bst.save_model(model_path)
     print("Final validation error: {:.4f}".format(
-        train_args["evals_result"]["eval"]["error"][-1]))
+        evals_result["eval"]["error"][-1]))
 
 
 if __name__ == "__main__":

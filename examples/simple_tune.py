@@ -1,28 +1,40 @@
 import argparse
 import os
 
-from ray import tune
-
+from sklearn import datasets
+from sklearn.model_selection import train_test_split
 import xgboost as xgb
 
-from xgboost_ray import train
+from ray import tune
 
-from examples.simple import create_train_args
+from xgboost_ray import train, RayDMatrix
 
 
 def train_breast_cancer(config, cpus_per_actor=1, num_actors=1):
+    # Load dataset
+    data, labels = datasets.load_breast_cancer(return_X_y=True)
+    # Split into train and test set
+    train_x, test_x, train_y, test_y = train_test_split(
+        data, labels, test_size=0.25)
 
-    train_args = create_train_args(
-        params=config, cpus_per_actor=cpus_per_actor, num_actors=num_actors)
+    train_set = RayDMatrix(train_x, train_y)
+    test_set = RayDMatrix(test_x, test_y)
 
-    bst = train(**train_args)
+    evals_result = {}
+
+    bst = train(params=config, dtrain=train_set, evals=[(test_set,
+                                                                 "eval")],
+                evals_result=evals_result,
+                max_actor_restarts=1, checkpoint_path="/tmp/checkpoint/",
+                gpus_per_actor=0, cpus_per_actor=cpus_per_actor,
+                num_actors=num_actors, verbose_eval=False, num_boost_round=10)
 
     model_path = "simple.xgb"
-    with tune.checkpoint_dir(step=0) as checkpoint_dir:
-        model_path = checkpoint_dir + "/" + model_path
+    # with tune.checkpoint_dir(step=0) as checkpoint_dir:
+    #     model_path = checkpoint_dir + "/" + model_path
     bst.save_model(model_path)
     print("Final validation error: {:.4f}".format(
-        train_args["evals_result"]["eval"]["error"][-1]))
+        evals_result["eval"]["error"][-1]))
 
 
 def main(cpus_per_actor, num_actors, num_samples):
@@ -52,7 +64,7 @@ def main(cpus_per_actor, num_actors, num_samples):
 
     # Load the best model checkpoint
     best_bst = xgb.Booster()
-    best_bst.load_model(os.path.join(analysis.best_checkpoint, "simple.xgb"))
+    best_bst.load_model(os.path.join(analysis.best_logdir, "simple.xgb"))
     accuracy = 1. - analysis.best_result["eval-error"]
     print(f"Best model parameters: {analysis.best_config}")
     print(f"Best model total accuracy: {accuracy:.4f}")
@@ -79,11 +91,7 @@ if __name__ == "__main__":
         "--num-samples",
         type=int,
         default=4,
-        help="Number "
-        "of "
-        "samples "
-        "to use "
-        "for Tune.")
+        help="Number of samples to use for Tune.")
 
     args, _ = parser.parse_known_args()
 
