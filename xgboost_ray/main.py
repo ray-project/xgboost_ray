@@ -7,20 +7,31 @@ import time
 
 from threading import Thread
 
-from ray.exceptions import RayActorError
-
 try:
     import ray
     from ray import logger
     from ray.services import get_node_ip_address
+    from ray.exceptions import RayActorError
     from ray.util.queue import Queue
+    from ray.actor import ActorHandle
     RAY_INSTALLED = True
 except ImportError:
     ray = None
     logger = None
     get_node_ip_address = None
     Queue = None
+    ActorHandle = None
     RAY_INSTALLED = False
+
+# Tune imports.
+try:
+    from ray import tune
+    from xgboost_ray.tune import RayTuneReportCallback
+    TUNE_INSTALLED = True
+except ImportError:
+    tune = None
+    RayTuneReportCallback = None
+    TUNE_INSTALLED = False
 
 import xgboost as xgb
 
@@ -102,6 +113,16 @@ def _checkpoint_file(path: str, prefix: str, rank: int):
     if not prefix:
         return None
     return os.path.join(path, f"{prefix}_{rank:05d}.xgb")
+
+
+def _try_add_tune_callback(kwargs: Dict):
+    if TUNE_INSTALLED and tune.is_session_enabled():
+        callbacks = kwargs.get("callbacks", [])
+        for callback in callbacks:
+            if isinstance(callback, RayTuneReportCallback):
+                return
+        callbacks.append(RayTuneReportCallback())
+        kwargs["callbacks"] = callbacks
 
 
 def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
@@ -206,7 +227,7 @@ class RayXGBoostActor:
             return
         param = data.get_data(self.rank, self.num_actors)
         if isinstance(param["data"], list):
-            self._local_n = sum([len(a) for a in param["data"]])
+            self._local_n = sum(len(a) for a in param["data"])
         else:
             self._local_n = len(param["data"])
         data.unload_data()  # Free object store
@@ -294,7 +315,7 @@ def _create_actor(rank: int,
                   num_cpus_per_actor: int,
                   num_gpus_per_actor: int,
                   resources_per_actor: Optional[Dict] = None,
-                  queue: Queue = None,
+                  queue: Optional[Queue] = None,
                   checkpoint_prefix: Optional[str] = None,
                   checkpoint_path: str = "/tmp",
                   checkpoint_frequency: int = 5) -> RayXGBoostActor:
@@ -324,6 +345,27 @@ def _cleanup(checkpoint_prefix: str, checkpoint_path: str, num_actors: int):
                                            i)
         if os.path.exists(checkpoint_file):
             os.remove(checkpoint_file)
+
+
+def _shutdown(remote_workers: List[ActorHandle],
+              queue: Optional[Queue] = None,
+              force: bool = False):
+    if force:
+        logger.debug(f"Killing {len(remote_workers)} workers.")
+        for worker in remote_workers:
+            ray.kill(worker)
+        if queue is not None:
+            logger.debug("Killing Queue.")
+            ray.kill(queue.actor)
+    else:
+        try:
+            [worker.__ray_terminate__.remote() for worker in remote_workers]
+            if queue is not None:
+                queue.actor.__ray_terminate__.remote()
+        except RayActorError:
+            logger.warning("Failed to shutdown gracefully, forcing a "
+                           "shutdown.")
+            _shutdown(remote_workers, force=True)
 
 
 def _train(params: Dict,
@@ -362,9 +404,11 @@ def _train(params: Dict,
     else:
         params["nthread"] = cpus_per_actor
 
-    # Create remote actors
-    queue = Queue()  # Always create queue
+    # Create queue for communication from worker to caller.
+    # Always create queue.
+    queue = Queue()
 
+    # Create remote actors
     actors = [
         _create_actor(i, num_actors, cpus_per_actor, gpus_per_actor,
                       resources_per_actor, queue, checkpoint_prefix,
@@ -381,10 +425,7 @@ def _train(params: Dict,
     try:
         ray.get(wait_load)
     except Exception:
-        for actor in actors:
-            ray.kill(actor)
-        if queue:
-            ray.kill(queue)
+        _shutdown(actors, queue, force=True)
         raise
 
     logger.info("[RayXGBoost] Starting XGBoost training.")
@@ -417,10 +458,7 @@ def _train(params: Dict,
         ray.get(fut)
     # The inner loop should catch all exceptions
     except Exception:
-        for actor in actors:
-            ray.kill(actor)
-        if queue:
-            ray.kill(queue)
+        _shutdown(remote_workers=actors, queue=queue, force=True)
         raise
 
     # All results should be the same because of Rabit tracking. So we just
@@ -434,13 +472,15 @@ def _train(params: Dict,
         additional_results["callback_returns"] = callback_returns
 
     all_res = ray.get(fut)
-    total_n = sum([res["train_n"] or 0 for res in all_res])
+    total_n = sum(res["train_n"] or 0 for res in all_res)
 
     logger.info(f"[RayXGBoost] Finished XGBoost training on training data "
                 f"with total N={total_n:,}.")
 
     if checkpoint_prefix:
         _cleanup(checkpoint_prefix, checkpoint_path, num_actors)
+
+    _shutdown(remote_workers=actors, queue=queue, force=False)
 
     return bst, evals_result, additional_results
 
@@ -463,6 +503,9 @@ def train(params: Dict,
     remote actors, send data shards to them, and have them train an
     XGBoost classifier. The XGBoost parameters will be shared and combined
     via Rabit's all-reduce protocol.
+
+    If running inside a Ray Tune session, this function will automatically
+    handle results to tune for hyperparameter search.
 
     Args:
         params (Dict): parameter dict passed to ``xgboost.train()``
@@ -500,6 +543,8 @@ def train(params: Dict,
             "\nFIX THIS by instantiating a RayDMatrix first: "
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(
                 type(dtrain)))
+
+    _try_add_tune_callback(kwargs)
 
     if not dtrain.loaded and not dtrain.distributed:
         dtrain.load_data(num_actors)
@@ -580,15 +625,14 @@ def _predict(model: xgb.Booster,
 
     # Split data across workers
     wait_load = []
-    for _, (actor, _) in enumerate(actors):
+    for _, actor in enumerate(actors):
         wait_load.extend(_trigger_data_load(actor, data, []))
 
     try:
         ray.get(wait_load)
     except Exception as exc:
         logger.warning(f"Caught an error during prediction: {str(exc)}")
-        for actor in actors:
-            ray.kill(actor)
+        _shutdown(actors, force=True)
         raise
 
     # Put model into object store
@@ -597,18 +641,16 @@ def _predict(model: xgb.Booster,
     logger.info("[RayXGBoost] Starting XGBoost prediction.")
 
     # Train
-    fut = [
-        actor.predict.remote(model_ref, data, **kwargs)
-        for (actor, _) in actors
-    ]
+    fut = [actor.predict.remote(model_ref, data, **kwargs) for actor in actors]
 
     try:
         actor_results = ray.get(fut)
     except Exception as exc:
         logger.warning(f"Caught an error during prediction: {str(exc)}")
-        for actor in actors:
-            ray.kill(actor)
+        _shutdown(remote_workers=actors, force=True)
         raise
+
+    _shutdown(remote_workers=actors, force=False)
 
     return combine_data(data.sharding, actor_results)
 

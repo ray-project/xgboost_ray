@@ -27,9 +27,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             [0, 0, 1, 1],  # Feature 2+3 -> Label 2
             [0, 0, 1, 0],  # Feature 2+!3 -> Label 3
         ] * repeat)
-        self.y = np.array([
-            0, 1, 2, 3
-        ] * repeat)
+        self.y = np.array([0, 1, 2, 3] * repeat)
 
         self.params = {
             "booster": "gbtree",
@@ -67,6 +65,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     fp.write("")
                 import sys
                 sys.exit(1)
+
         return callback
 
     def testTrainingContinuation(self):
@@ -85,10 +84,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         self.assertSequenceEqual(list(self.y), list(pred_y))
 
     def testTrainingStop(self):
-        """This should now continue training after one actor died."""
+        """This should now stop training after one actor died."""
         # The `train()` function raises a RuntimeError
         with self.assertRaises(RuntimeError):
-            bst = train(
+            train(
                 self.params,
                 RayDMatrix(self.x, self.y),
                 callbacks=[self._fail_callback(self.die_lock_file)],

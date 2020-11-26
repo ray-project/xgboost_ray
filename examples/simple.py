@@ -1,10 +1,12 @@
+import argparse
+
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
 
 from xgboost_ray import RayDMatrix, train
 
 
-def main():
+def main(cpus_per_actor, num_actors):
     # Load dataset
     data, labels = datasets.load_breast_cancer(return_X_y=True)
     # Split into train and test set
@@ -14,30 +16,56 @@ def main():
     train_set = RayDMatrix(train_x, train_y)
     test_set = RayDMatrix(test_x, test_y)
 
-    # Set config
-    config = {
+    evals_result = {}
+
+    # Set XGBoost config.
+    xgboost_params = {
         "tree_method": "approx",
         "objective": "binary:logistic",
         "eval_metric": ["logloss", "error"],
-        "max_depth": 3,
     }
-
-    evals_result = {}
 
     # Train the classifier
     bst = train(
-        config,
-        train_set,
+        params=xgboost_params,
+        dtrain=train_set,
         evals=[(test_set, "eval")],
         evals_result=evals_result,
         max_actor_restarts=1,
         checkpoint_path="/tmp/checkpoint/",
-        verbose_eval=False)
+        gpus_per_actor=0,
+        cpus_per_actor=cpus_per_actor,
+        num_actors=num_actors,
+        verbose_eval=False,
+        num_boost_round=10)
 
-    bst.save_model("simple.xgb")
+    model_path = "simple.xgb"
+    bst.save_model(model_path)
     print("Final validation error: {:.4f}".format(
         evals_result["eval"]["error"][-1]))
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--address",
+        required=False,
+        type=str,
+        help="the address to use for Ray")
+    parser.add_argument(
+        "--cpus-per-actor",
+        type=int,
+        default=1,
+        help="Sets number of CPUs per xgboost training worker.")
+    parser.add_argument(
+        "--num-actors",
+        type=int,
+        default=1,
+        help="Sets number of xgboost workers to use.")
+
+    args, _ = parser.parse_known_args()
+
+    import ray
+    ray.init(address=args.address)
+
+    main(args.cpus_per_actor, args.num_actors)
