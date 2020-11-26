@@ -36,8 +36,11 @@ train_set = RayDMatrix(train_x, train_y)
 
 evals_result = {}
 bst = train(
-    params=config,
-    dtrain=train_set,
+    {
+        "objective": "binary:logistic",
+        "eval_metric": ["logloss", "error"],
+    },
+    train_set,
     evals_result=evals_result,
     evals=[(train_set, "train")],
     verbose_eval=False,
