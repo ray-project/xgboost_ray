@@ -70,12 +70,14 @@ fi
 # Only fetch master since that's the branch we're diffing against.
 git fetch upstream master || true
 
+echo "DEBUG 1"
 YAPF_FLAGS=(
     '--style' "$ROOT/.style.yapf"
     '--recursive'
     '--parallel'
 )
 
+echo "DEBUG 2"
 YAPF_EXCLUDES=(
     # '--exclude' 'python/ray/cloudpickle/*'
     # '--exclude' 'python/build/*'
@@ -83,11 +85,13 @@ YAPF_EXCLUDES=(
     # '--exclude' 'python/ray/thirdparty_files/*'
 )
 
+echo "DEBUG 3"
 # Format specified files
 format() {
     yapf --in-place "${YAPF_FLAGS[@]}" -- "$@"
 }
 
+echo "DEBUG 4"
 # Format files that differ from main branch. Ignores dirs that are not slated
 # for autoformat yet.
 format_changed() {
@@ -124,12 +128,16 @@ format_all() {
 # This flag formats individual files. --files *must* be the first command line
 # arg to use this option.
 if [[ "$1" == '--files' ]]; then
+  echo "DEBUG A"
     format "${@:2}"
     # If `--all` is passed, then any further arguments are ignored and the
     # entire python directory is formatted.
 elif [[ "$1" == '--all' ]]; then
+  echo "DEBUG B"
+
     format_all
 else
+  echo "DEBUG C"
     # Format only the files that changed in last commit.
     format_changed
 fi
