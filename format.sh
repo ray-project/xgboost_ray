@@ -143,3 +143,5 @@ if ! git diff --quiet &>/dev/null; then
 
     exit 1
 fi
+
+echo 'Linting check finished successfully.'
