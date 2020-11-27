@@ -30,9 +30,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             [0, 0, 1, 1],  # Feature 2+3 -> Label 2
             [0, 0, 1, 0],  # Feature 2+!3 -> Label 3
         ] * repeat)
-        self.y = np.array([
-            0, 1, 2, 3
-        ] * repeat)
+        self.y = np.array([0, 1, 2, 3] * repeat)
 
         self.params = {
             "booster": "gbtree",
@@ -45,10 +43,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
     def testSingleTraining(self):
         """Test that XGBoost learns to predict full matrix"""
         dtrain = xgb.DMatrix(self.x, self.y)
-        bst = xgb.train(
-            self.params,
-            dtrain,
-            num_boost_round=2)
+        bst = xgb.train(self.params, dtrain, num_boost_round=2)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
@@ -64,19 +59,13 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
         # Test case: The first model only sees feature 2 --> label 2
         # and the second model only sees feature 2 --> label 3
-        test_X = xgb.DMatrix(np.array([
-            [0, 0, 1, 1],
-            [0, 0, 1, 0]
-        ]))
+        test_X = xgb.DMatrix(np.array([[0, 0, 1, 1], [0, 0, 1, 0]]))
         test_y_first = [2, 2]
         test_y_second = [3, 3]
 
         # First half
         dtrain = xgb.DMatrix(x_first, y_first)
-        bst = xgb.train(
-            self.params,
-            dtrain,
-            num_boost_round=2)
+        bst = xgb.train(self.params, dtrain, num_boost_round=2)
 
         x_mat = xgb.DMatrix(x_first)
         pred_y = bst.predict(x_mat)
@@ -87,10 +76,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
         # Second half
         dtrain = xgb.DMatrix(x_second, y_second)
-        bst = xgb.train(
-            self.params,
-            dtrain,
-            num_boost_round=2)
+        bst = xgb.train(self.params, dtrain, num_boost_round=2)
 
         x_mat = xgb.DMatrix(x_second)
         pred_y = bst.predict(x_mat)
@@ -104,10 +90,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         should be combined together and find the true model."""
         ray.init(num_cpus=2, num_gpus=0)
 
-        bst = train(
-            self.params,
-            RayDMatrix(self.x, self.y),
-            num_actors=2)
+        bst = train(self.params, RayDMatrix(self.x, self.y), num_actors=2)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)

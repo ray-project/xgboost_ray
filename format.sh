@@ -118,7 +118,8 @@ format_changed() {
 
 # Format all files, and print the diff to stdout for travis.
 format_all() {
-    yapf --diff "${YAPF_FLAGS[@]}" "${YAPF_EXCLUDES[@]}" tune_sklearn
+    yapf --diff "${YAPF_FLAGS[@]}" "${YAPF_EXCLUDES[@]}" xgboost_ray
+    flake8 --inline-quotes '"' --no-avoid-escape --ignore=C408,E121,E123,E126,E211,E225,E226,E227,E24,E704,E999,W503,W504,W605 xgboost_ray
 }
 
 # This flag formats individual files. --files *must* be the first command line
@@ -143,3 +144,5 @@ if ! git diff --quiet &>/dev/null; then
 
     exit 1
 fi
+
+echo 'Linting check finished successfully.'
