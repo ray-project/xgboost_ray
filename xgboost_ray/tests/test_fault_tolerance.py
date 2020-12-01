@@ -108,10 +108,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 RayDMatrix(self.x, self.y),
                 callbacks=[_fail_callback(self.die_lock_file)],
                 num_boost_round=20,
-                ray_params=RayParams(
-                    max_actor_restarts=0,
-                    num_actors=2,
-                    checkpoint_path=self.tmpdir))
+                ray_params=RayParams(max_actor_restarts=0, num_actors=2))
 
     def testCheckpointContinuationValidity(self):
         """Test that checkpoints are stored and loaded correctly"""
