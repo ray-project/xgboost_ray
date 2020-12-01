@@ -146,7 +146,7 @@ class _RayDMatrixLoader:
         if check is not None:
             if not self.filetype:
                 # Try to guess filetype from file ending
-                if check.endswith(".csv"):
+                if check.endswith(".csv") or check.endswith("csv.gz"):
                     self.filetype = RayFileType.CSV
                 elif check.endswith(".parquet"):
                     self.filetype = RayFileType.PARQUET
@@ -367,6 +367,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             elif os.path.exists(self.data):
                 self.data = [self.data]
             else:
+                print(f"INVALID: {self.data}")
                 invalid_data = True
 
         if not isinstance(self.data, Iterable) or invalid_data:

@@ -48,10 +48,13 @@ jobs:
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
         python -m pytest -v --durations=0 -x test_tune.py
+        echo "running smoke test on benchmark_cpu_gpu.py" && python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
         popd
         pushd examples/
         echo "running simple.py" && python simple.py
+        echo "running simple_predict.py" && python simple_predict.py
         echo "running simple_tune.py" && python simple_tune.py
+        echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
       # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
 
   test_linux_ray_release:
@@ -81,9 +84,11 @@ jobs:
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
         python -m pytest -v --durations=0 -x test_tune.py
+        echo "running smoke test on benchmark_cpu_gpu.py" && python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
         popd
         pushd examples/
         echo "running simple.py" && python simple.py
+        echo "running simple_predict.py" && python simple_predict.py
         echo "running simple_tune.py" && python simple_tune.py
-      # pushd examples/
+        echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
       # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done

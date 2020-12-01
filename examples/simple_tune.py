@@ -7,7 +7,7 @@ import xgboost as xgb
 
 from ray import tune
 
-from xgboost_ray import train, RayDMatrix
+from xgboost_ray import train, RayDMatrix, RayParams
 
 
 def train_breast_cancer(config, cpus_per_actor=1, num_actors=1):
@@ -27,15 +27,16 @@ def train_breast_cancer(config, cpus_per_actor=1, num_actors=1):
         dtrain=train_set,
         evals=[(test_set, "eval")],
         evals_result=evals_result,
-        max_actor_restarts=1,
-        checkpoint_path="/tmp/checkpoint/",
-        gpus_per_actor=0,
-        cpus_per_actor=cpus_per_actor,
-        num_actors=num_actors,
+        ray_params=RayParams(
+            max_actor_restarts=1,
+            checkpoint_path="/tmp/checkpoint/",
+            gpus_per_actor=0,
+            cpus_per_actor=cpus_per_actor,
+            num_actors=num_actors),
         verbose_eval=False,
         num_boost_round=10)
 
-    model_path = "simple.xgb"
+    model_path = "tuned.xgb"
     bst.save_model(model_path)
     print("Final validation error: {:.4f}".format(
         evals_result["eval"]["error"][-1]))
@@ -70,7 +71,7 @@ def main(cpus_per_actor, num_actors, num_samples):
 
     # Load the best model checkpoint
     best_bst = xgb.Booster()
-    best_bst.load_model(os.path.join(analysis.best_logdir, "simple.xgb"))
+    best_bst.load_model(os.path.join(analysis.best_logdir, "tuned.xgb"))
     accuracy = 1. - analysis.best_result["eval-error"]
     print(f"Best model parameters: {analysis.best_config}")
     print(f"Best model total accuracy: {accuracy:.4f}")
@@ -87,12 +88,12 @@ if __name__ == "__main__":
         "--cpus-per-actor",
         type=int,
         default=1,
-        help="Sets number of CPUs per xgboost training worker.")
+        help="Sets number of CPUs per XGBoost training worker.")
     parser.add_argument(
         "--num-actors",
         type=int,
         default=1,
-        help="Sets number of xgboost workers to use.")
+        help="Sets number of XGBoost workers to use.")
     parser.add_argument(
         "--num-samples",
         type=int,

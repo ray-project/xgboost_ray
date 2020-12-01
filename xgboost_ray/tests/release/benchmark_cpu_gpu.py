@@ -2,19 +2,24 @@ import glob
 import os
 
 import argparse
+import shutil
 import time
 
 import ray
 from xgboost_ray import train, RayDMatrix, RayFileType, \
-    RayDeviceQuantileDMatrix
+    RayDeviceQuantileDMatrix, RayParams
+from xgboost_ray.tests.utils import create_parquet_in_tempdir
 
 if "OMP_NUM_THREADS" in os.environ:
     del os.environ["OMP_NUM_THREADS"]
 
 
-def train_ray(num_workers, num_boost_rounds, num_files=0, use_gpu=False):
-    path = "/data/parted.parquet"
-
+def train_ray(path,
+              num_workers,
+              num_boost_rounds,
+              num_files=0,
+              use_gpu=False,
+              smoke_test=False):
     if num_files:
         files = sorted(glob.glob(f"{path}/**/*.parquet"))
         while num_files > len(files):
@@ -55,16 +60,17 @@ def train_ray(num_workers, num_boost_rounds, num_files=0, use_gpu=False):
         config,
         dtrain,
         evals_result=evals_result,
-        max_actor_restarts=2,
         num_boost_round=num_boost_rounds,
-        num_actors=num_workers,
-        cpus_per_actor=4,
-        checkpoint_path="/tmp/checkpoint/",
-        gpus_per_actor=0 if not use_gpu else 1,
-        resources_per_actor={
-            "actor_cpus": 4,
-            "actor_gpus": 0 if not use_gpu else 1
-        },
+        ray_params=RayParams(
+            max_actor_restarts=2,
+            num_actors=num_workers,
+            cpus_per_actor=4 if not smoke_test else 1,
+            checkpoint_path="/tmp/checkpoint/",
+            gpus_per_actor=0 if not use_gpu else 1,
+            resources_per_actor={
+                "actor_cpus": 4 if not smoke_test else 0,
+                "actor_gpus": 0 if not use_gpu else 1
+            }),
         evals=[(dtrain, "train")])
     taken = time.time() - start
     print(f"TRAIN TIME TAKEN: {taken:.2f} seconds")
@@ -85,6 +91,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--gpu", action="store_true", default=False, help="gpu")
 
+    parser.add_argument(
+        "--smoke-test", action="store_true", default=False, help="gpu")
+
     args = parser.parse_args()
 
     num_workers = args.num_workers
@@ -92,23 +101,51 @@ if __name__ == "__main__":
     num_files = args.num_files
     use_gpu = args.gpu
 
+    temp_dir = None
+    if args.smoke_test:
+        temp_dir, path = create_parquet_in_tempdir(
+            filename="smoketest.parquet",
+            num_rows=args.num_workers * 500,
+            num_features=4,
+            num_classes=2,
+            num_partitions=args.num_workers * 10)
+        use_gpu = False
+    else:
+        path = "/data/parted.parquet"
+        if not os.path.exists(path):
+            raise ValueError(
+                f"Benchmarking data not found: {path}."
+                f"\nFIX THIS by running `python create_test_data.py` first.")
+
     init_start = time.time()
-    ray.init(address="auto")
+    if args.smoke_test:
+        ray.init(num_cpus=num_workers)
+    else:
+        ray.init(address="auto")
     init_taken = time.time() - init_start
 
     full_start = time.time()
-    train_taken = train_ray(num_workers, num_boost_rounds, num_files, use_gpu)
+    train_taken = train_ray(
+        path,
+        num_workers,
+        num_boost_rounds,
+        num_files,
+        use_gpu=use_gpu,
+        smoke_test=args.smoke_test)
     full_taken = time.time() - full_start
     print(f"TOTAL TIME TAKEN: {full_taken:.2f} seconds "
           f"({init_taken:.2f} for init)")
 
-    with open("res.csv", "at") as fp:
-        fp.writelines([
-            ",".join([
-                str(e) for e in [
-                    num_workers, num_files,
-                    int(use_gpu), num_boost_rounds, init_taken, full_taken,
-                    train_taken
-                ]
-            ]) + "\n"
-        ])
+    if args.smoke_test:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    else:
+        with open("res.csv", "at") as fp:
+            fp.writelines([
+                ",".join([
+                    str(e) for e in [
+                        num_workers, num_files,
+                        int(use_gpu), num_boost_rounds, init_taken, full_taken,
+                        train_taken
+                    ]
+                ]) + "\n"
+            ])

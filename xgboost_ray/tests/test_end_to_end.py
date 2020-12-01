@@ -4,7 +4,7 @@ import xgboost as xgb
 
 import ray
 
-from xgboost_ray import train, RayDMatrix
+from xgboost_ray import RayParams, train, RayDMatrix
 
 
 class XGBoostRayEndToEndTest(unittest.TestCase):
@@ -90,7 +90,10 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         should be combined together and find the true model."""
         ray.init(num_cpus=2, num_gpus=0)
 
-        bst = train(self.params, RayDMatrix(self.x, self.y), num_actors=2)
+        bst = train(
+            self.params,
+            RayDMatrix(self.x, self.y),
+            ray_params=RayParams(num_actors=2))
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)

@@ -7,7 +7,7 @@ import xgboost as xgb
 
 import ray
 
-from xgboost_ray import RayDMatrix, train
+from xgboost_ray import RayDMatrix, train, RayParams
 
 # From XGBoost documentation:
 # https://xgboost.readthedocs.io/en/latest/tutorials/custom_metric_obj.html
@@ -87,7 +87,7 @@ class XGBoostAPITest(unittest.TestCase):
         bst_ray = train(
             params,
             RayDMatrix(self.x, self.y),
-            num_actors=2,
+            ray_params=RayParams(num_actors=2),
             obj=squared_log,
             **self.kwargs)
 
@@ -124,7 +124,7 @@ class XGBoostAPITest(unittest.TestCase):
         bst_ray = train(
             params,
             dtrain_ray,
-            num_actors=2,
+            ray_params=RayParams(num_actors=2),
             obj=squared_log,
             feval=rmsle,
             evals=[(dtrain_ray, "dtrain")],
@@ -153,7 +153,7 @@ class XGBoostAPITest(unittest.TestCase):
         train(
             self.params,
             RayDMatrix(self.x, self.y),
-            num_actors=2,
+            ray_params=RayParams(num_actors=2),
             callbacks=[callback],
             additional_results=additional_results,
             **self.kwargs)

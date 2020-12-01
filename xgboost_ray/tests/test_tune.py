@@ -5,7 +5,7 @@ import numpy as np
 import ray
 from ray import tune
 
-from xgboost_ray import RayDMatrix, train
+from xgboost_ray import RayDMatrix, train, RayParams
 
 
 class XGBoostRayTuneTest(unittest.TestCase):
@@ -36,8 +36,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
             train(
                 config["xgb"],
                 dtrain=train_set,
-                cpus_per_actor=1,
-                num_actors=1,
+                ray_params=RayParams(cpus_per_actor=1, num_actors=1),
                 num_boost_round=config["num_boost_round"])
 
         self.train_func = train_func

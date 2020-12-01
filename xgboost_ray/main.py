@@ -1,4 +1,5 @@
-from typing import Tuple, Dict, Any, List, Optional, Callable
+from dataclasses import dataclass
+from typing import Tuple, Dict, Any, List, Optional, Callable, Union
 
 import numpy as np
 
@@ -160,6 +161,53 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
         matrix = xgb.DMatrix(**param)
         matrix.set_info(label_lower_bound=ll, label_upper_bound=lu)
     return matrix
+
+
+@dataclass
+class RayParams:
+    """Parameters to configure Ray-specific behavior.
+
+    Args:
+        num_actors (int): Number of parallel Ray actors.
+        cpus_per_actor (int): Number of CPUs to be used per Ray actor.
+        gpus_per_actor (int): Number of GPUs to be used per Ray actor.
+        resources_per_actor (Optional[Dict]): Dict of additional resources
+            required per Ray actor.
+        max_actor_restarts (int): Number of retries when Ray actors fail.
+            Defaults to 0 (no retries). Set to -1 for unlimited retries.
+        checkpoint_prefix (str): Prefix for the checkpoint filenames.
+            Defaults to ``.xgb_ray_{time.time()}``.
+        checkpoint_path (str): Path to store checkpoints at. Defaults to
+            ``/tmp``
+        checkpoint_frequency (int): How often to save checkpoints. Defaults
+            to ``5``.
+    """
+    # Actor scheduling
+    num_actors: int = 4
+    cpus_per_actor: int = 0
+    gpus_per_actor: int = -1
+    resources_per_actor: Optional[Dict] = None
+
+    # Fault tolerance
+    max_actor_restarts: int = 0
+    checkpoint_prefix: Optional[str] = None
+    checkpoint_path: str = "/tmp"
+    checkpoint_frequency: int = 5
+
+
+def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
+        -> RayParams:
+    if ray_params is None:
+        ray_params = RayParams()
+    elif isinstance(ray_params, dict):
+        ray_params = RayParams(**ray_params)
+    elif not isinstance(ray_params, RayParams):
+        raise ValueError(
+            f"`ray_params` must be a `RayParams` instance, a dict, or None, "
+            f"but it was {type(ray_params)}."
+            f"\nFIX THIS preferably by passing a `RayParams` instance as "
+            f"the `ray_params` parameter.")
+    return ray_params
 
 
 @ray.remote
@@ -372,18 +420,15 @@ def _train(params: Dict,
            dtrain: RayDMatrix,
            *args,
            evals=(),
-           num_actors: int = 4,
-           cpus_per_actor: int = 0,
-           gpus_per_actor: int = -1,
-           resources_per_actor: Optional[Dict] = None,
-           checkpoint_prefix: Optional[str] = None,
-           checkpoint_path: str = "/tmp",
-           checkpoint_frequency: int = 5,
+           ray_params: RayParams,
            **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
     _assert_ray_support()
 
     if not ray.is_initialized():
         ray.init()
+
+    gpus_per_actor = ray_params.gpus_per_actor
+    cpus_per_actor = ray_params.cpus_per_actor
 
     if gpus_per_actor == -1:
         gpus_per_actor = 0
@@ -393,7 +438,8 @@ def _train(params: Dict,
     if cpus_per_actor <= 0:
         cluster_cpus = _ray_get_cluster_cpus() or 1
         cpus_per_actor = min(
-            int(_get_max_node_cpus() or 1), int(cluster_cpus // num_actors))
+            int(_get_max_node_cpus() or 1),
+            int(cluster_cpus // ray_params.num_actors))
 
     if "nthread" in params:
         if params["nthread"] > cpus_per_actor:
@@ -410,10 +456,11 @@ def _train(params: Dict,
 
     # Create remote actors
     actors = [
-        _create_actor(i, num_actors, cpus_per_actor, gpus_per_actor,
-                      resources_per_actor, queue, checkpoint_prefix,
-                      checkpoint_path, checkpoint_frequency)
-        for i in range(num_actors)
+        _create_actor(i, ray_params.num_actors, cpus_per_actor, gpus_per_actor,
+                      ray_params.resources_per_actor, queue,
+                      ray_params.checkpoint_prefix, ray_params.checkpoint_path,
+                      ray_params.checkpoint_frequency)
+        for i in range(ray_params.num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
 
@@ -431,7 +478,7 @@ def _train(params: Dict,
     logger.info("[RayXGBoost] Starting XGBoost training.")
 
     # Start tracker
-    env = _start_rabit_tracker(num_actors)
+    env = _start_rabit_tracker(ray_params.num_actors)
     rabit_args = [("%s=%s" % item).encode() for item in env.items()]
 
     # Train
@@ -477,8 +524,9 @@ def _train(params: Dict,
     logger.info(f"[RayXGBoost] Finished XGBoost training on training data "
                 f"with total N={total_n:,}.")
 
-    if checkpoint_prefix:
-        _cleanup(checkpoint_prefix, checkpoint_path, num_actors)
+    if ray_params.checkpoint_prefix:
+        _cleanup(ray_params.checkpoint_prefix, ray_params.checkpoint_path,
+                 ray_params.num_actors)
 
     _shutdown(remote_workers=actors, queue=queue, force=False)
 
@@ -491,11 +539,7 @@ def train(params: Dict,
           evals=(),
           evals_result: Optional[Dict] = None,
           additional_results: Optional[Dict] = None,
-          num_actors: int = 4,
-          cpus_per_actor: int = 0,
-          gpus_per_actor: int = -1,
-          resources_per_actor: Optional[Dict] = None,
-          max_actor_restarts: int = 0,
+          ray_params: Union[None, RayParams, Dict] = None,
           **kwargs):
     """Distributed XGBoost training via Ray.
 
@@ -514,26 +558,18 @@ def train(params: Dict,
             ``xgboost.train()``.
         evals_result (Optional[Dict]): Dict to store evaluation results in.
         additional_results (Optional[Dict]): Dict to store additional results.
-        num_actors (int): Number of parallel Ray actors.
-        cpus_per_actor (int): Number of CPUs to be used per Ray actor.
-        gpus_per_actor (int): Number of GPUs to be used per Ray actor.
-        resources_per_actor (Optional[Dict]): Dict of additional resources
-            required per Ray actor.
-        max_actor_restarts (int): Number of retries when Ray actors fail.
-            Defaults to 0 (no retries). Set to -1 for unlimited retries.
-
-    Keyword Args:
-        checkpoint_prefix (str): Prefix for the checkpoint filenames.
-            Defaults to ``.xgb_ray_{time.time()}``.
-        checkpoint_path (str): Path to store checkpoints at. Defaults to
-            ``/tmp``
-        checkpoint_frequency (int): How often to save checkpoints. Defaults
-            to ``5``.
+        ray_params (Union[None, RayParams, Dict]): Parameters to configure
+            Ray-specific behavior. See :class:`RayParams` for a list of valid
+            configuration parameters.
+        **kwargs: Keyword arguments will be passed to the local
+            `xgb.train()` calls.
 
     Returns: An ``xgboost.Booster`` object.
     """
-    max_actor_restarts = max_actor_restarts \
-        if max_actor_restarts >= 0 else float("inf")
+    ray_params = _validate_ray_params(ray_params)
+
+    max_actor_restarts = ray_params.max_actor_restarts \
+        if ray_params.max_actor_restarts >= 0 else float("inf")
     _assert_ray_support()
 
     if not isinstance(dtrain, RayDMatrix):
@@ -547,15 +583,13 @@ def train(params: Dict,
     _try_add_tune_callback(kwargs)
 
     if not dtrain.loaded and not dtrain.distributed:
-        dtrain.load_data(num_actors)
+        dtrain.load_data(ray_params.num_actors)
     for (deval, name) in evals:
         if not deval.loaded and not deval.distributed:
-            deval.load_data(num_actors)
+            deval.load_data(ray_params.num_actors)
 
-    checkpoint_prefix = kwargs.pop("checkpoint_prefix",
-                                   f".xgb_ray_{time.time()}")
-    checkpoint_path = kwargs.pop("checkpoint_path", "/tmp")
-    checkpoint_frequency = kwargs.pop("checkpoint_frequency", 5)
+    ray_params.checkpoint_prefix = ray_params.checkpoint_prefix or \
+        f".xgb_ray_{time.time()}"
 
     bst = None
     train_evals_result = {}
@@ -569,13 +603,7 @@ def train(params: Dict,
                 dtrain,
                 *args,
                 evals=evals,
-                num_actors=num_actors,
-                cpus_per_actor=cpus_per_actor,
-                gpus_per_actor=gpus_per_actor,
-                resources_per_actor=resources_per_actor,
-                checkpoint_prefix=checkpoint_prefix,
-                checkpoint_path=checkpoint_path,
-                checkpoint_frequency=checkpoint_frequency,
+                ray_params=ray_params,
                 **kwargs)
             break
         except RayActorError:
@@ -593,8 +621,9 @@ def train(params: Dict,
                     "stored at `{}` with prefix `{}` - you can pass these "
                     "parameters as `checkpoint_path` and `checkpoint_prefix` "
                     "to the `train()` function to try to continue "
-                    "the training.".format(max_actor_restarts, checkpoint_path,
-                                           checkpoint_prefix))
+                    "the training.".format(max_actor_restarts,
+                                           ray_params.checkpoint_path,
+                                           ray_params.checkpoint_prefix))
             tries += 1
 
     if isinstance(evals_result, dict):
@@ -604,12 +633,7 @@ def train(params: Dict,
     return bst
 
 
-def _predict(model: xgb.Booster,
-             data: RayDMatrix,
-             num_actors: int = 4,
-             cpus_per_actor: int = 0,
-             gpus_per_actor: int = 0,
-             resources_per_actor: Optional[Dict] = None,
+def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
              **kwargs):
     _assert_ray_support()
 
@@ -618,8 +642,11 @@ def _predict(model: xgb.Booster,
 
     # Create remote actors
     actors = [
-        _create_actor(i, num_actors, cpus_per_actor, gpus_per_actor,
-                      resources_per_actor) for i in range(num_actors)
+        _create_actor(
+            i, ray_params.num_actors, ray_params.cpus_per_actor,
+            ray_params.gpus_per_actor if ray_params.gpus_per_actor >= 0 else 0,
+            ray_params.resources_per_actor)
+        for i in range(ray_params.num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
 
@@ -657,11 +684,7 @@ def _predict(model: xgb.Booster,
 
 def predict(model: xgb.Booster,
             data: RayDMatrix,
-            num_actors: int = 4,
-            cpus_per_actor: int = 0,
-            gpus_per_actor: int = 0,
-            resources_per_actor: Optional[Dict] = None,
-            max_actor_restarts: int = 0,
+            ray_params: Union[None, RayParams, Dict] = None,
             **kwargs) -> Optional[np.ndarray]:
     """Distributed XGBoost predict via Ray.
 
@@ -673,19 +696,19 @@ def predict(model: xgb.Booster,
     Args:
         model (xgb.Booster): Booster object to call for prediction.
         data (RayDMatrix): Data object containing the prediction data.
-        num_actors (int): Number of parallel Ray actors.
-        cpus_per_actor (int): Number of CPUs to be used per Ray actor.
-        gpus_per_actor (int): Number of GPUs to be used per Ray actor.
-        resources_per_actor (Optional[Dict]): Dict of additional resources
-            required per Ray actor.
-        max_actor_restarts (int): Number of retries when Ray actors fail.
-            Defaults to 0 (no retries). Set to -1 for unlimited retries.
+        ray_params (Union[None, RayParams, Dict]): Parameters to configure
+            Ray-specific behavior. See :class:`RayParams` for a list of valid
+            configuration parameters.
+        **kwargs: Keyword arguments will be passed to the local
+            `xgb.predict()` calls.
 
     Returns: ``np.ndarray`` containing the predicted labels.
 
     """
-    max_actor_restarts = max_actor_restarts \
-        if max_actor_restarts >= 0 else float("inf")
+    ray_params = _validate_ray_params(ray_params)
+
+    max_actor_restarts = ray_params.max_actor_restarts \
+        if ray_params.max_actor_restarts >= 0 else float("inf")
     _assert_ray_support()
 
     if not isinstance(data, RayDMatrix):
@@ -698,14 +721,7 @@ def predict(model: xgb.Booster,
     tries = 0
     while tries <= max_actor_restarts:
         try:
-            return _predict(
-                model,
-                data,
-                num_actors=num_actors,
-                cpus_per_actor=cpus_per_actor,
-                gpus_per_actor=gpus_per_actor,
-                resources_per_actor=resources_per_actor,
-                **kwargs)
+            return _predict(model, data, ray_params=ray_params, **kwargs)
         except RayActorError:
             if tries + 1 <= max_actor_restarts:
                 logger.warning(

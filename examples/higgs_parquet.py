@@ -5,7 +5,11 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from .higgs import download_higgs
 from xgboost_ray import train, RayDMatrix
+
+FILENAME_CSV = "HIGGS.csv.gz"
+FILENAME_PARQUET = "HIGGS.parquet"
 
 
 def csv_to_parquet(in_file, out_file, chunksize=100_000, **csv_kwargs):
@@ -39,28 +43,31 @@ def main():
     # https://medium.com/rapids-ai/a-new-official-dask-api-for-xgboost-e8b10f3d1eb7
     # This uses the HIGGS dataset. Download here:
     # https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz
-    csv_file = "HIGGS.csv"
-    parquet_file = "HIGGS_two.parquet"
 
-    # Convert CSV file to Parquet
-    csv_to_parquet(
-        csv_file,
-        parquet_file,
-        names=[
-            "label", "feature-01", "feature-02", "feature-03", "feature-04",
-            "feature-05", "feature-06", "feature-07", "feature-08",
-            "feature-09", "feature-10", "feature-11", "feature-12",
-            "feature-13", "feature-14", "feature-15", "feature-16",
-            "feature-17", "feature-18", "feature-19", "feature-20",
-            "feature-21", "feature-22", "feature-23", "feature-24",
-            "feature-25", "feature-26", "feature-27", "feature-28"
-        ])
+    if not os.path.exists(FILENAME_PARQUET):
+        if not os.path.exists(FILENAME_CSV):
+            download_higgs(FILENAME_CSV)
+            print("Downloaded HIGGS csv dataset")
+        print("Converting HIGGS csv dataset to parquet")
+        csv_to_parquet(
+            FILENAME_CSV,
+            FILENAME_PARQUET,
+            names=[
+                "label", "feature-01", "feature-02", "feature-03",
+                "feature-04", "feature-05", "feature-06", "feature-07",
+                "feature-08", "feature-09", "feature-10", "feature-11",
+                "feature-12", "feature-13", "feature-14", "feature-15",
+                "feature-16", "feature-17", "feature-18", "feature-19",
+                "feature-20", "feature-21", "feature-22", "feature-23",
+                "feature-24", "feature-25", "feature-26", "feature-27",
+                "feature-28"
+            ])
 
     colnames = ["label"] + ["feature-%02d" % i for i in range(1, 29)]
 
     # Here we load the Parquet file
     dtrain = RayDMatrix(
-        os.path.abspath(parquet_file), label="label", columns=colnames)
+        os.path.abspath(FILENAME_PARQUET), label="label", columns=colnames)
 
     config = {
         "tree_method": "hist",

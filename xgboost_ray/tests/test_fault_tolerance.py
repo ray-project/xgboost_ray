@@ -10,7 +10,7 @@ import xgboost as xgb
 
 import ray
 
-from xgboost_ray import train, RayDMatrix
+from xgboost_ray import train, RayDMatrix, RayParams
 
 
 class XGBoostRayFaultToleranceTest(unittest.TestCase):
@@ -75,9 +75,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             RayDMatrix(self.x, self.y),
             callbacks=[self._fail_callback(self.die_lock_file)],
             num_boost_round=20,
-            max_actor_restarts=1,
-            num_actors=2,
-            checkpoint_path=self.tmpdir)
+            ray_params=RayParams(
+                max_actor_restarts=1,
+                num_actors=2,
+                checkpoint_path=self.tmpdir))
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
@@ -92,9 +93,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 RayDMatrix(self.x, self.y),
                 callbacks=[self._fail_callback(self.die_lock_file)],
                 num_boost_round=20,
-                max_actor_restarts=0,
-                num_actors=2,
-                checkpoint_path=self.tmpdir)
+                ray_params=RayParams(
+                    max_actor_restarts=0,
+                    num_actors=2,
+                    checkpoint_path=self.tmpdir))
 
 
 if __name__ == "__main__":
