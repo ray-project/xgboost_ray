@@ -68,7 +68,7 @@ def train_ray(path,
             checkpoint_path="/tmp/checkpoint/",
             gpus_per_actor=0 if not use_gpu else 1,
             resources_per_actor={
-                "actor_cpus": 4,
+                "actor_cpus": 4 if not smoke_test else 1,
                 "actor_gpus": 0 if not use_gpu else 1
             } if not smoke_test else None),
         evals=[(dtrain, "train")])
@@ -109,6 +109,7 @@ if __name__ == "__main__":
             num_features=4,
             num_classes=2,
             num_partitions=args.num_workers * 10)
+        use_gpu = False
     else:
         path = "/data/parted.parquet"
         if not os.path.exists(path):

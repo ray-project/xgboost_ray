@@ -367,6 +367,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             elif os.path.exists(self.data):
                 self.data = [self.data]
             else:
+                print(f"INVALID: {self.data}")
                 invalid_data = True
 
         if not isinstance(self.data, Iterable) or invalid_data:

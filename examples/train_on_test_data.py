@@ -13,7 +13,7 @@ from xgboost_ray.tests.utils import create_parquet_in_tempdir
 ####
 
 
-def main(fname="parted.parquet", num_actors=2):
+def main(fname, num_actors=2):
     dtrain = RayDMatrix(
         os.path.abspath(fname), label="labels", ignore=["partition"])
 
@@ -57,12 +57,14 @@ if __name__ == "__main__":
             num_features=4,
             num_classes=2,
             num_partitions=2)
+    else:
+        path = os.path.join(os.path.dirname(__file__), "parted.parquet")
 
     import ray
     ray.init()
 
     start = time.time()
-    main()
+    main(path)
     taken = time.time() - start
     print(f"TOTAL TIME TAKEN: {taken:.2f} seconds")
 
