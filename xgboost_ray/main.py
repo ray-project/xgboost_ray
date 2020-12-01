@@ -291,6 +291,11 @@ class RayXGBoostActor:
 
         local_params = params.copy()
 
+        if "xgb_model" in kwargs:
+            if isinstance(kwargs["xgb_model"], bytes):
+                # bytearray type gets lost in remote actor call
+                kwargs["xgb_model"] = bytearray(kwargs["xgb_model"])
+
         if "nthread" not in local_params:
             if num_threads > 0:
                 local_params["num_threads"] = num_threads
