@@ -213,7 +213,9 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             self.assertAlmostEqual(flat_noerror[key], flat_error[key])
             self.assertAlmostEqual(flat_noerror[key], flat_2part[key])
 
-        self.assertEqual(len(res_error["callback_returns"][0]), 10)
+        # We fail at iteration 7, but checkpoints are saved at iteration 5
+        # Thus we have two additional returns here.
+        self.assertEqual(len(res_error["callback_returns"][0]), 10 + 2)
 
 
 if __name__ == "__main__":

@@ -383,6 +383,7 @@ def _train(params: Dict,
            evals=(),
            ray_params: RayParams,
            _checkpoint: _Checkpoint,
+           _additional_results: Dict,
            **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
     _assert_ray_support()
 
@@ -458,7 +459,11 @@ def _train(params: Dict,
         for actor in actors
     ]
 
-    callback_returns = [list() for _ in range(len(actors))]
+    callback_returns = _additional_results.get("callback_returns")
+    if callback_returns is None:
+        callback_returns = [list() for _ in range(len(actors))]
+        _additional_results["callback_returns"] = callback_returns
+
     try:
         not_ready = fut
         while not_ready:
@@ -486,10 +491,9 @@ def _train(params: Dict,
     res: Dict[str, Any] = ray.get(fut[0])
     bst = res["bst"]
     evals_result = res["evals_result"]
-    additional_results = {}
 
     if callback_returns:
-        additional_results["callback_returns"] = callback_returns
+        _additional_results["callback_returns"] = callback_returns
 
     all_res = ray.get(fut)
     total_n = sum(res["train_n"] or 0 for res in all_res)
@@ -499,7 +503,7 @@ def _train(params: Dict,
 
     _shutdown(remote_workers=actors, queue=queue, force=False)
 
-    return bst, evals_result, additional_results
+    return bst, evals_result, _additional_results
 
 
 def train(params: Dict,
@@ -563,6 +567,7 @@ def train(params: Dict,
 
     tries = 0
     checkpoint = _Checkpoint()
+    current_results = {}
     while tries <= max_actor_restarts:
         try:
             bst, train_evals_result, train_additional_results = _train(
@@ -572,6 +577,7 @@ def train(params: Dict,
                 evals=evals,
                 ray_params=ray_params,
                 _checkpoint=checkpoint,
+                _additional_results=current_results,
                 **kwargs)
             break
         except RayActorError:
