@@ -48,7 +48,7 @@ jobs:
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
         python -m pytest -v --durations=0 -x test_tune.py
-        python -m pytest -v --durations=0 -x release/benchmark_cpu_gpu.py --smoke-test
+        python -m pytest -v --durations=0 -x release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
         popd
         pushd examples/
         echo "running simple.py" && python simple.py
@@ -84,7 +84,7 @@ jobs:
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
         python -m pytest -v --durations=0 -x test_tune.py
-        python -m pytest -v --durations=0 -x release/benchmark_cpu_gpu.py --smoke-test
+        python -m pytest -v --durations=0 -x release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
         popd
         pushd examples/
         echo "running simple.py" && python simple.py
