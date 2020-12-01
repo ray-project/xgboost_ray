@@ -1,10 +1,10 @@
-import pickle
-from dataclasses import dataclass
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union
+from dataclasses import dataclass
 
 import numpy as np
 
 import os
+import pickle
 import time
 
 from threading import Thread
