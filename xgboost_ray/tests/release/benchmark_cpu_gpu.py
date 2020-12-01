@@ -64,7 +64,7 @@ def train_ray(path,
         ray_params=RayParams(
             max_actor_restarts=2,
             num_actors=num_workers,
-            cpus_per_actor=4,
+            cpus_per_actor=4 if not smoke_test else 1,
             checkpoint_path="/tmp/checkpoint/",
             gpus_per_actor=0 if not use_gpu else 1,
             resources_per_actor={
@@ -118,12 +118,15 @@ if __name__ == "__main__":
                 f"\nFIX THIS by running `python create_test_data.py` first.")
 
     init_start = time.time()
-    ray.init()
+    if args.smoke_test:
+        ray.init(num_cpus=num_workers)
+    else:
+        ray.init(address="auto")
     init_taken = time.time() - init_start
 
     full_start = time.time()
     train_taken = train_ray(path, num_workers, num_boost_rounds, num_files,
-                            use_gpu, args.smoke_test)
+                            use_gpu=use_gpu, smoke_test=args.smoke_test)
     full_taken = time.time() - full_start
     print(f"TOTAL TIME TAKEN: {full_taken:.2f} seconds "
           f"({init_taken:.2f} for init)")
