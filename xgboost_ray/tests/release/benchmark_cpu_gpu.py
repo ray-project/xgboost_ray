@@ -125,8 +125,13 @@ if __name__ == "__main__":
     init_taken = time.time() - init_start
 
     full_start = time.time()
-    train_taken = train_ray(path, num_workers, num_boost_rounds, num_files,
-                            use_gpu=use_gpu, smoke_test=args.smoke_test)
+    train_taken = train_ray(
+        path,
+        num_workers,
+        num_boost_rounds,
+        num_files,
+        use_gpu=use_gpu,
+        smoke_test=args.smoke_test)
     full_taken = time.time() - full_start
     print(f"TOTAL TIME TAKEN: {full_taken:.2f} seconds "
           f"({init_taken:.2f} for init)")
