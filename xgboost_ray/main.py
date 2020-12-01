@@ -1,3 +1,4 @@
+import pickle
 from dataclasses import dataclass
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union
 
@@ -38,7 +39,7 @@ import xgboost as xgb
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
-from xgboost_ray.session import init_session
+from xgboost_ray.session import init_session, put_queue
 
 
 def _assert_ray_support():
@@ -110,12 +111,6 @@ def _set_omp_num_threads():
     return int(float(os.environ.get("OMP_NUM_THREADS", "0.0")))
 
 
-def _checkpoint_file(path: str, prefix: str, rank: int):
-    if not prefix:
-        return None
-    return os.path.join(path, f"{prefix}_{rank:05d}.xgb")
-
-
 def _try_add_tune_callback(kwargs: Dict):
     if TUNE_INSTALLED and tune.is_session_enabled():
         callbacks = kwargs.get("callbacks", [])
@@ -175,12 +170,8 @@ class RayParams:
             required per Ray actor.
         max_actor_restarts (int): Number of retries when Ray actors fail.
             Defaults to 0 (no retries). Set to -1 for unlimited retries.
-        checkpoint_prefix (str): Prefix for the checkpoint filenames.
-            Defaults to ``.xgb_ray_{time.time()}``.
-        checkpoint_path (str): Path to store checkpoints at. Defaults to
-            ``/tmp``
         checkpoint_frequency (int): How often to save checkpoints. Defaults
-            to ``5``.
+            to ``5`` (every 5th iteration).
     """
     # Actor scheduling
     num_actors: int = 4
@@ -190,9 +181,13 @@ class RayParams:
 
     # Fault tolerance
     max_actor_restarts: int = 0
-    checkpoint_prefix: Optional[str] = None
-    checkpoint_path: str = "/tmp"
     checkpoint_frequency: int = 5
+
+
+@dataclass
+class _Checkpoint:
+    iteration: int = 0
+    value: Optional[bytes] = None
 
 
 def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
@@ -219,16 +214,13 @@ class RayXGBoostActor:
     all-reduce ring, and initializes local training, sending updates
     to other workers.
 
-    The actor also takes care of checkpointing (locally), enabling
-    training to resume after it has been stopped.
+    The actor with rank 0 also checkpoints the model periodically and
+    sends the checkpoint back to the driver.
 
     Args:
         rank (int): Rank of the actor. Must be ``0 <= rank < num_actors``.
         num_actors (int): Total number of actors.
         queue (Queue): Ray queue to communicate with main process.
-        checkpoint_prefix (str): Prefix for checkpoint files.
-        checkpoint_path (str): Path to store checkpoints at. Defaults to
-            ``/tmp``
         checkpoint_frequency (int): How often to store checkpoints. Defaults
             to ``5``, saving checkpoints every 5 boosting rounds.
 
@@ -238,8 +230,6 @@ class RayXGBoostActor:
                  rank: int,
                  num_actors: int,
                  queue: Optional[Queue] = None,
-                 checkpoint_prefix: Optional[str] = None,
-                 checkpoint_path: str = "/tmp",
                  checkpoint_frequency: int = 5):
         self.queue = queue
         init_session(rank, queue)
@@ -247,8 +237,6 @@ class RayXGBoostActor:
         self.rank = rank
         self.num_actors = num_actors
 
-        self.checkpoint_prefix = checkpoint_prefix
-        self.checkpoint_path = checkpoint_path
         self.checkpoint_frequency = checkpoint_frequency
 
         self._data: Dict[RayDMatrix, xgb.DMatrix] = {}
@@ -258,15 +246,11 @@ class RayXGBoostActor:
         _set_omp_num_threads()
 
     @property
-    def checkpoint_file(self) -> Optional[str]:
-        return _checkpoint_file(self.checkpoint_path, self.checkpoint_prefix,
-                                self.rank)
-
-    @property
     def _save_checkpoint_callback(self):
         def callback(env):
-            if env.iteration % self.checkpoint_frequency == 0:
-                env.model.save_model(self.checkpoint_file)
+            if self.rank == 0 and \
+               env.iteration % self.checkpoint_frequency == 0:
+                put_queue(_Checkpoint(env.iteration, pickle.dumps(env.model)))
 
         return callback
 
@@ -315,22 +299,6 @@ class RayXGBoostActor:
 
         evals_result = dict()
 
-        # Load model
-        checkpoint_dir = os.path.dirname(self.checkpoint_file)
-        if os.path.exists(self.checkpoint_file):
-            kwargs.update({"xgb_model": self.checkpoint_file})
-        elif not os.path.exists(checkpoint_dir):
-            try:
-                os.makedirs(checkpoint_dir, 0o755, exist_ok=True)
-            except Exception as e:
-                raise ValueError(
-                    f"Checkpoint directory {checkpoint_dir} could not be "
-                    f"created."
-                    f"\nFIX THIS by passing a valid (existing) location "
-                    f"as the `checkpoint_path` parameter and omit using "
-                    f"path separators (usually `/`) in the "
-                    f"`checkpoint_prefix` parameter.") from e
-
         if "callbacks" in kwargs:
             callbacks = kwargs["callbacks"]
         else:
@@ -369,8 +337,6 @@ def _create_actor(rank: int,
                   num_gpus_per_actor: int,
                   resources_per_actor: Optional[Dict] = None,
                   queue: Optional[Queue] = None,
-                  checkpoint_prefix: Optional[str] = None,
-                  checkpoint_path: str = "/tmp",
                   checkpoint_frequency: int = 5) -> RayXGBoostActor:
 
     return RayXGBoostActor.options(
@@ -380,8 +346,6 @@ def _create_actor(rank: int,
             rank=rank,
             num_actors=num_actors,
             queue=queue,
-            checkpoint_prefix=checkpoint_prefix,
-            checkpoint_path=checkpoint_path,
             checkpoint_frequency=checkpoint_frequency)
 
 
@@ -390,14 +354,6 @@ def _trigger_data_load(actor, dtrain, evals):
     for deval, name in evals:
         wait_load.append(actor.load_data.remote(deval))
     return wait_load
-
-
-def _cleanup(checkpoint_prefix: str, checkpoint_path: str, num_actors: int):
-    for i in range(num_actors):
-        checkpoint_file = _checkpoint_file(checkpoint_path, checkpoint_prefix,
-                                           i)
-        if os.path.exists(checkpoint_file):
-            os.remove(checkpoint_file)
 
 
 def _shutdown(remote_workers: List[ActorHandle],
@@ -426,6 +382,7 @@ def _train(params: Dict,
            *args,
            evals=(),
            ray_params: RayParams,
+           _checkpoint: _Checkpoint,
            **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
     _assert_ray_support()
 
@@ -461,10 +418,14 @@ def _train(params: Dict,
 
     # Create remote actors
     actors = [
-        _create_actor(i, ray_params.num_actors, cpus_per_actor, gpus_per_actor,
-                      ray_params.resources_per_actor, queue,
-                      ray_params.checkpoint_prefix, ray_params.checkpoint_path,
-                      ray_params.checkpoint_frequency)
+        _create_actor(
+            rank=i,
+            num_actors=ray_params.num_actors,
+            num_cpus_per_actor=cpus_per_actor,
+            num_gpus_per_actor=gpus_per_actor,
+            resources_per_actor=ray_params.resources_per_actor,
+            queue=queue,
+            checkpoint_frequency=ray_params.checkpoint_frequency)
         for i in range(ray_params.num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
@@ -486,6 +447,11 @@ def _train(params: Dict,
     env = _start_rabit_tracker(ray_params.num_actors)
     rabit_args = [("%s=%s" % item).encode() for item in env.items()]
 
+    if _checkpoint.value:
+        kwargs["xgb_model"] = pickle.loads(_checkpoint.value)
+        kwargs["num_boost_round"] = kwargs.get("num_boost_round", 10) - \
+            _checkpoint.iteration - 1
+
     # Train
     fut = [
         actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
@@ -501,6 +467,8 @@ def _train(params: Dict,
                     (actor_rank, item) = queue.get()
                     if isinstance(item, Callable):
                         item()
+                    elif isinstance(item, _Checkpoint):
+                        _checkpoint.__dict__ = item.__dict__
                     else:
                         callback_returns[actor_rank].append(item)
             ready, not_ready = ray.wait(not_ready, timeout=0)
@@ -528,10 +496,6 @@ def _train(params: Dict,
 
     logger.info(f"[RayXGBoost] Finished XGBoost training on training data "
                 f"with total N={total_n:,}.")
-
-    if ray_params.checkpoint_prefix:
-        _cleanup(ray_params.checkpoint_prefix, ray_params.checkpoint_path,
-                 ray_params.num_actors)
 
     _shutdown(remote_workers=actors, queue=queue, force=False)
 
@@ -593,14 +557,12 @@ def train(params: Dict,
         if not deval.loaded and not deval.distributed:
             deval.load_data(ray_params.num_actors)
 
-    ray_params.checkpoint_prefix = ray_params.checkpoint_prefix or \
-        f".xgb_ray_{time.time()}"
-
     bst = None
     train_evals_result = {}
     train_additional_results = {}
 
     tries = 0
+    checkpoint = _Checkpoint()
     while tries <= max_actor_restarts:
         try:
             bst, train_evals_result, train_additional_results = _train(
@@ -609,6 +571,7 @@ def train(params: Dict,
                 *args,
                 evals=evals,
                 ray_params=ray_params,
+                _checkpoint=checkpoint,
                 **kwargs)
             break
         except RayActorError:
@@ -622,13 +585,7 @@ def train(params: Dict,
             else:
                 raise RuntimeError(
                     "A Ray actor died during training and the maximum number "
-                    "of retries ({}) is exhausted. Checkpoints have been "
-                    "stored at `{}` with prefix `{}` - you can pass these "
-                    "parameters as `checkpoint_path` and `checkpoint_prefix` "
-                    "to the `train()` function to try to continue "
-                    "the training.".format(max_actor_restarts,
-                                           ray_params.checkpoint_path,
-                                           ray_params.checkpoint_prefix))
+                    "of retries ({}) is exhausted.")
             tries += 1
 
     if isinstance(evals_result, dict):
@@ -648,9 +605,12 @@ def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
     # Create remote actors
     actors = [
         _create_actor(
-            i, ray_params.num_actors, ray_params.cpus_per_actor,
-            ray_params.gpus_per_actor if ray_params.gpus_per_actor >= 0 else 0,
-            ray_params.resources_per_actor)
+            rank=i,
+            num_actors=ray_params.num_actors,
+            num_cpus_per_actor=ray_params.cpus_per_actor,
+            num_gpus_per_actor=ray_params.gpus_per_actor
+            if ray_params.gpus_per_actor >= 0 else 0,
+            resources_per_actor=ray_params.resources_per_actor)
         for i in range(ray_params.num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")

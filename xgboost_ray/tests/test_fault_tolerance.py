@@ -1,5 +1,5 @@
+import json
 import os
-import random
 import shutil
 import tempfile
 import time
@@ -12,15 +12,22 @@ import ray
 
 from xgboost_ray import train, RayDMatrix, RayParams
 from xgboost_ray.session import put_queue
+from xgboost_ray.tests.utils import flatten_obj
 
 
-def _fail_callback(die_lock_file: str):
+def tree_obj(bst: xgb.Booster):
+    return [json.loads(j) for j in bst.get_dump(dump_format="json")]
+
+
+def _fail_callback(die_lock_file: str,
+                   actor_rank: int = 0,
+                   fail_iteration: int = 6):
     def callback(env):
-        if env.iteration == 6 and not os.path.exists(die_lock_file):
-            pass
-            # By sleeping a random amount of time we make sure only
-            # one worker dies.
-            time.sleep(random.uniform(0.5, 2.0))
+        if env.rank == actor_rank:
+            put_queue((env.iteration, time.time()))
+        if env.rank == actor_rank and env.iteration == fail_iteration and \
+           not os.path.exists(die_lock_file):
+            # Only die once
             if os.path.exists(die_lock_file):
                 return
 
@@ -86,10 +93,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             RayDMatrix(self.x, self.y),
             callbacks=[_fail_callback(self.die_lock_file)],
             num_boost_round=20,
-            ray_params=RayParams(
-                max_actor_restarts=1,
-                num_actors=2,
-                checkpoint_path=self.tmpdir))
+            ray_params=RayParams(max_actor_restarts=1, num_actors=2))
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
@@ -169,6 +173,47 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         # Training should have proceeded for the last checkpoint,
         # so trees should not be equal
         self.assertNotEqual(fcp_bst.save_raw(), lcp_bst.save_raw())
+
+    def testSameResultWithAndWithoutError(self):
+        """Get the same model with and without errors during training."""
+        # Run training
+        bst_noerror = train(
+            self.params,
+            RayDMatrix(self.x, self.y),
+            num_boost_round=10,
+            ray_params=RayParams(max_actor_restarts=0, num_actors=2))
+
+        bst_2part_1 = train(
+            self.params,
+            RayDMatrix(self.x, self.y),
+            num_boost_round=5,
+            ray_params=RayParams(max_actor_restarts=0, num_actors=2))
+
+        bst_2part_2 = train(
+            self.params,
+            RayDMatrix(self.x, self.y),
+            num_boost_round=5,
+            ray_params=RayParams(max_actor_restarts=0, num_actors=2),
+            xgb_model=bst_2part_1)
+
+        res_error = {}
+        bst_error = train(
+            self.params,
+            RayDMatrix(self.x, self.y),
+            callbacks=[_fail_callback(self.die_lock_file, fail_iteration=7)],
+            num_boost_round=10,
+            ray_params=RayParams(max_actor_restarts=1, num_actors=2),
+            additional_results=res_error)
+
+        flat_noerror = flatten_obj({"tree": tree_obj(bst_noerror)})
+        flat_error = flatten_obj({"tree": tree_obj(bst_error)})
+        flat_2part = flatten_obj({"tree": tree_obj(bst_2part_2)})
+
+        for key in flat_noerror:
+            self.assertAlmostEqual(flat_noerror[key], flat_error[key])
+            self.assertAlmostEqual(flat_noerror[key], flat_2part[key])
+
+        self.assertEqual(len(res_error["callback_returns"][0]), 10)
 
 
 if __name__ == "__main__":
