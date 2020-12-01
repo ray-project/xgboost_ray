@@ -1,13 +1,19 @@
+import argparse
 import os
+import shutil
 import time
 
-from xgboost_ray import train, RayDMatrix
+from xgboost_ray import train, RayDMatrix, RayParams
+from xgboost_ray.tests.utils import create_parquet_in_tempdir
+
+####
+# Run `create_test_data.py` first to create a large fake data set.
+# Alternatively, run with `--smoke-test` to create an ephemeral small fake
+# data set.
+####
 
 
-def main():
-    # Run `create_test_data.py` first to create fake data.
-    fname = "parted.parquet"
-
+def main(fname="parted.parquet", num_actors=2):
     dtrain = RayDMatrix(
         os.path.abspath(fname), label="labels", ignore=["partition"])
 
@@ -23,8 +29,8 @@ def main():
         config,
         dtrain,
         evals_result=evals_result,
-        max_actor_restarts=1,
-        num_boost_round=100,
+        ray_params=RayParams(max_actor_restarts=1, num_actors=num_actors),
+        num_boost_round=10,
         evals=[(dtrain, "train")])
     taken = time.time() - start
     print(f"TRAIN TIME TAKEN: {taken:.2f} seconds")
@@ -35,6 +41,23 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--smoke-test",
+        action="store_true",
+        default=False,
+        help="Finish quickly for testing")
+    args = parser.parse_args()
+
+    temp_dir, path = None, None
+    if args.smoke_test:
+        temp_dir, path = create_parquet_in_tempdir(
+            "smoketest.parquet",
+            num_rows=1_000,
+            num_features=4,
+            num_classes=2,
+            num_partitions=2)
+
     import ray
     ray.init()
 
@@ -42,3 +65,6 @@ if __name__ == "__main__":
     main()
     taken = time.time() - start
     print(f"TOTAL TIME TAKEN: {taken:.2f} seconds")
+
+    if args.smoke_test:
+        shutil.rmtree(temp_dir)

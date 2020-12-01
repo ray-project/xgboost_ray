@@ -1,3 +1,5 @@
+import os
+
 from sklearn import datasets
 
 import xgboost as xgb
@@ -7,6 +9,11 @@ import numpy as np
 
 
 def main():
+    if not os.path.exists("simple.xgb"):
+        raise ValueError(f"Model file not found: `simple.xgb`"
+                         f"\nFIX THIS by running `python `simple.py` first to "
+                         f"train the model.")
+
     # Load dataset
     data, labels = datasets.load_breast_cancer(return_X_y=True)
 

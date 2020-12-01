@@ -146,7 +146,7 @@ class _RayDMatrixLoader:
         if check is not None:
             if not self.filetype:
                 # Try to guess filetype from file ending
-                if check.endswith(".csv"):
+                if check.endswith(".csv") or check.endswith("csv.gz"):
                     self.filetype = RayFileType.CSV
                 elif check.endswith(".parquet"):
                     self.filetype = RayFileType.PARQUET

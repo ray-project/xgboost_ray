@@ -3,7 +3,7 @@ import argparse
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
 
-from xgboost_ray import RayDMatrix, train
+from xgboost_ray import RayDMatrix, train, RayParams
 
 
 def main(cpus_per_actor, num_actors):
@@ -31,11 +31,12 @@ def main(cpus_per_actor, num_actors):
         dtrain=train_set,
         evals=[(test_set, "eval")],
         evals_result=evals_result,
-        max_actor_restarts=1,
-        checkpoint_path="/tmp/checkpoint/",
-        gpus_per_actor=0,
-        cpus_per_actor=cpus_per_actor,
-        num_actors=num_actors,
+        ray_params=RayParams(
+            max_actor_restarts=1,
+            checkpoint_path="/tmp/checkpoint/",
+            gpus_per_actor=0,
+            cpus_per_actor=cpus_per_actor,
+            num_actors=num_actors),
         verbose_eval=False,
         num_boost_round=10)
 
