@@ -29,7 +29,7 @@ have to use `xgboost_ray.RayDMatrix`.
 Here is a simplified example:
 
 ```python
-from xgboost_ray import RayDMatrix, train
+from xgboost_ray import RayDMatrix, RayParams, train
 
 train_x, train_y = None, None  # Load data here
 train_set = RayDMatrix(train_x, train_y)
@@ -44,8 +44,9 @@ bst = train(
     evals_result=evals_result,
     evals=[(train_set, "train")],
     verbose_eval=False,
-    num_actors=2,
-    cpus_per_actor=1)
+    ray_params=RayParams(
+        num_actors=2, 
+        cpus_per_actor=1))
 
 bst.save_model("model.xgb")
 print("Final training error: {:.4f}".format(
@@ -101,7 +102,7 @@ automatically report results to tune.
 Example using `xgboost_ray` with Tune:
 
 ```python
-from xgboost_ray import RayDMatrix, train
+from xgboost_ray import RayDMatrix, RayParams, train
 
 num_actors = 4
 num_cpus_per_actor = 4
@@ -117,8 +118,9 @@ def train_model(config):
         evals_result=evals_result,
         evals=[(train_set, "train")],
         verbose_eval=False,
-        num_actors=num_actors,
-        cpus_per_actor=num_cpus_per_actor)
+        ray_params=RayParams(
+            num_actors=num_actors,
+            cpus_per_actor=num_cpus_per_actor))
     bst.save_model("model.xgb")
 
 from ray import tune
