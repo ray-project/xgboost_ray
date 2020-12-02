@@ -473,7 +473,7 @@ def _train(params: Dict,
                     if isinstance(item, Callable):
                         item()
                     elif isinstance(item, _Checkpoint):
-                        _checkpoint.__dict__ = item.__dict__
+                        _checkpoint.__dict__.update(item.__dict__)
                     else:
                         callback_returns[actor_rank].append(item)
             ready, not_ready = ray.wait(not_ready, timeout=0)

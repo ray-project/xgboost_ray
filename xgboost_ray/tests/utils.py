@@ -62,8 +62,8 @@ def create_parquet_in_tempdir(filename: str,
 
 
 def flatten_obj(obj: Union[List, Dict], keys=None, base=None):
-    keys = keys if keys is not None else []
-    base = base if base is not None else {}
+    keys = keys or []
+    base = base if base is not None else {}  # Keep same object if empty dict
     if isinstance(obj, list):
         for i, o in enumerate(obj):
             flatten_obj(o, keys + [str(i)], base)
