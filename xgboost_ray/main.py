@@ -9,6 +9,8 @@ import time
 
 from threading import Thread
 
+import xgboost as xgb
+
 try:
     import ray
     from ray import logger
@@ -25,17 +27,7 @@ except ImportError:
     ActorHandle = None
     RAY_INSTALLED = False
 
-# Tune imports.
-try:
-    from ray import tune
-    from xgboost_ray.tune import RayTuneReportCallback
-    TUNE_INSTALLED = True
-except ImportError:
-    tune = None
-    RayTuneReportCallback = None
-    TUNE_INSTALLED = False
-
-import xgboost as xgb
+from xgboost_ray.tune import _try_add_tune_callback
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
@@ -109,16 +101,6 @@ def _set_omp_num_threads():
         if "OMP_NUM_THREADS" in os.environ:
             del os.environ["OMP_NUM_THREADS"]
     return int(float(os.environ.get("OMP_NUM_THREADS", "0.0")))
-
-
-def _try_add_tune_callback(kwargs: Dict):
-    if TUNE_INSTALLED and tune.is_session_enabled():
-        callbacks = kwargs.get("callbacks", [])
-        for callback in callbacks:
-            if isinstance(callback, RayTuneReportCallback):
-                return
-        callbacks.append(RayTuneReportCallback())
-        kwargs["callbacks"] = callbacks
 
 
 def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:

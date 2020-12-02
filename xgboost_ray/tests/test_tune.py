@@ -1,9 +1,11 @@
+import os
 import unittest
 
 import numpy as np
 
 import ray
 from ray import tune
+from ray.tune.integration.xgboost import TuneReportCheckpointCallback
 
 from xgboost_ray import RayDMatrix, train, RayParams
 
@@ -27,17 +29,20 @@ class XGBoostRayTuneTest(unittest.TestCase):
                 "max_depth": 2,
                 "objective": "multi:softmax",
                 "num_class": 4,
+                "eval_metric": ["mlogloss", "merror"],
             },
             "num_boost_round": tune.choice([1, 3])
         }
 
-        def train_func(config):
+        def train_func(config, checkpoint_dir=None, **kwargs):
             train_set = RayDMatrix(x, y)
             train(
                 config["xgb"],
                 dtrain=train_set,
                 ray_params=RayParams(cpus_per_actor=1, num_actors=1),
-                num_boost_round=config["num_boost_round"])
+                num_boost_round=config["num_boost_round"],
+                evals=[(train_set, "train")],
+                **kwargs)
 
         self.train_func = train_func
 
@@ -45,7 +50,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
         ray.shutdown()
 
     # noinspection PyTypeChecker
-    def test_num_iters(self):
+    def testNumIters(self):
         analysis = tune.run(
             self.train_func,
             config=self.params,
@@ -58,6 +63,21 @@ class XGBoostRayTuneTest(unittest.TestCase):
         self.assertTrue(
             all(analysis.results_df["training_iteration"] ==
                 analysis.results_df["config.num_boost_round"]))
+
+    def testCheckpointing(self):
+        analysis = tune.run(
+            tune.with_parameters(
+                self.train_func, callbacks=[TuneReportCheckpointCallback()]),
+            config=self.params,
+            resources_per_trial={
+                "cpu": 1,
+                "extra_cpu": 1
+            },
+            num_samples=2,
+            metric="train-mlogloss",
+            mode="min")
+
+        self.assertTrue(os.path.exists(analysis.best_checkpoint))
 
 
 if __name__ == "__main__":
