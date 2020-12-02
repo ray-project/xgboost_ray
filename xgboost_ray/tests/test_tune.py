@@ -12,7 +12,7 @@ from xgboost_ray import RayDMatrix, train, RayParams
 
 class XGBoostRayTuneTest(unittest.TestCase):
     def setUp(self):
-        ray.init(num_cpus=4)
+        ray.init(num_cpus=8)
         repeat = 8  # Repeat data a couple of times for stability
         x = np.array([
             [1, 0, 0, 0],  # Feature 0 -> Label 0
@@ -34,12 +34,12 @@ class XGBoostRayTuneTest(unittest.TestCase):
             "num_boost_round": tune.choice([1, 3])
         }
 
-        def train_func(config, checkpoint_dir=None, **kwargs):
+        def train_func(config, checkpoint_dir=None, num_actors=1, **kwargs):
             train_set = RayDMatrix(x, y)
             train(
                 config["xgb"],
                 dtrain=train_set,
-                ray_params=RayParams(cpus_per_actor=1, num_actors=1),
+                ray_params=RayParams(cpus_per_actor=1, num_actors=num_actors),
                 num_boost_round=config["num_boost_round"],
                 evals=[(train_set, "train")],
                 **kwargs)
@@ -67,7 +67,9 @@ class XGBoostRayTuneTest(unittest.TestCase):
     def testCheckpointing(self):
         analysis = tune.run(
             tune.with_parameters(
-                self.train_func, callbacks=[TuneReportCheckpointCallback()]),
+                self.train_func,
+                num_actors=2,
+                callbacks=[TuneReportCheckpointCallback()]),
             config=self.params,
             resources_per_trial={
                 "cpu": 1,
