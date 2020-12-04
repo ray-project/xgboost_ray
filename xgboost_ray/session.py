@@ -10,6 +10,9 @@ class RayXGBoostSession:
     def get_actor_rank(self):
         return self._rank
 
+    def set_queue(self, queue):
+        self._queue = queue
+
     def put_queue(self, item):
         if self._queue is None:
             raise ValueError(
@@ -39,6 +42,11 @@ def get_session() -> RayXGBoostSession:
             "\nFIX THIS by calling function in `session.py` like "
             "`get_actor_rank()` only from within an XGBoost actor session.")
     return _session
+
+
+def set_session_queue(queue: Queue):
+    session = get_session()
+    session.set_queue(queue)
 
 
 def get_actor_rank() -> int:

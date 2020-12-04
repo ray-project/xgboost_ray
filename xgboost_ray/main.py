@@ -1,13 +1,13 @@
+import threading
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass
 
-import numpy as np
-
+import multiprocessing
 import os
 import pickle
 import time
 
-from threading import Thread
+import numpy as np
 
 try:
     import ray
@@ -16,13 +16,10 @@ try:
     from ray.exceptions import RayActorError
     from ray.util.queue import Queue
     from ray.actor import ActorHandle
+    from xgboost_ray.util import Event
     RAY_INSTALLED = True
 except ImportError:
-    ray = None
-    logger = None
-    get_node_ip_address = None
-    Queue = None
-    ActorHandle = None
+    ray = logger = get_node_ip_address = Queue = Event = ActorHandle = None
     RAY_INSTALLED = False
 
 # Tune imports.
@@ -39,7 +36,8 @@ import xgboost as xgb
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
-from xgboost_ray.session import init_session, put_queue
+from xgboost_ray.session import init_session, put_queue, \
+    set_session_queue
 
 
 def _assert_ray_support():
@@ -62,11 +60,15 @@ def _start_rabit_tracker(num_workers: int):
     rabit_tracker.start(num_workers)
 
     # Wait until context completion
-    thread = Thread(target=rabit_tracker.join)
-    thread.daemon = True
-    thread.start()
+    process = multiprocessing.Process(target=rabit_tracker.join)
+    process.daemon = True
+    process.start()
 
-    return env
+    return process, env
+
+
+def _stop_rabit_tracker(rabit_process):
+    rabit_process.terminate()
 
 
 class RabitContext:
@@ -180,6 +182,8 @@ class RayParams:
     resources_per_actor: Optional[Dict] = None
 
     # Fault tolerance
+    elastic_training: bool = False  # Todo: doc
+    max_failed_actors: int = 0  # Todo: doc
     max_actor_restarts: int = 0
     checkpoint_frequency: int = 5
 
@@ -230,9 +234,10 @@ class RayXGBoostActor:
                  rank: int,
                  num_actors: int,
                  queue: Optional[Queue] = None,
+                 stop_event: Optional[Event] = None,
                  checkpoint_frequency: int = 5):
         self.queue = queue
-        init_session(rank, queue)
+        init_session(rank, self.queue)
 
         self.rank = rank
         self.num_actors = num_actors
@@ -240,10 +245,26 @@ class RayXGBoostActor:
         self.checkpoint_frequency = checkpoint_frequency
 
         self._data: Dict[RayDMatrix, xgb.DMatrix] = {}
-
         self._local_n = 0
 
+        self._stop_event = stop_event
+
         _set_omp_num_threads()
+
+    def set_queue(self, queue: Queue):
+        self.queue = queue
+        set_session_queue(self.queue)
+
+    def set_stop_event(self, stop_event: Event):
+        self._stop_event = stop_event
+
+    @property
+    def _stop_training_callback(self):
+        def callback(env):
+            if self._stop_event and self._stop_event.is_set():
+                raise xgb.core.EarlyStopException
+
+        return callback
 
     @property
     def _save_checkpoint_callback(self):
@@ -306,19 +327,38 @@ class RayXGBoostActor:
         callbacks.append(self._save_checkpoint_callback)
         kwargs["callbacks"] = callbacks
 
-        with RabitContext(str(id(self)), rabit_args):
-            bst = xgb.train(
-                local_params,
-                local_dtrain,
-                *args,
-                evals=local_evals,
-                evals_result=evals_result,
-                **kwargs)
-            return {
-                "bst": bst,
-                "evals_result": evals_result,
-                "train_n": self._local_n
-            }
+        result_dict = {}
+
+        def _train():
+            with RabitContext(str(id(self)), rabit_args):
+                bst = xgb.train(
+                    local_params,
+                    local_dtrain,
+                    *args,
+                    evals=local_evals,
+                    evals_result=evals_result,
+                    **kwargs)
+                result_dict.update({
+                    "bst": bst,
+                    "evals_result": evals_result,
+                    "train_n": self._local_n
+                })
+
+        thread = threading.Thread(target=_train)
+        thread.start()
+        while thread.is_alive():
+            thread.join(timeout=0)
+            if self._stop_event.is_set():
+                raise ValueError("Training was interrupted.")
+            time.sleep(0.1)
+
+        if not result_dict:
+            import sys
+            sys.exit(1)
+            raise ValueError("Training was interrupted.")
+
+        thread.join()
+        return result_dict
 
     def predict(self, model: xgb.Booster, data: RayDMatrix, **kwargs):
         _set_omp_num_threads()
@@ -356,25 +396,45 @@ def _trigger_data_load(actor, dtrain, evals):
     return wait_load
 
 
+# def _stop_training(actors: List):
+#     futures = []
+#     for actor in actors:
+#         if actor is not None:
+#             futures.append(actor.stop_training.remote())
+#     ray.get(futures)
+
+
 def _shutdown(remote_workers: List[ActorHandle],
               queue: Optional[Queue] = None,
               force: bool = False):
     if force:
         logger.debug(f"Killing {len(remote_workers)} workers.")
         for worker in remote_workers:
+            if worker is None:
+                continue
             ray.kill(worker)
         if queue is not None:
             logger.debug("Killing Queue.")
             ray.kill(queue.actor)
     else:
         try:
-            [worker.__ray_terminate__.remote() for worker in remote_workers]
+            [
+                worker.__ray_terminate__.remote() for worker in remote_workers
+                if worker is not None
+            ]
             if queue is not None:
                 queue.actor.__ray_terminate__.remote()
         except RayActorError:
             logger.warning("Failed to shutdown gracefully, forcing a "
                            "shutdown.")
             _shutdown(remote_workers, force=True)
+
+
+def _print_alive_actors(actors):
+    alive_actors = sum(1 for a in actors if a is not None)
+    print(f"Currently alive actors (count = {alive_actors})")
+    for i, actor in enumerate(actors):
+        print(f"  Rank = {i}, ID = {actor} ")
 
 
 def _train(params: Dict,
@@ -384,6 +444,10 @@ def _train(params: Dict,
            ray_params: RayParams,
            _checkpoint: _Checkpoint,
            _additional_results: Dict,
+           _actors: List,
+           _queue: Queue,
+           _stop_event: Event,
+           _failed_actor_ranks: set,
            **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
     _assert_ray_support()
 
@@ -413,39 +477,71 @@ def _train(params: Dict,
     else:
         params["nthread"] = cpus_per_actor
 
-    # Create queue for communication from worker to caller.
-    # Always create queue.
-    queue = Queue()
-
     # Create remote actors
-    actors = [
-        _create_actor(
+    def create_actor(*args, **kwargs):
+        return _create_actor(*args, **kwargs).on_failure(handle_actor_failure)
+
+    def handle_actor_failure(actor_id):
+        rank = _actors.index(actor_id)
+        print(f"ACTOR WITH RANK {rank} died")
+        _failed_actor_ranks.add(rank)
+        _actors[rank] = None
+
+    newly_created = 0
+    for i in list(_failed_actor_ranks):
+        if _actors[i] is not None:
+            raise RuntimeError(
+                f"Trying to create actor with rank {i}, but it already "
+                f"exists.")
+        print(f"CREATE ACTOR WITH RANK {i}")
+        actor = create_actor(
             rank=i,
             num_actors=ray_params.num_actors,
             num_cpus_per_actor=cpus_per_actor,
             num_gpus_per_actor=gpus_per_actor,
             resources_per_actor=ray_params.resources_per_actor,
-            queue=queue,
+            queue=_queue,
             checkpoint_frequency=ray_params.checkpoint_frequency)
-        for i in range(ray_params.num_actors)
+        _actors[i] = actor
+        # Remove from this set so it is not created again
+        _failed_actor_ranks.remove(i)
+        newly_created += 1
+
+    # Maybe we got a new queue actor
+    wait_queue = [
+        actor.set_queue.remote(_queue) for actor in _actors
+        if actor is not None
     ]
-    logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
+    ray.get(wait_queue)
+
+    wait_event = [
+        actor.set_stop_event.remote(_stop_event) for actor in _actors
+        if actor is not None
+    ]
+    ray.get(wait_event)
+
+    alive_actors = sum(1 for a in _actors if a is not None)
+    logger.info(f"[RayXGBoost] Created {newly_created} new actors "
+                f"({alive_actors} total actors).")
 
     # Split data across workers
     wait_load = []
-    for _, actor in enumerate(actors):
+    for _, actor in enumerate(_actors):
+        if actor is None:
+            continue
+        # If data is already on the node, will not load again
         wait_load.extend(_trigger_data_load(actor, dtrain, evals))
 
-    try:
-        ray.get(wait_load)
-    except Exception:
-        _shutdown(actors, queue, force=True)
-        raise
+    for future in wait_load:
+        future.on_failure(lambda fut, *args: False)
 
+    ray.get(wait_load)
+
+    _print_alive_actors(_actors)
     logger.info("[RayXGBoost] Starting XGBoost training.")
 
     # Start tracker
-    env = _start_rabit_tracker(ray_params.num_actors)
+    rabit_process, env = _start_rabit_tracker(alive_actors)
     rabit_args = [("%s=%s" % item).encode() for item in env.items()]
 
     if _checkpoint.value:
@@ -454,22 +550,22 @@ def _train(params: Dict,
             _checkpoint.iteration - 1
 
     # Train
-    fut = [
+    training_futures = [
         actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
-        for actor in actors
+        for actor in _actors if actor is not None
     ]
 
     callback_returns = _additional_results.get("callback_returns")
     if callback_returns is None:
-        callback_returns = [list() for _ in range(len(actors))]
+        callback_returns = [list() for _ in range(len(_actors))]
         _additional_results["callback_returns"] = callback_returns
 
     try:
-        not_ready = fut
+        not_ready = training_futures
         while not_ready:
-            if queue:
-                while not queue.empty():
-                    (actor_rank, item) = queue.get()
+            if _queue:
+                while not _queue.empty():
+                    (actor_rank, item) = _queue.get()
                     if isinstance(item, Callable):
                         item()
                     elif isinstance(item, _Checkpoint):
@@ -480,28 +576,38 @@ def _train(params: Dict,
             logger.debug("[RayXGBoost] Waiting for results...")
             ray.get(ready)
         # Once everything is ready
-        ray.get(fut)
+        ray.get(training_futures)
+
     # The inner loop should catch all exceptions
-    except Exception:
-        _shutdown(remote_workers=actors, queue=queue, force=True)
-        raise
+    except Exception as exc:
+        print(f"GOT EXCEPTION: {exc}")
+
+        # Trigger stop training
+        _stop_event.set()
+
+        # Todo: Try to fetch newer checkpoint, store in `_checkpoint`
+        # Shut down rabit
+        _stop_rabit_tracker(rabit_process)
+
+        raise RayActorError from exc
+
+    # Stop Rabit process
+    _stop_rabit_tracker(rabit_process)
 
     # All results should be the same because of Rabit tracking. So we just
     # return the first one.
-    res: Dict[str, Any] = ray.get(fut[0])
+    res: Dict[str, Any] = ray.get(training_futures[0])
     bst = res["bst"]
     evals_result = res["evals_result"]
 
     if callback_returns:
         _additional_results["callback_returns"] = callback_returns
 
-    all_res = ray.get(fut)
+    all_res = ray.get(training_futures)
     total_n = sum(res["train_n"] or 0 for res in all_res)
 
     logger.info(f"[RayXGBoost] Finished XGBoost training on training data "
                 f"with total N={total_n:,}.")
-
-    _shutdown(remote_workers=actors, queue=queue, force=False)
 
     return bst, evals_result, _additional_results
 
@@ -566,8 +672,12 @@ def train(params: Dict,
     train_additional_results = {}
 
     tries = 0
-    checkpoint = _Checkpoint()
-    current_results = {}
+    checkpoint = _Checkpoint()  # Keep track of latest checkpoint
+    current_results = {}  # Keep track of additional results
+    actors = [None] * ray_params.num_actors  # All active actors
+    queue = Queue()  # Queue actor
+    stop_event = Event()  # Stop event actor
+    start_actor_ranks = set(range(ray_params.num_actors))  # Start these
     while tries <= max_actor_restarts:
         try:
             bst, train_evals_result, train_additional_results = _train(
@@ -578,21 +688,45 @@ def train(params: Dict,
                 ray_params=ray_params,
                 _checkpoint=checkpoint,
                 _additional_results=current_results,
+                _actors=actors,
+                _queue=queue,
+                _stop_event=stop_event,
+                _failed_actor_ranks=start_actor_ranks,
                 **kwargs)
             break
         except RayActorError:
+            if ray_params.elastic_training:
+                alive_actors = sum(1 for a in actors if a is not None)
+                if alive_actors < ray_params.num_actors - \
+                   ray_params.max_failed_actors:
+                    raise RuntimeError(
+                        "A Ray actor died during training and the maximum "
+                        "number of dead actors in elastic training was "
+                        "reached. Shutting down training.")
+                # Do not start new actors
+                start_actor_ranks = set()
             if tries + 1 <= max_actor_restarts:
                 logger.warning(
                     f"A Ray actor died during training. Trying to restart "
                     f"and continue training from last checkpoint "
                     f"(restart {tries + 1} of {max_actor_restarts}). "
                     f"Sleeping for 10 seconds for cleanup.")
-                time.sleep(10)
+                time.sleep(5)
+                queue.actor.__ray_terminate__.remote()
+                stop_event.shutdown()
+                time.sleep(5)
+                queue = Queue()
+                stop_event = Event()
             else:
                 raise RuntimeError(
-                    "A Ray actor died during training and the maximum number "
-                    "of retries ({}) is exhausted.")
+                    f"A Ray actor died during training and the maximum number "
+                    f"of retries ({max_actor_restarts}) is exhausted.")
             tries += 1
+
+    print(f"End of training.")
+    _print_alive_actors(actors)
+
+    _shutdown(remote_workers=actors, queue=queue, force=False)
 
     if isinstance(evals_result, dict):
         evals_result.update(train_evals_result)

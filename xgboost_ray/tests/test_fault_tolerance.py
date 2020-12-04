@@ -79,7 +79,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         if os.path.exists(self.die_lock_file):
             os.remove(self.die_lock_file)
 
-        ray.init(num_cpus=2, num_gpus=0)
+        ray.init(num_cpus=2, num_gpus=0, log_to_driver=False)
 
     def tearDown(self) -> None:
         if os.path.exists(self.tmpdir):
@@ -98,6 +98,25 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
+        print(f"Got correct predictions: {pred_y}")
+
+    def testTrainingContinuationElastic(self):
+        """This should continue after one actor died."""
+        bst = train(
+            self.params,
+            RayDMatrix(self.x, self.y),
+            callbacks=[_fail_callback(self.die_lock_file)],
+            num_boost_round=20,
+            ray_params=RayParams(
+                max_actor_restarts=1,
+                num_actors=2,
+                elastic_training=True,
+                max_failed_actors=1))
+
+        x_mat = xgb.DMatrix(self.x)
+        pred_y = bst.predict(x_mat)
+        self.assertSequenceEqual(list(self.y), list(pred_y))
+        print(f"Got correct predictions: {pred_y}")
 
     def testTrainingStop(self):
         """This should now stop training after one actor died."""

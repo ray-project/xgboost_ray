@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-actors",
         type=int,
-        default=1,
+        default=4,
         help="Sets number of xgboost workers to use.")
 
     args, _ = parser.parse_known_args()
