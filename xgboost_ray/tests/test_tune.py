@@ -69,7 +69,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
             tune.with_parameters(
                 self.train_func,
                 num_actors=2,
-                callbacks=[TuneReportCheckpointCallback()]),
+                callbacks=[TuneReportCheckpointCallback(frequency=1)]),
             config=self.params,
             resources_per_trial={
                 "cpu": 1,
