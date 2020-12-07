@@ -338,6 +338,20 @@ def _trigger_data_load(actor, dtrain, evals):
     return wait_load
 
 
+def _handle_queue(queue: Queue, checkpoint: _Checkpoint,
+                  callback_returns: Dict):
+    while not queue.empty():
+        (actor_rank, item) = queue.get()
+        if isinstance(item, Callable):
+            item()
+        elif isinstance(item, _Checkpoint):
+            checkpoint.__dict__.update(item.__dict__)
+        else:
+            print(f"Got callback return: {item}. "
+                  f"Full data: {callback_returns}")
+            callback_returns[actor_rank].append(item)
+
+
 def _shutdown(remote_workers: List[ActorHandle],
               queue: Optional[Queue] = None,
               force: bool = False):
@@ -450,21 +464,23 @@ def _train(params: Dict,
         not_ready = fut
         while not_ready:
             if queue:
-                while not queue.empty():
-                    (actor_rank, item) = queue.get()
-                    if isinstance(item, Callable):
-                        item()
-                    elif isinstance(item, _Checkpoint):
-                        _checkpoint.__dict__.update(item.__dict__)
-                    else:
-                        print(f"Got callback return: {item}. "
-                              f"Full data: {callback_returns}")
-                        callback_returns[actor_rank].append(item)
+                _handle_queue(
+                    queue=queue,
+                    checkpoint=_checkpoint,
+                    callback_returns=callback_returns)
             ready, not_ready = ray.wait(not_ready, timeout=0)
             logger.debug("[RayXGBoost] Waiting for results...")
             ray.get(ready)
         # Once everything is ready
         ray.get(fut)
+
+        # Get items from queue one last time
+        if queue:
+            _handle_queue(
+                queue=queue,
+                checkpoint=_checkpoint,
+                callback_returns=callback_returns)
+
     # The inner loop should catch all exceptions
     except Exception:
         _shutdown(remote_workers=actors, queue=queue, force=True)
