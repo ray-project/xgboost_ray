@@ -282,7 +282,7 @@ class RayXGBoostActor:
         evals_result = dict()
 
         if "callbacks" in kwargs:
-            callbacks = kwargs["callbacks"]
+            callbacks = kwargs["callbacks"] or []
         else:
             callbacks = []
         callbacks.append(self._save_checkpoint_callback)

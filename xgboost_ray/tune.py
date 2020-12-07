@@ -105,7 +105,7 @@ else:
 
 def _try_add_tune_callback(kwargs: Dict):
     if TUNE_INSTALLED and is_session_enabled():
-        callbacks = kwargs.get("callbacks", [])
+        callbacks = kwargs.get("callbacks", []) or []
         new_callbacks = []
         has_tune_callback = False
 
