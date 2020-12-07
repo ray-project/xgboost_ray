@@ -364,9 +364,12 @@ def _shutdown(remote_workers: List[ActorHandle],
             ray.kill(queue.actor)
     else:
         try:
+            logger.debug("Gracefully terminating workers")
             [worker.__ray_terminate__.remote() for worker in remote_workers]
             if queue is not None:
-                queue.actor.__ray_terminate__.remote()
+                # Queues seem to stick around, so kill them always
+                logger.debug("Forcefully terminating queue")
+                ray.kill(queue.actor)
         except RayActorError:
             logger.warning("Failed to shutdown gracefully, forcing a "
                            "shutdown.")

@@ -128,7 +128,8 @@ class XGBoostRayTuneTest(unittest.TestCase):
             },
             num_samples=2,
             metric="train-mlogloss",
-            mode="min")
+            mode="min",
+            log_to_file=True)
 
         self.assertTrue(os.path.exists(analysis.best_checkpoint))
 
