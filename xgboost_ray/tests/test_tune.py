@@ -41,15 +41,20 @@ class XGBoostRayTuneTest(unittest.TestCase):
             "num_boost_round": tune.choice([1, 3])
         }
 
-        def train_func(config, checkpoint_dir=None, num_actors=1, **kwargs):
-            train_set = RayDMatrix(x, y)
-            train(
-                config["xgb"],
-                dtrain=train_set,
-                ray_params=RayParams(cpus_per_actor=1, num_actors=num_actors),
-                num_boost_round=config["num_boost_round"],
-                evals=[(train_set, "train")],
-                **kwargs)
+        def train_func(num_actors=1, callbacks=None, **kwargs):
+            def _inner_train(config, checkpoint_dir):
+                train_set = RayDMatrix(x, y)
+                train(
+                    config["xgb"],
+                    dtrain=train_set,
+                    ray_params=RayParams(
+                        cpus_per_actor=1, num_actors=num_actors),
+                    num_boost_round=config["num_boost_round"],
+                    evals=[(train_set, "train")],
+                    callbacks=callbacks,
+                    **kwargs)
+
+            return _inner_train
 
         self.train_func = train_func
         self.experiment_dir = tempfile.mkdtemp()
@@ -61,7 +66,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
     # noinspection PyTypeChecker
     def testNumIters(self):
         analysis = tune.run(
-            self.train_func,
+            self.train_func(),
             config=self.params,
             resources_per_trial={
                 "cpu": 1,
@@ -104,10 +109,9 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
     def testEndToEndCheckpointing(self):
         analysis = tune.run(
-            tune.with_parameters(
-                self.train_func,
-                num_actors=2,
-                callbacks=[TuneReportCheckpointCallback(frequency=1)]),
+            self.train_func(
+                callbacks=[TuneReportCheckpointCallback(frequency=1)],
+                num_actors=2),
             config=self.params,
             resources_per_trial={
                 "cpu": 1,
@@ -123,10 +127,8 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
     def testEndToEndCheckpointingOrigTune(self):
         analysis = tune.run(
-            tune.with_parameters(
-                self.train_func,
-                num_actors=2,
-                callbacks=[OrigTuneReportCheckpointCallback()]),
+            self.train_func(
+                num_actors=2, callbacks=[OrigTuneReportCheckpointCallback()]),
             config=self.params,
             resources_per_trial={
                 "cpu": 1,
