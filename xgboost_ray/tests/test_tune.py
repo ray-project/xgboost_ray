@@ -113,7 +113,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
                 "cpu": 1,
                 "extra_cpu": 1
             },
-            num_samples=2,
+            num_samples=1,
             metric="train-mlogloss",
             mode="min",
             log_to_file=True,
@@ -132,7 +132,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
                 "cpu": 1,
                 "extra_cpu": 1
             },
-            num_samples=2,
+            num_samples=1,
             metric="train-mlogloss",
             mode="min",
             log_to_file=True,
