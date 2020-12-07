@@ -457,6 +457,8 @@ def _train(params: Dict,
                     elif isinstance(item, _Checkpoint):
                         _checkpoint.__dict__.update(item.__dict__)
                     else:
+                        print(f"Got callback return: {item}. "
+                              f"Full data: {callback_returns}")
                         callback_returns[actor_rank].append(item)
             ready, not_ready = ray.wait(not_ready, timeout=0)
             logger.debug("[RayXGBoost] Waiting for results...")
