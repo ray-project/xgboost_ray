@@ -1,13 +1,18 @@
 import os
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
 import ray
 from ray import tune
-from ray.tune.integration.xgboost import TuneReportCheckpointCallback
+from ray.tune.integration.xgboost import \
+    TuneReportCallback as OrigTuneReportCallback, \
+    TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback
 
 from xgboost_ray import RayDMatrix, train, RayParams
+from xgboost_ray.tune import TuneReportCallback,\
+    TuneReportCheckpointCallback, _try_add_tune_callback
 
 
 class XGBoostRayTuneTest(unittest.TestCase):
@@ -64,12 +69,58 @@ class XGBoostRayTuneTest(unittest.TestCase):
             all(analysis.results_df["training_iteration"] ==
                 analysis.results_df["config.num_boost_round"]))
 
-    def testCheckpointing(self):
+    def testReplaceTuneCheckpoints(self):
+        """Test if ray.tune.integration.xgboost callbacks are replaced"""
+        # Report callback
+        in_cp = [OrigTuneReportCallback(metrics="met")]
+        in_dict = {"callbacks": in_cp}
+
+        with patch("xgboost_ray.tune.is_session_enabled") as mocked:
+            mocked.return_value = True
+            _try_add_tune_callback(in_dict)
+
+        replaced = in_dict["callbacks"][0]
+        self.assertTrue(isinstance(replaced, TuneReportCallback))
+        self.assertSequenceEqual(replaced._metrics, ["met"])
+
+        # Report and checkpointing callback
+        in_cp = [
+            OrigTuneReportCheckpointCallback(metrics="met", filename="test")
+        ]
+        in_dict = {"callbacks": in_cp}
+
+        with patch("xgboost_ray.tune.is_session_enabled") as mocked:
+            mocked.return_value = True
+            _try_add_tune_callback(in_dict)
+
+        replaced = in_dict["callbacks"][0]
+        self.assertTrue(isinstance(replaced, TuneReportCheckpointCallback))
+        self.assertSequenceEqual(replaced._report._metrics, ["met"])
+        self.assertEqual(replaced._checkpoint._filename, "test")
+
+    def testEndToEndCheckpointing(self):
         analysis = tune.run(
             tune.with_parameters(
                 self.train_func,
                 num_actors=2,
                 callbacks=[TuneReportCheckpointCallback(frequency=1)]),
+            config=self.params,
+            resources_per_trial={
+                "cpu": 1,
+                "extra_cpu": 1
+            },
+            num_samples=2,
+            metric="train-mlogloss",
+            mode="min")
+
+        self.assertTrue(os.path.exists(analysis.best_checkpoint))
+
+    def testEndToEndCheckpointingOrigTune(self):
+        analysis = tune.run(
+            tune.with_parameters(
+                self.train_func,
+                num_actors=2,
+                callbacks=[OrigTuneReportCheckpointCallback()]),
             config=self.params,
             resources_per_trial={
                 "cpu": 1,
