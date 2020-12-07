@@ -11,6 +11,8 @@ import numpy as np
 
 import xgboost as xgb
 
+import xgboost as xgb
+
 try:
     import ray
     from ray import logger
