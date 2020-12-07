@@ -319,7 +319,7 @@ def _create_actor(rank: int,
                   num_gpus_per_actor: int,
                   resources_per_actor: Optional[Dict] = None,
                   queue: Optional[Queue] = None,
-                  checkpoint_frequency: int = 5) -> RayXGBoostActor:
+                  checkpoint_frequency: int = 5) -> ActorHandle:
 
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
