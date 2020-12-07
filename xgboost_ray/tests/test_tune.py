@@ -17,7 +17,7 @@ from xgboost_ray.tune import TuneReportCallback,\
 
 class XGBoostRayTuneTest(unittest.TestCase):
     def setUp(self):
-        ray.init(num_cpus=8)
+        ray.init(num_cpus=4)
         repeat = 8  # Repeat data a couple of times for stability
         x = np.array([
             [1, 0, 0, 0],  # Feature 0 -> Label 0
