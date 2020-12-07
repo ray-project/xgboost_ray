@@ -347,8 +347,6 @@ def _handle_queue(queue: Queue, checkpoint: _Checkpoint,
         elif isinstance(item, _Checkpoint):
             checkpoint.__dict__.update(item.__dict__)
         else:
-            print(f"Got callback return: {item}. "
-                  f"Full data: {callback_returns}")
             callback_returns[actor_rank].append(item)
 
 

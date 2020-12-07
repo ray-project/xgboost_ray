@@ -11,7 +11,7 @@ import xgboost as xgb
 import ray
 
 from xgboost_ray import train, RayDMatrix, RayParams
-from xgboost_ray.session import put_queue
+from xgboost_ray.session import put_queue, get_actor_rank
 from xgboost_ray.tests.utils import flatten_obj
 
 
@@ -25,7 +25,8 @@ def _fail_callback(die_lock_file: str,
     def callback(env):
         if env.rank == actor_rank:
             put_queue((env.iteration, time.time()))
-        if env.rank == actor_rank and env.iteration == fail_iteration and \
+        if get_actor_rank() == actor_rank and \
+           env.iteration == fail_iteration and \
            not os.path.exists(die_lock_file):
             # Only die once
             if os.path.exists(die_lock_file):
