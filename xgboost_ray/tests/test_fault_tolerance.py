@@ -23,7 +23,7 @@ def _fail_callback(die_lock_file: str,
                    actor_rank: int = 0,
                    fail_iteration: int = 6):
     def callback(env):
-        if env.rank == actor_rank:
+        if get_actor_rank() == actor_rank:
             put_queue((env.iteration, time.time()))
         if get_actor_rank() == actor_rank and \
            env.iteration == fail_iteration and \
