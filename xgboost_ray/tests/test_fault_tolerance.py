@@ -11,7 +11,7 @@ import xgboost as xgb
 import ray
 
 from xgboost_ray import train, RayDMatrix, RayParams
-from xgboost_ray.session import put_queue
+from xgboost_ray.session import put_queue, get_actor_rank
 from xgboost_ray.tests.utils import flatten_obj
 
 
@@ -23,9 +23,10 @@ def _fail_callback(die_lock_file: str,
                    actor_rank: int = 0,
                    fail_iteration: int = 6):
     def callback(env):
-        if env.rank == actor_rank:
+        if get_actor_rank() == actor_rank:
             put_queue((env.iteration, time.time()))
-        if env.rank == actor_rank and env.iteration == fail_iteration and \
+        if get_actor_rank() == actor_rank and \
+           env.iteration == fail_iteration and \
            not os.path.exists(die_lock_file):
             # Only die once
             if os.path.exists(die_lock_file):
@@ -33,6 +34,7 @@ def _fail_callback(die_lock_file: str,
 
             with open(die_lock_file, "wt") as fp:
                 fp.write("")
+            time.sleep(2)
             import sys
             sys.exit(1)
 
@@ -218,7 +220,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             RayDMatrix(self.x, self.y),
             callbacks=[_fail_callback(self.die_lock_file, fail_iteration=7)],
             num_boost_round=10,
-            ray_params=RayParams(max_actor_restarts=1, num_actors=2),
+            ray_params=RayParams(
+                max_actor_restarts=1, num_actors=2, checkpoint_frequency=5),
             additional_results=res_error)
 
         flat_noerror = flatten_obj({"tree": tree_obj(bst_noerror)})
@@ -231,6 +234,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
         # We fail at iteration 7, but checkpoints are saved at iteration 5
         # Thus we have two additional returns here.
+        print("Callback returns:", res_error["callback_returns"][0])
         self.assertEqual(len(res_error["callback_returns"][0]), 10 + 2)
 
 

@@ -9,6 +9,8 @@ import time
 
 import numpy as np
 
+import xgboost as xgb
+
 try:
     import ray
     from ray import logger
@@ -22,17 +24,7 @@ except ImportError:
     ray = logger = get_node_ip_address = Queue = Event = ActorHandle = None
     RAY_INSTALLED = False
 
-# Tune imports.
-try:
-    from ray import tune
-    from xgboost_ray.tune import RayTuneReportCallback
-    TUNE_INSTALLED = True
-except ImportError:
-    tune = None
-    RayTuneReportCallback = None
-    TUNE_INSTALLED = False
-
-import xgboost as xgb
+from xgboost_ray.tune import _try_add_tune_callback
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
@@ -111,16 +103,6 @@ def _set_omp_num_threads():
         if "OMP_NUM_THREADS" in os.environ:
             del os.environ["OMP_NUM_THREADS"]
     return int(float(os.environ.get("OMP_NUM_THREADS", "0.0")))
-
-
-def _try_add_tune_callback(kwargs: Dict):
-    if TUNE_INSTALLED and tune.is_session_enabled():
-        callbacks = kwargs.get("callbacks", [])
-        for callback in callbacks:
-            if isinstance(callback, RayTuneReportCallback):
-                return
-        callbacks.append(RayTuneReportCallback())
-        kwargs["callbacks"] = callbacks
 
 
 def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
@@ -377,7 +359,7 @@ def _create_actor(rank: int,
                   num_gpus_per_actor: int,
                   resources_per_actor: Optional[Dict] = None,
                   queue: Optional[Queue] = None,
-                  checkpoint_frequency: int = 5) -> RayXGBoostActor:
+                  checkpoint_frequency: int = 5) -> ActorHandle:
 
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
@@ -396,12 +378,16 @@ def _trigger_data_load(actor, dtrain, evals):
     return wait_load
 
 
-# def _stop_training(actors: List):
-#     futures = []
-#     for actor in actors:
-#         if actor is not None:
-#             futures.append(actor.stop_training.remote())
-#     ray.get(futures)
+def _handle_queue(queue: Queue, checkpoint: _Checkpoint,
+                  callback_returns: Dict):
+    while not queue.empty():
+        (actor_rank, item) = queue.get()
+        if isinstance(item, Callable):
+            item()
+        elif isinstance(item, _Checkpoint):
+            checkpoint.__dict__.update(item.__dict__)
+        else:
+            callback_returns[actor_rank].append(item)
 
 
 def _shutdown(remote_workers: List[ActorHandle],
@@ -418,12 +404,15 @@ def _shutdown(remote_workers: List[ActorHandle],
             ray.kill(queue.actor)
     else:
         try:
+            logger.debug("Gracefully terminating workers")
             [
                 worker.__ray_terminate__.remote() for worker in remote_workers
                 if worker is not None
             ]
             if queue is not None:
-                queue.actor.__ray_terminate__.remote()
+                # Queues seem to stick around, so kill them always
+                logger.debug("Forcefully terminating queue")
+                ray.kill(queue.actor)
         except RayActorError:
             logger.warning("Failed to shutdown gracefully, forcing a "
                            "shutdown.")
@@ -564,19 +553,22 @@ def _train(params: Dict,
         not_ready = training_futures
         while not_ready:
             if _queue:
-                while not _queue.empty():
-                    (actor_rank, item) = _queue.get()
-                    if isinstance(item, Callable):
-                        item()
-                    elif isinstance(item, _Checkpoint):
-                        _checkpoint.__dict__.update(item.__dict__)
-                    else:
-                        callback_returns[actor_rank].append(item)
+                _handle_queue(
+                    queue=_queue,
+                    checkpoint=_checkpoint,
+                    callback_returns=callback_returns)
             ready, not_ready = ray.wait(not_ready, timeout=0)
             logger.debug("[RayXGBoost] Waiting for results...")
             ray.get(ready)
         # Once everything is ready
         ray.get(training_futures)
+
+        # Get items from queue one last time
+        if _queue:
+            _handle_queue(
+                queue=_queue,
+                checkpoint=_checkpoint,
+                callback_returns=callback_returns)
 
     # The inner loop should catch all exceptions
     except Exception as exc:
