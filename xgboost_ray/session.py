@@ -25,11 +25,6 @@ class RayXGBoostSession:
 _session = None
 
 
-def is_xgboost_ray_actor() -> bool:
-    global _session
-    return _session is not None
-
-
 def init_session(*args, **kwargs):
     global _session
     if _session:
