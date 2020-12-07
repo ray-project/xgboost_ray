@@ -19,6 +19,31 @@ def tree_obj(bst: xgb.Booster):
     return [json.loads(j) for j in bst.get_dump(dump_format="json")]
 
 
+def _kill_callback(die_lock_file: str,
+                   actor_rank: int = 0,
+                   fail_iteration: int = 6):
+    def callback(env):
+        if get_actor_rank() == actor_rank:
+            put_queue((env.iteration, time.time()))
+        if get_actor_rank() == actor_rank and \
+                env.iteration == fail_iteration and \
+                not os.path.exists(die_lock_file):
+            # Only die once
+            if os.path.exists(die_lock_file):
+                return
+
+            # Get PID
+            pid = os.getpid()
+            print(f"Killing process: {pid}")
+            with open(die_lock_file, "wt") as fp:
+                fp.write("")
+
+            time.sleep(2)
+            os.kill(pid, 9)
+
+    return callback
+
+
 def _fail_callback(die_lock_file: str,
                    actor_rank: int = 0,
                    fail_iteration: int = 6):
@@ -81,29 +106,74 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         if os.path.exists(self.die_lock_file):
             os.remove(self.die_lock_file)
 
-        ray.init(num_cpus=2, num_gpus=0, log_to_driver=False)
+        ray.init(num_cpus=2, num_gpus=0, log_to_driver=True)
 
     def tearDown(self) -> None:
         if os.path.exists(self.tmpdir):
             shutil.rmtree(self.tmpdir)
         ray.shutdown()
 
-    def testTrainingContinuation(self):
+    def testTrainingContinuationKilled(self):
         """This should continue after one actor died."""
+        actors = [None, None]
+        additional_results = {}
+
         bst = train(
             self.params,
             RayDMatrix(self.x, self.y),
-            callbacks=[_fail_callback(self.die_lock_file)],
+            callbacks=[_kill_callback(self.die_lock_file)],
             num_boost_round=20,
-            ray_params=RayParams(max_actor_restarts=1, num_actors=2))
+            ray_params=RayParams(max_actor_restarts=1, num_actors=2),
+            additional_results=additional_results,
+            _actors=actors)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
         print(f"Got correct predictions: {pred_y}")
 
-    def testTrainingContinuationElastic(self):
+        # End with two working actors
+        self.assertTrue(actors[0])
+        self.assertTrue(actors[1])
+
+        # Two workers finished, so N=32
+        self.assertEqual(additional_results["total_n"], 32)
+
+    def testTrainingContinuationElasticKilled(self):
         """This should continue after one actor died."""
+        actors = [None, None]
+        additional_results = {}
+
+        bst = train(
+            self.params,
+            RayDMatrix(self.x, self.y),
+            callbacks=[_kill_callback(self.die_lock_file)],
+            num_boost_round=20,
+            ray_params=RayParams(
+                max_actor_restarts=1,
+                num_actors=2,
+                elastic_training=True,
+                max_failed_actors=1),
+            additional_results=additional_results,
+            _actors=actors)
+
+        x_mat = xgb.DMatrix(self.x)
+        pred_y = bst.predict(x_mat)
+        self.assertSequenceEqual(list(self.y), list(pred_y))
+        print(f"Got correct predictions: {pred_y}")
+
+        # First actor does not get recreated
+        self.assertEqual(actors[0], None)
+        self.assertTrue(actors[1])
+
+        # Only one worker finished, so n=16
+        self.assertEqual(additional_results["total_n"], 16)
+
+    def testTrainingContinuationElasticFailed(self):
+        """This should continue after one actor failed training."""
+        actors = [None, None]
+        additional_results = {}
+
         bst = train(
             self.params,
             RayDMatrix(self.x, self.y),
@@ -113,12 +183,21 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 max_actor_restarts=1,
                 num_actors=2,
                 elastic_training=True,
-                max_failed_actors=1))
+                max_failed_actors=1),
+            additional_results=additional_results,
+            _actors=actors)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
         print(f"Got correct predictions: {pred_y}")
+
+        # End with two working actors since only the training failed
+        self.assertTrue(actors[0])
+        self.assertTrue(actors[1])
+
+        # Two workers finished, so n=32
+        self.assertEqual(additional_results["total_n"], 32)
 
     def testTrainingStop(self):
         """This should now stop training after one actor died."""
