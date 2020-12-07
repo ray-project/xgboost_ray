@@ -34,6 +34,7 @@ def _fail_callback(die_lock_file: str,
 
             with open(die_lock_file, "wt") as fp:
                 fp.write("")
+            time.sleep(2)
             import sys
             sys.exit(1)
 
@@ -200,7 +201,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             RayDMatrix(self.x, self.y),
             callbacks=[_fail_callback(self.die_lock_file, fail_iteration=7)],
             num_boost_round=10,
-            ray_params=RayParams(max_actor_restarts=1, num_actors=2),
+            ray_params=RayParams(
+                max_actor_restarts=1, num_actors=2, checkpoint_frequency=5),
             additional_results=res_error)
 
         flat_noerror = flatten_obj({"tree": tree_obj(bst_noerror)})
@@ -213,6 +215,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
         # We fail at iteration 7, but checkpoints are saved at iteration 5
         # Thus we have two additional returns here.
+        print("Callback returns:", res_error["callback_returns"][0])
         self.assertEqual(len(res_error["callback_returns"][0]), 10 + 2)
 
 
