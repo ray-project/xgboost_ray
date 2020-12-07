@@ -33,7 +33,7 @@ def _fail_callback(die_lock_file: str,
 
             with open(die_lock_file, "wt") as fp:
                 fp.write("")
-            time.sleep(0.5)
+            time.sleep(2)
             import sys
             sys.exit(1)
 
@@ -214,6 +214,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
         # We fail at iteration 7, but checkpoints are saved at iteration 5
         # Thus we have two additional returns here.
+        print("Callback returns:", res_error["callback_returns"][0])
         self.assertEqual(len(res_error["callback_returns"][0]), 10 + 2)
 
 
