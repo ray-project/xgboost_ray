@@ -1,6 +1,6 @@
 import os
 import tempfile
-from typing import Tuple
+from typing import Tuple, Union, List, Dict
 
 import numpy as np
 import pandas as pd
@@ -59,3 +59,17 @@ def create_parquet_in_tempdir(filename: str,
         num_classes=num_classes,
         num_partitions=num_partitions)
     return temp_dir, path
+
+
+def flatten_obj(obj: Union[List, Dict], keys=None, base=None):
+    keys = keys or []
+    base = base if base is not None else {}  # Keep same object if empty dict
+    if isinstance(obj, list):
+        for i, o in enumerate(obj):
+            flatten_obj(o, keys + [str(i)], base)
+    elif isinstance(obj, dict):
+        for k, o in obj.items():
+            flatten_obj(o, keys + [str(k)], base)
+    else:
+        base["/".join(keys)] = obj
+    return base
