@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -50,9 +52,11 @@ class XGBoostRayTuneTest(unittest.TestCase):
                 **kwargs)
 
         self.train_func = train_func
+        self.experiment_dir = tempfile.mkdtemp()
 
     def tearDown(self):
         ray.shutdown()
+        shutil.rmtree(self.experiment_dir)
 
     # noinspection PyTypeChecker
     def testNumIters(self):
@@ -111,7 +115,9 @@ class XGBoostRayTuneTest(unittest.TestCase):
             },
             num_samples=2,
             metric="train-mlogloss",
-            mode="min")
+            mode="min",
+            log_to_file=True,
+            local_dir=self.experiment_dir)
 
         self.assertTrue(os.path.exists(analysis.best_checkpoint))
 
@@ -129,7 +135,8 @@ class XGBoostRayTuneTest(unittest.TestCase):
             num_samples=2,
             metric="train-mlogloss",
             mode="min",
-            log_to_file=True)
+            log_to_file=True,
+            local_dir=self.experiment_dir)
 
         self.assertTrue(os.path.exists(analysis.best_checkpoint))
 

@@ -126,8 +126,7 @@ def _try_add_tune_callback(kwargs: Dict):
                 if TUNE_LEGACY:
                     replace_cb = TuneReportCheckpointCallback(
                         metrics=cb._report._metrics,
-                        filename=cb._checkpoint._filename,
-                        frequency=5)
+                        filename=cb._checkpoint._filename)
                 else:
                     replace_cb = TuneReportCheckpointCallback(
                         metrics=cb._report._metrics,
