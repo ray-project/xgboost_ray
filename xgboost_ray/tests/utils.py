@@ -42,7 +42,8 @@ def create_parquet(filename: str,
         data["partition"] = partition
 
         os.makedirs(filename, 0o755, exist_ok=True)
-        data.to_parquet(filename, partition_cols=["partition"])
+        data.to_parquet(filename, partition_cols=["partition"], engine="pyarrow",
+                        partition_filename_cb = lambda key: f"part_{key[0]}.parquet")
 
 
 def create_parquet_in_tempdir(filename: str,
