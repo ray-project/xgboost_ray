@@ -5,6 +5,7 @@ on: [push, pull_request]
 jobs:
   test_lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 3
 
     steps:
     - uses: actions/checkout@v2
@@ -22,8 +23,8 @@ jobs:
         ./format.sh --all
 
   test_linux_ray_master:
-
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
     - uses: actions/checkout@v2
@@ -58,8 +59,8 @@ jobs:
       # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
 
   test_linux_ray_release:
-
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
     - uses: actions/checkout@v2

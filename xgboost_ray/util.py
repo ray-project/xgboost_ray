@@ -32,5 +32,5 @@ class Event:
 
     def shutdown(self):
         if self.actor:
-            self.actor.__ray_terminate__.remote()
+            ray.kill(self.actor)
         self.actor = None
