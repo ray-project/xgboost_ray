@@ -53,9 +53,9 @@ jobs:
         popd
         pushd examples/
         ray stop || true
-        echo "running simple.py" && python simple.py
+        echo "running simple.py" && python simple.py --smoke-test
         echo "running simple_predict.py" && python simple_predict.py
-        echo "running simple_tune.py" && python simple_tune.py
+        echo "running simple_tune.py" && python simple_tune.py --smoke-test
         echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
       # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
 
@@ -90,8 +90,8 @@ jobs:
         popd
         pushd examples/
         ray stop || true
-        echo "running simple.py" && python simple.py
+        echo "running simple.py" && python simple.py --smoke-test
         echo "running simple_predict.py" && python simple_predict.py
-        echo "running simple_tune.py" && python simple_tune.py
+        echo "running simple_tune.py" && python simple_tune.py --smoke-test
         echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
       # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done

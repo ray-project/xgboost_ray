@@ -74,6 +74,4 @@ if __name__ == "__main__":
     else:
         ray.init(address=args.address)
 
-    ray.init(address=args.address)
-
     main(args.cpus_per_actor, args.num_actors)
