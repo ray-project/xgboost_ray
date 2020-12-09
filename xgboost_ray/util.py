@@ -1,6 +1,8 @@
 import ray
 import asyncio
 
+from ray.util.queue import Queue as RayQueue
+
 
 @ray.remote
 class _EventActor:
@@ -30,6 +32,13 @@ class Event:
     def is_set(self):
         return ray.get(self.actor.is_set.remote())
 
+    def shutdown(self):
+        if self.actor:
+            ray.kill(self.actor)
+        self.actor = None
+
+
+class Queue(RayQueue):
     def shutdown(self):
         if self.actor:
             ray.kill(self.actor)

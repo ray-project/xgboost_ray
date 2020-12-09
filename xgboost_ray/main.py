@@ -16,9 +16,9 @@ try:
     from ray import logger
     from ray.services import get_node_ip_address
     from ray.exceptions import RayActorError
-    from ray.util.queue import Queue
     from ray.actor import ActorHandle
-    from xgboost_ray.util import Event
+    from xgboost_ray.util import Event, Queue
+
     RAY_INSTALLED = True
 except ImportError:
     ray = logger = get_node_ip_address = Queue = Event = ActorHandle = None
@@ -339,6 +339,7 @@ class RayXGBoostActor:
                 })
 
         thread = threading.Thread(target=_train)
+        thread.daemon = True
         thread.start()
         while thread.is_alive():
             thread.join(timeout=0)
@@ -402,44 +403,49 @@ def _handle_queue(queue: Queue, checkpoint: _Checkpoint,
 
 def _get_actor_alive_status(actors: List[ActorHandle],
                             callback: Callable[[ActorHandle], None]):
-    for i in range(len(actors)):
-        actor = actors[i]
+    obj_to_rank = {}
+
+    for rank in range(len(actors)):
+        actor = actors[rank]
         if actor is None:
             continue
-        try:
-            pid = ray.get(actor.pid.remote(), timeout=1)
-            logger.debug(f"Actor {actor} with PID {pid} is still alive.")
-        except Exception:
-            callback(actors[i])
+        obj = actor.pid.remote()
+        obj_to_rank[obj] = rank
+
+    not_ready = list(obj_to_rank.keys())
+    while not_ready:
+        ready, not_ready = ray.wait(not_ready, timeout=0)
+
+        for obj in ready:
+            try:
+                pid = ray.get(obj)
+                rank = obj_to_rank[obj]
+                logger.info(
+                    f"Actor {actors[rank]} with PID {pid} is still alive.")
+            except Exception:
+                rank = obj_to_rank[obj]
+                logger.info(f"Actor {actors[rank]} with is _not_ alive.")
+                callback(actors[rank])
 
 
 def _shutdown(actors: List[ActorHandle],
               queue: Optional[Queue] = None,
+              event: Optional[Event] = None,
               force: bool = False):
-    if force:
-        logger.debug(f"Killing {len(actors)} workers.")
-        for actor in actors:
-            if actor is None:
-                continue
+    for i in range(len(actors)):
+        actor = actors[i]
+        if actor is None:
+            continue
+        if force:
             ray.kill(actor)
-        if queue is not None:
-            logger.debug("Killing Queue.")
-            ray.kill(queue.actor)
-    else:
-        try:
-            logger.debug("Gracefully terminating workers")
-            [
-                actor.__ray_terminate__.remote() for actor in actors
-                if actor is not None
-            ]
-            if queue is not None:
-                # Queues seem to stick around, so kill them always
-                logger.debug("Forcefully terminating queue")
-                ray.kill(queue.actor)
-        except RayActorError:
-            logger.warning("Failed to shutdown gracefully, forcing a "
-                           "shutdown.")
-            _shutdown(actors, force=True)
+        else:
+            try:
+                ray.get(actor.__ray_terminate__.remote())
+            except RayActorError:
+                ray.kill(actor)
+        # actors[i] = None
+    queue.shutdown()
+    event.shutdown()
 
 
 def _train(params: Dict,
@@ -723,7 +729,7 @@ def train(params: Dict,
                     f"(restart {tries + 1} of {max_actor_restarts}). "
                     f"Sleeping for 10 seconds for cleanup.")
                 time.sleep(5)
-                queue.actor.__ray_terminate__.remote()
+                queue.shutdown()
                 stop_event.shutdown()
                 time.sleep(5)
                 queue = Queue()
@@ -734,7 +740,7 @@ def train(params: Dict,
                     f"of retries ({max_actor_restarts}) is exhausted.")
             tries += 1
 
-    _shutdown(actors=actors, queue=queue, force=False)
+    _shutdown(actors=actors, queue=queue, event=stop_event, force=False)
 
     if isinstance(evals_result, dict):
         evals_result.update(train_evals_result)
