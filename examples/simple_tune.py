@@ -5,6 +5,7 @@ from sklearn import datasets
 from sklearn.model_selection import train_test_split
 import xgboost as xgb
 
+import ray
 from ray import tune
 
 from xgboost_ray import train, RayDMatrix, RayParams
@@ -98,9 +99,14 @@ if __name__ == "__main__":
         type=int,
         default=4,
         help="Number of samples to use for Tune.")
+    parser.add_argument(
+        "--smoke-test", action="store_true", default=False, help="gpu")
 
     args, _ = parser.parse_known_args()
 
-    import ray
-    ray.init(address=args.address)
+    if args.smoke_test:
+        ray.init(num_cpus=args.num_actors * args.num_samples)
+    else:
+        ray.init(address=args.address)
+
     main(args.cpus_per_actor, args.num_actors, args.num_samples)
