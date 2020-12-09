@@ -444,8 +444,10 @@ def _shutdown(actors: List[ActorHandle],
             except RayActorError:
                 ray.kill(actor)
         # actors[i] = None
-    queue.shutdown()
-    event.shutdown()
+    if queue:
+        queue.shutdown()
+    if event:
+        event.shutdown()
 
 
 def _train(params: Dict,
