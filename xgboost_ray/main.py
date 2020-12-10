@@ -168,6 +168,11 @@ class RayParams:
         gpus_per_actor (int): Number of GPUs to be used per Ray actor.
         resources_per_actor (Optional[Dict]): Dict of additional resources
             required per Ray actor.
+        elastic_training (bool): If True, training will continue with
+            fewer actors if an actor fails. Default False.
+        max_failed_actors (int): If `elastic_training` is True, this
+            specifies the maximum number of failed actors with which
+            we still continue training.
         max_actor_restarts (int): Number of retries when Ray actors fail.
             Defaults to 0 (no retries). Set to -1 for unlimited retries.
         checkpoint_frequency (int): How often to save checkpoints. Defaults
@@ -180,8 +185,8 @@ class RayParams:
     resources_per_actor: Optional[Dict] = None
 
     # Fault tolerance
-    elastic_training: bool = False  # Todo: doc
-    max_failed_actors: int = 0  # Todo: doc
+    elastic_training: bool = False
+    max_failed_actors: int = 0
     max_actor_restarts: int = 0
     checkpoint_frequency: int = 5
 
