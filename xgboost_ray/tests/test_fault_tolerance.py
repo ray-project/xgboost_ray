@@ -23,26 +23,27 @@ def tree_obj(bst: xgb.Booster):
 def _kill_callback(die_lock_file: str,
                    actor_rank: int = 0,
                    fail_iteration: int = 6):
-    def callback(env):
-        if get_actor_rank() == actor_rank:
-            put_queue((env.iteration, time.time()))
-        if get_actor_rank() == actor_rank and \
-                env.iteration == fail_iteration and \
-                not os.path.exists(die_lock_file):
-            # Only die once
-            if os.path.exists(die_lock_file):
-                return
+    class _KillCallback(TrainingCallback):
+        def after_iteration(self, model, epoch, evals_log):
+            if get_actor_rank() == actor_rank:
+                put_queue((epoch, time.time()))
+            if get_actor_rank() == actor_rank and \
+                    epoch == fail_iteration and \
+                    not os.path.exists(die_lock_file):
+                # Only die once
+                if os.path.exists(die_lock_file):
+                    return
 
-            # Get PID
-            pid = os.getpid()
-            print(f"Killing process: {pid}")
-            with open(die_lock_file, "wt") as fp:
-                fp.write("")
+                # Get PID
+                pid = os.getpid()
+                print(f"Killing process: {pid}")
+                with open(die_lock_file, "wt") as fp:
+                    fp.write("")
 
-            time.sleep(2)
-            os.kill(pid, 9)
+                time.sleep(2)
+                os.kill(pid, 9)
 
-    return callback
+    return _KillCallback()
 
 
 def _fail_callback(die_lock_file: str,

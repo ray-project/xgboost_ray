@@ -259,13 +259,14 @@ class RayXGBoostActor:
         """Get process PID. Used for checking if still alive"""
         return os.getpid()
 
-    @property
     def _stop_training_callback(self):
-        def callback(env):
-            if self._stop_event and self._stop_event.is_set():
+        this = self
+
+        class _StopCheckpointCallback(TrainingCallback):
+            if this._stop_event and this._stop_event.is_set():
                 raise xgb.core.EarlyStopException
 
-        return callback
+        return _StopCheckpointCallback()
 
     def _save_checkpoint_callback(self):
         this = self
@@ -328,6 +329,7 @@ class RayXGBoostActor:
         else:
             callbacks = []
         callbacks.append(self._save_checkpoint_callback())
+        callbacks.append(self._stop_training_callback())
         kwargs["callbacks"] = callbacks
 
         result_dict = {}
