@@ -7,6 +7,7 @@ import time
 import numpy as np
 import unittest
 import xgboost as xgb
+from xgboost.callback import TrainingCallback
 
 import ray
 
@@ -22,33 +23,38 @@ def tree_obj(bst: xgb.Booster):
 def _fail_callback(die_lock_file: str,
                    actor_rank: int = 0,
                    fail_iteration: int = 6):
-    def callback(env):
-        if get_actor_rank() == actor_rank:
-            put_queue((env.iteration, time.time()))
-        if get_actor_rank() == actor_rank and \
-           env.iteration == fail_iteration and \
-           not os.path.exists(die_lock_file):
-            # Only die once
-            if os.path.exists(die_lock_file):
-                return
+    class _FailCallback(TrainingCallback):
+        def after_iteration(self, model, epoch, evals_log):
 
-            with open(die_lock_file, "wt") as fp:
-                fp.write("")
-            time.sleep(2)
-            import sys
-            sys.exit(1)
+            if get_actor_rank() == actor_rank:
+                put_queue((epoch, time.time()))
+            if get_actor_rank() == actor_rank and \
+               epoch == fail_iteration and \
+               not os.path.exists(die_lock_file):
+                # Only die once
+                if os.path.exists(die_lock_file):
+                    return
 
-    return callback
+                with open(die_lock_file, "wt") as fp:
+                    fp.write("")
+                time.sleep(2)
+                import sys
+                sys.exit(1)
+
+    return _FailCallback()
 
 
 def _checkpoint_callback(frequency: int = 1, before_iteration=False):
-    def callback(env):
-        if env.iteration % frequency == 0:
-            put_queue(env.model.save_raw())
+    class _CheckpointCallback(TrainingCallback):
+        def after_iteration(self, model, epoch, evals_log):
+            if epoch % frequency == 0:
+                put_queue(model.save_raw())
 
-    callback.before_iteration = before_iteration
+    if before_iteration:
+        _CheckpointCallback.before_iteration = \
+            _CheckpointCallback.after_iteration
 
-    return callback
+    return _CheckpointCallback()
 
 
 class XGBoostRayFaultToleranceTest(unittest.TestCase):
