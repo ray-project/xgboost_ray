@@ -10,6 +10,7 @@ import time
 import numpy as np
 
 import xgboost as xgb
+from xgboost.core import XGBoostError
 
 try:
     from xgboost.callback import TrainingCallback
@@ -335,19 +336,23 @@ class RayXGBoostActor:
         result_dict = {}
 
         def _train():
-            with RabitContext(str(id(self)), rabit_args):
-                bst = xgb.train(
-                    local_params,
-                    local_dtrain,
-                    *args,
-                    evals=local_evals,
-                    evals_result=evals_result,
-                    **kwargs)
-                result_dict.update({
-                    "bst": bst,
-                    "evals_result": evals_result,
-                    "train_n": self._local_n
-                })
+            try:
+                with RabitContext(str(id(self)), rabit_args):
+                    bst = xgb.train(
+                        local_params,
+                        local_dtrain,
+                        *args,
+                        evals=local_evals,
+                        evals_result=evals_result,
+                        **kwargs)
+                    result_dict.update({
+                        "bst": bst,
+                        "evals_result": evals_result,
+                        "train_n": self._local_n
+                    })
+            except XGBoostError:
+                # Silent fail, will be raised as RayXGBoostTrainingStopped
+                return
 
         thread = threading.Thread(target=_train)
         thread.daemon = True
@@ -416,9 +421,13 @@ def _get_actor_alive_status(actors: List[ActorHandle],
                             callback: Callable[[ActorHandle], None]):
     obj_to_rank = {}
 
+    alive = 0
+    dead = 0
+
     for rank in range(len(actors)):
         actor = actors[rank]
         if actor is None:
+            dead += 1
             continue
         obj = actor.pid.remote()
         obj_to_rank[obj] = rank
@@ -431,12 +440,16 @@ def _get_actor_alive_status(actors: List[ActorHandle],
             try:
                 pid = ray.get(obj)
                 rank = obj_to_rank[obj]
-                logger.info(
+                logger.debug(
                     f"Actor {actors[rank]} with PID {pid} is still alive.")
+                alive += 1
             except Exception:
                 rank = obj_to_rank[obj]
-                logger.info(f"Actor {actors[rank]} with is _not_ alive.")
+                logger.debug(f"Actor {actors[rank]} is _not_ alive.")
+                dead += 1
                 callback(actors[rank])
+    logger.info(f"Actor status: {alive} alive, {dead} dead "
+                f"({alive+dead} total)")
 
 
 def _shutdown(actors: List[ActorHandle],

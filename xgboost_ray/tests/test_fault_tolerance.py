@@ -104,6 +104,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             "nthread": 1,
             "max_depth": 2,
             "objective": "multi:softmax",
+            "eval_metric": "mlogloss",
             "num_class": 4
         }
 
