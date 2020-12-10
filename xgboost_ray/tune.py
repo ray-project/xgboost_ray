@@ -1,6 +1,6 @@
 # Tune imports.
 import os
-from typing import Dict, Union, List
+from typing import Dict, Union, List, OrderedDict
 
 import logging
 
@@ -9,6 +9,7 @@ from xgboost_ray.session import put_queue
 try:
     from ray import tune
     from ray.tune import is_session_enabled
+    from ray.tune.utils import flatten_dict
     from ray.tune.integration.xgboost import \
         TuneReportCallback as OrigTuneReportCallback, \
         _TuneCheckpointCallback as _OrigTuneCheckpointCallback, \
@@ -23,6 +24,7 @@ except ImportError:
     def is_session_enabled():
         return False
 
+    flatten_dict = is_session_enabled
     TUNE_INSTALLED = False
 
 # Todo(krfricke): Remove after next ray core release
@@ -34,9 +36,15 @@ else:
 if TUNE_LEGACY:
     # Until the next release, keep compatible callbacks here.
     class TuneReportCallback(OrigTuneReportCallback):
-        def _get_report_dict(self, env):
-            # Only one worker should report to Tune
-            result_dict = dict(env.evaluation_result_list)
+        def _get_report_dict(self, evals_log):
+            if isinstance(evals_log, OrderedDict):
+                # xgboost>=1.3
+                result_dict = flatten_dict(evals_log, delimiter="-")
+                for k in list(result_dict):
+                    result_dict[k] = result_dict[k][0]
+            else:
+                # xgboost<1.3
+                result_dict = dict(evals_log)
             if not self._metrics:
                 report_dict = result_dict
             else:
@@ -49,8 +57,8 @@ if TUNE_LEGACY:
                     report_dict[key] = result_dict[metric]
             return report_dict
 
-        def __call__(self, env):
-            report_dict = self._get_report_dict(env)
+        def after_iteration(self, model, epoch: int, evals_log: Dict):
+            report_dict = self._get_report_dict(evals_log)
             put_queue(lambda: tune.report(**report_dict))
 
     class _TuneCheckpointCallback(_OrigTuneCheckpointCallback):
@@ -59,15 +67,16 @@ if TUNE_LEGACY:
             self._frequency = frequency
 
         @staticmethod
-        def _create_checkpoint(env, filename: str, frequency: int):
-            if env.iteration % frequency > 0:
+        def _create_checkpoint(model, epoch: int, filename: str,
+                               frequency: int):
+            if epoch % frequency > 0:
                 return
-            with tune.checkpoint_dir(step=env.iteration) as checkpoint_dir:
-                env.model.save_model(os.path.join(checkpoint_dir, filename))
+            with tune.checkpoint_dir(step=epoch) as checkpoint_dir:
+                model.save_model(os.path.join(checkpoint_dir, filename))
 
-        def __call__(self, env):
+        def after_iteration(self, model, epoch: int, evals_log: Dict):
             put_queue(lambda: self._create_checkpoint(
-                env, filename=self._filename, frequency=self._frequency))
+                model, epoch, self._filename, self._frequency))
 
     class TuneReportCheckpointCallback(OrigTuneReportCheckpointCallback):
         _checkpoint_callback_cls = _TuneCheckpointCallback
@@ -82,21 +91,21 @@ if TUNE_LEGACY:
                 filename, frequency)
             self._report = self._report_callbacks_cls(metrics)
 
-        def __call__(self, env):
-            self._checkpoint(env)
-            self._report(env)
+        def after_iteration(self, model, epoch: int, evals_log: Dict):
+            self._checkpoint.after_iteration(model, epoch, evals_log)
+            self._report.after_iteration(model, epoch, evals_log)
 
 else:
     # New style callbacks.
     class TuneReportCallback(OrigTuneReportCallback):
-        def __call__(self, env):
-            report_dict = self._get_report_dict(env)
+        def after_iteration(self, model, epoch: int, evals_log: Dict):
+            report_dict = self._get_report_dict(evals_log)
             put_queue(lambda: tune.report(**report_dict))
 
     class _TuneCheckpointCallback(_OrigTuneCheckpointCallback):
-        def __call__(self, env):
+        def after_iteration(self, model, epoch: int, evals_log: Dict):
             put_queue(lambda: self._create_checkpoint(
-                env, filename=self._filename, frequency=self._frequency))
+                model, epoch, self._filename, self._frequency))
 
     class TuneReportCheckpointCallback(OrigTuneReportCheckpointCallback):
         _checkpoint_callback_cls = _TuneCheckpointCallback

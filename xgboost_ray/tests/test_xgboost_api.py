@@ -4,6 +4,7 @@ import unittest
 
 import numpy as np
 import xgboost as xgb
+from xgboost.callback import TrainingCallback
 
 import ray
 
@@ -145,9 +146,12 @@ class XGBoostAPITest(unittest.TestCase):
                 atol=0.1))
 
     def testCallbacks(self):
-        def callback(env):
-            print(f"My rank: {get_actor_rank()}")
-            put_queue(("rank", get_actor_rank()))
+        class _Callback(TrainingCallback):
+            def after_iteration(self, model, epoch, evals_log):
+                print(f"My rank: {get_actor_rank()}")
+                put_queue(("rank", get_actor_rank()))
+
+        callback = _Callback()
 
         additional_results = {}
         train(
