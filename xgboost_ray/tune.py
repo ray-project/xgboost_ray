@@ -30,7 +30,8 @@ except ImportError:
     TUNE_INSTALLED = False
 
 # Todo(krfricke): Remove after next ray core release
-if not hasattr(OrigTuneReportCallback, "_get_report_dict"):
+if not hasattr(OrigTuneReportCallback, "_get_report_dict") or not issubclass(
+        OrigTuneReportCallback, TrainingCallback):
     TUNE_LEGACY = True
 else:
     TUNE_LEGACY = False
