@@ -12,10 +12,17 @@ import numpy as np
 import xgboost as xgb
 
 try:
+    from xgboost.callback import TrainingCallback
+except ImportError:
+    print(f"xgboost_ray requires xgboost>=1.3 to work. Got version "
+          f"{xgb.__version__}. Install latest release with "
+          f"`pip install -U xgboost`.")
+
+try:
     import ray
     from ray import logger
     from ray.services import get_node_ip_address
-    from ray.exceptions import RayActorError
+    from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
     from xgboost_ray.util import Event, Queue
 
@@ -260,14 +267,16 @@ class RayXGBoostActor:
 
         return callback
 
-    @property
     def _save_checkpoint_callback(self):
-        def callback(env):
-            if self.rank == 0 and \
-               env.iteration % self.checkpoint_frequency == 0:
-                put_queue(_Checkpoint(env.iteration, pickle.dumps(env.model)))
+        this = self
 
-        return callback
+        class _SaveInternalCheckpointCallback(TrainingCallback):
+            def after_iteration(self, model, epoch, evals_log):
+                if this.rank == 0 and \
+                   epoch % this.checkpoint_frequency == 0:
+                    put_queue(_Checkpoint(epoch, pickle.dumps(model)))
+
+        return _SaveInternalCheckpointCallback()
 
     def load_data(self, data: RayDMatrix):
         if data in self._data:
@@ -318,7 +327,7 @@ class RayXGBoostActor:
             callbacks = kwargs["callbacks"] or []
         else:
             callbacks = []
-        callbacks.append(self._save_checkpoint_callback)
+        callbacks.append(self._save_checkpoint_callback())
         kwargs["callbacks"] = callbacks
 
         result_dict = {}
@@ -713,7 +722,7 @@ def train(params: Dict,
                 _failed_actor_ranks=start_actor_ranks,
                 **kwargs)
             break
-        except RayActorError:
+        except (RayActorError, RayTaskError):
             if ray_params.elastic_training:
                 alive_actors = sum(1 for a in actors if a is not None)
                 if alive_actors < ray_params.num_actors - \
