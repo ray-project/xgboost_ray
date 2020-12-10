@@ -70,15 +70,15 @@ def _fail_callback(die_lock_file: str,
     return _FailCallback()
 
 
-def _checkpoint_callback(frequency: int = 1, before_iteration=False):
+def _checkpoint_callback(frequency: int = 1, before_iteration_=False):
     class _CheckpointCallback(TrainingCallback):
         def after_iteration(self, model, epoch, evals_log):
             if epoch % frequency == 0:
                 put_queue(model.save_raw())
 
-    if before_iteration:
-        _CheckpointCallback.before_iteration = \
-            _CheckpointCallback.after_iteration
+        def before_iteration(self, model, epoch, evals_log):
+            if before_iteration_:
+                self.after_iteration(model, epoch, evals_log)
 
     return _CheckpointCallback()
 
@@ -227,7 +227,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             self.params,
             RayDMatrix(self.x, self.y),
             callbacks=[
-                _checkpoint_callback(frequency=1, before_iteration=False)
+                _checkpoint_callback(frequency=1, before_iteration_=False)
             ],
             num_boost_round=2,
             ray_params=RayParams(num_actors=2),
@@ -248,8 +248,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             self.params,
             RayDMatrix(self.x, self.y),
             callbacks=[
-                _checkpoint_callback(frequency=1, before_iteration=True),
-                _checkpoint_callback(frequency=1, before_iteration=False)
+                _checkpoint_callback(frequency=1, before_iteration_=True),
+                _checkpoint_callback(frequency=1, before_iteration_=False)
             ],
             num_boost_round=4,
             ray_params=RayParams(num_actors=2),
