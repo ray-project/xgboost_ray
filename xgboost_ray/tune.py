@@ -4,6 +4,8 @@ from typing import Dict, Union, List, OrderedDict
 
 import logging
 
+from xgboost.callback import TrainingCallback
+
 from xgboost_ray.session import put_queue
 
 try:
@@ -35,7 +37,7 @@ else:
 
 if TUNE_LEGACY:
     # Until the next release, keep compatible callbacks here.
-    class TuneReportCallback(OrigTuneReportCallback):
+    class TuneReportCallback(OrigTuneReportCallback, TrainingCallback):
         def _get_report_dict(self, evals_log):
             if isinstance(evals_log, OrderedDict):
                 # xgboost>=1.3
@@ -61,7 +63,8 @@ if TUNE_LEGACY:
             report_dict = self._get_report_dict(evals_log)
             put_queue(lambda: tune.report(**report_dict))
 
-    class _TuneCheckpointCallback(_OrigTuneCheckpointCallback):
+    class _TuneCheckpointCallback(_OrigTuneCheckpointCallback,
+                                  TrainingCallback):
         def __init__(self, filename: str, frequency: int):
             super(_TuneCheckpointCallback, self).__init__(filename)
             self._frequency = frequency
@@ -78,7 +81,8 @@ if TUNE_LEGACY:
             put_queue(lambda: self._create_checkpoint(
                 model, epoch, self._filename, self._frequency))
 
-    class TuneReportCheckpointCallback(OrigTuneReportCheckpointCallback):
+    class TuneReportCheckpointCallback(OrigTuneReportCheckpointCallback,
+                                       TrainingCallback):
         _checkpoint_callback_cls = _TuneCheckpointCallback
         _report_callbacks_cls = TuneReportCallback
 
