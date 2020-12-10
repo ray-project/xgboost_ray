@@ -278,6 +278,11 @@ class RayXGBoostActor:
                    epoch % this.checkpoint_frequency == 0:
                     put_queue(_Checkpoint(epoch, pickle.dumps(model)))
 
+            def after_training(self, model):
+                if this.rank == 0:
+                    put_queue(_Checkpoint(-1, pickle.dumps(model)))
+                return model
+
         return _SaveInternalCheckpointCallback()
 
     def load_data(self, data: RayDMatrix):
@@ -631,17 +636,17 @@ def _train(params: Dict,
     # Stop Rabit process
     _stop_rabit_tracker(rabit_process)
 
+    all_results: List[Dict[str, Any]] = ray.get(training_futures)
+
     # All results should be the same because of Rabit tracking. So we just
     # return the first one.
-    res: Dict[str, Any] = ray.get(training_futures[0])
-    bst = res["bst"]
-    evals_result = res["evals_result"]
+    bst = all_results[0]["bst"]
+    evals_result = all_results[0]["evals_result"]
 
     if callback_returns:
         _additional_results["callback_returns"] = callback_returns
 
-    all_res = ray.get(training_futures)
-    total_n = sum(res["train_n"] or 0 for res in all_res)
+    total_n = sum(res["train_n"] or 0 for res in all_results)
 
     _additional_results["total_n"] = total_n
 
