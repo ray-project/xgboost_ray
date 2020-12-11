@@ -179,6 +179,7 @@ class RayParams:
             we still continue training.
         max_actor_restarts (int): Number of retries when Ray actors fail.
             Defaults to 0 (no retries). Set to -1 for unlimited retries.
+            Ignored when `elastic_training` is set.
         checkpoint_frequency (int): How often to save checkpoints. Defaults
             to ``5`` (every 5th iteration).
     """
@@ -476,7 +477,7 @@ def _shutdown(actors: List[ActorHandle],
                 ray.get(actor.__ray_terminate__.remote())
             except RayActorError:
                 ray.kill(actor)
-        # actors[i] = None
+        actors[i] = None
     if queue:
         queue.shutdown()
     if event:
@@ -722,11 +723,7 @@ def train(params: Dict,
     tries = 0
     checkpoint = _Checkpoint()  # Keep track of latest checkpoint
     current_results = {}  # Keep track of additional results
-    if "_actors" not in kwargs:
-        actors = [None] * ray_params.num_actors  # All active actors
-    else:
-        # Explicit actors for class injection and testing
-        actors = kwargs.pop("_actors")
+    actors = [None] * ray_params.num_actors  # All active actors
     queue = Queue()  # Queue actor
     stop_event = Event()  # Stop event actor
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
@@ -747,8 +744,8 @@ def train(params: Dict,
                 **kwargs)
             break
         except (RayActorError, RayTaskError):
+            alive_actors = sum(1 for a in actors if a is not None)
             if ray_params.elastic_training:
-                alive_actors = sum(1 for a in actors if a is not None)
                 if alive_actors < ray_params.num_actors - \
                    ray_params.max_failed_actors:
                     raise RuntimeError(
@@ -757,11 +754,13 @@ def train(params: Dict,
                         "reached. Shutting down training.")
                 # Do not start new actors
                 start_actor_ranks = set()
-            if tries + 1 <= max_actor_restarts:
+            if tries + 1 <= max_actor_restarts or ray_params.elastic_training:
                 logger.warning(
                     f"A Ray actor died during training. Trying to restart "
                     f"and continue training from last checkpoint "
                     f"(restart {tries + 1} of {max_actor_restarts}). "
+                    f"This will use {alive_actors} existing actors and start "
+                    f"{len(start_actor_ranks)} new actors."
                     f"Sleeping for 10 seconds for cleanup.")
                 time.sleep(5)
                 queue.shutdown()

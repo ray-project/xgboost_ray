@@ -3,6 +3,7 @@ import os
 import shutil
 import tempfile
 import time
+from unittest.mock import patch, DEFAULT
 
 import numpy as np
 import unittest
@@ -116,23 +117,29 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingContinuationKilled(self):
         """This should continue after one actor died."""
-        actors = [None, None]
         additional_results = {}
+        keep_actors = {}
 
-        bst = train(
-            self.params,
-            RayDMatrix(self.x, self.y),
-            callbacks=[_kill_callback(self.die_lock_file)],
-            num_boost_round=20,
-            ray_params=RayParams(max_actor_restarts=1, num_actors=2),
-            additional_results=additional_results,
-            _actors=actors)
+        def keep(actors, *args, **kwargs):
+            keep_actors["actors"] = actors.copy()
+            return DEFAULT
+
+        with patch("xgboost_ray.main._shutdown") as mocked:
+            mocked.side_effect = keep
+            bst = train(
+                self.params,
+                RayDMatrix(self.x, self.y),
+                callbacks=[_kill_callback(self.die_lock_file)],
+                num_boost_round=20,
+                ray_params=RayParams(max_actor_restarts=1, num_actors=2),
+                additional_results=additional_results)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
         print(f"Got correct predictions: {pred_y}")
 
+        actors = keep_actors["actors"]
         # End with two working actors
         self.assertTrue(actors[0])
         self.assertTrue(actors[1])
@@ -142,27 +149,33 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingContinuationElasticKilled(self):
         """This should continue after one actor died."""
-        actors = [None, None]
         additional_results = {}
+        keep_actors = {}
 
-        bst = train(
-            self.params,
-            RayDMatrix(self.x, self.y),
-            callbacks=[_kill_callback(self.die_lock_file)],
-            num_boost_round=20,
-            ray_params=RayParams(
-                max_actor_restarts=1,
-                num_actors=2,
-                elastic_training=True,
-                max_failed_actors=1),
-            additional_results=additional_results,
-            _actors=actors)
+        def keep(actors, *args, **kwargs):
+            keep_actors["actors"] = actors.copy()
+            return DEFAULT
+
+        with patch("xgboost_ray.main._shutdown") as mocked:
+            mocked.side_effect = keep
+            bst = train(
+                self.params,
+                RayDMatrix(self.x, self.y),
+                callbacks=[_kill_callback(self.die_lock_file)],
+                num_boost_round=20,
+                ray_params=RayParams(
+                    max_actor_restarts=1,
+                    num_actors=2,
+                    elastic_training=True,
+                    max_failed_actors=1),
+                additional_results=additional_results)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
         print(f"Got correct predictions: {pred_y}")
 
+        actors = keep_actors["actors"]
         # First actor does not get recreated
         self.assertEqual(actors[0], None)
         self.assertTrue(actors[1])
@@ -172,27 +185,33 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingContinuationElasticFailed(self):
         """This should continue after one actor failed training."""
-        actors = [None, None]
         additional_results = {}
+        keep_actors = {}
 
-        bst = train(
-            self.params,
-            RayDMatrix(self.x, self.y),
-            callbacks=[_fail_callback(self.die_lock_file)],
-            num_boost_round=20,
-            ray_params=RayParams(
-                max_actor_restarts=1,
-                num_actors=2,
-                elastic_training=True,
-                max_failed_actors=1),
-            additional_results=additional_results,
-            _actors=actors)
+        def keep(actors, *args, **kwargs):
+            keep_actors["actors"] = actors.copy()
+            return DEFAULT
+
+        with patch("xgboost_ray.main._shutdown") as mocked:
+            mocked.side_effect = keep
+            bst = train(
+                self.params,
+                RayDMatrix(self.x, self.y),
+                callbacks=[_fail_callback(self.die_lock_file)],
+                num_boost_round=20,
+                ray_params=RayParams(
+                    max_actor_restarts=1,
+                    num_actors=2,
+                    elastic_training=True,
+                    max_failed_actors=1),
+                additional_results=additional_results)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
         print(f"Got correct predictions: {pred_y}")
 
+        actors = keep_actors["actors"]
         # End with two working actors since only the training failed
         self.assertTrue(actors[0])
         self.assertTrue(actors[1])
