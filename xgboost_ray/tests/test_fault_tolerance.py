@@ -30,9 +30,6 @@ def _kill_callback(die_lock_file: str,
             if get_actor_rank() == actor_rank and \
                     epoch == fail_iteration and \
                     not os.path.exists(die_lock_file):
-                # Only die once
-                if os.path.exists(die_lock_file):
-                    return
 
                 # Get PID
                 pid = os.getpid()
@@ -57,9 +54,6 @@ def _fail_callback(die_lock_file: str,
             if get_actor_rank() == actor_rank and \
                epoch == fail_iteration and \
                not os.path.exists(die_lock_file):
-                # Only die once
-                if os.path.exists(die_lock_file):
-                    return
 
                 with open(die_lock_file, "wt") as fp:
                     fp.write("")
@@ -213,9 +207,24 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             train(
                 self.params,
                 RayDMatrix(self.x, self.y),
-                callbacks=[_fail_callback(self.die_lock_file)],
+                callbacks=[_kill_callback(self.die_lock_file)],
                 num_boost_round=20,
                 ray_params=RayParams(max_actor_restarts=0, num_actors=2))
+
+    def testTrainingStopElastic(self):
+        """This should now stop training after one actor died."""
+        # The `train()` function raises a RuntimeError
+        with self.assertRaises(RuntimeError):
+            train(
+                self.params,
+                RayDMatrix(self.x, self.y),
+                callbacks=[_kill_callback(self.die_lock_file)],
+                num_boost_round=20,
+                ray_params=RayParams(
+                    elastic_training=True,
+                    max_failed_actors=0,
+                    max_actor_restarts=1,
+                    num_actors=2))
 
     def testCheckpointContinuationValidity(self):
         """Test that checkpoints are stored and loaded correctly"""

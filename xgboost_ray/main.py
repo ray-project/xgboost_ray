@@ -41,10 +41,14 @@ from xgboost_ray.session import init_session, put_queue, \
 
 
 class RayXGBoostTrainingError(RuntimeError):
+    """Raised from RayXGBoostActor.train() when the local xgb.train function
+    did not complete."""
     pass
 
 
 class RayXGBoostTrainingStopped(RuntimeError):
+    """Raised from RayXGBoostActor.train() when training was deliberately
+    stopped."""
     pass
 
 
@@ -265,16 +269,8 @@ class RayXGBoostActor:
         """Get process PID. Used for checking if still alive"""
         return os.getpid()
 
-    def _stop_training_callback(self):
-        this = self
-
-        class _StopCheckpointCallback(TrainingCallback):
-            if this._stop_event and this._stop_event.is_set():
-                raise xgb.core.EarlyStopException
-
-        return _StopCheckpointCallback()
-
     def _save_checkpoint_callback(self):
+        """Send checkpoints to driver"""
         this = self
 
         class _SaveInternalCheckpointCallback(TrainingCallback):
@@ -340,11 +336,11 @@ class RayXGBoostActor:
         else:
             callbacks = []
         callbacks.append(self._save_checkpoint_callback())
-        callbacks.append(self._stop_training_callback())
         kwargs["callbacks"] = callbacks
 
         result_dict = {}
 
+        # We run xgb.train in a thread to be able to react to the stop event.
         def _train():
             try:
                 with RabitContext(str(id(self)), rabit_args):
@@ -429,6 +425,7 @@ def _handle_queue(queue: Queue, checkpoint: _Checkpoint,
 
 def _get_actor_alive_status(actors: List[ActorHandle],
                             callback: Callable[[ActorHandle], None]):
+    """Loop through all actors. Invoke a callback on dead actors. """
     obj_to_rank = {}
 
     alive = 0
@@ -460,6 +457,8 @@ def _get_actor_alive_status(actors: List[ActorHandle],
                 callback(actors[rank])
     logger.info(f"Actor status: {alive} alive, {dead} dead "
                 f"({alive+dead} total)")
+
+    return alive, dead
 
 
 def _shutdown(actors: List[ActorHandle],
@@ -525,9 +524,6 @@ def _train(params: Dict,
         params["nthread"] = cpus_per_actor
 
     # Create remote actors
-    def create_actor(*args, **kwargs):
-        return _create_actor(*args, **kwargs)
-
     def handle_actor_failure(actor_id):
         rank = _actors.index(actor_id)
         _failed_actor_ranks.add(rank)
@@ -539,7 +535,7 @@ def _train(params: Dict,
             raise RuntimeError(
                 f"Trying to create actor with rank {i}, but it already "
                 f"exists.")
-        actor = create_actor(
+        actor = _create_actor(
             rank=i,
             num_actors=ray_params.num_actors,
             num_cpus_per_actor=cpus_per_actor,
@@ -629,7 +625,10 @@ def _train(params: Dict,
 
     # The inner loop should catch all exceptions
     except Exception as exc:
+        # Stop all other actors from training
         _stop_event.set()
+
+        # Check which actors are still alive
         _get_actor_alive_status(_actors, handle_actor_failure)
 
         # Todo: Try to fetch newer checkpoint, store in `_checkpoint`
