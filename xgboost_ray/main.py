@@ -96,7 +96,14 @@ def _stop_rabit_tracker(rabit_process):
 
 
 class RabitContext:
-    """Context to connect a worker to a rabit tracker"""
+    """This context is used by local training actors to connect to the
+    Rabit tracker.
+
+    Args:
+        actor_id (str): Unique actor ID
+        args (list): Arguments for Rabit initialisation. These are
+            environment variables to configure Rabit clients.
+    """
 
     def __init__(self, actor_id, args):
         self.args = args
@@ -426,6 +433,18 @@ def _trigger_data_load(actor, dtrain, evals):
 
 def _handle_queue(queue: Queue, checkpoint: _Checkpoint,
                   callback_returns: Dict):
+    """Handle results obtained from workers through the remote Queue object.
+
+    Remote actors supply these results via the
+    ``xgboost_ray.session.put_queue()`` function. These can be:
+
+    - Callables. These will be called immediately with no arguments.
+    - ``_Checkpoint`` objects. These will update the latest checkpoint
+      object on the driver.
+    - Any other type. These will be appended to an actor rank-specific
+      ``callback_returns`` dict that will be written to the
+      ``additional_returns`` dict of the :func:`train() <train>` method.
+    """
     while not queue.empty():
         (actor_rank, item) = queue.get()
         if isinstance(item, Callable):
@@ -444,7 +463,7 @@ def _get_actor_alive_status(actors: List[ActorHandle],
     alive = 0
     dead = 0
 
-    for rank, actor in actors.items():
+    for rank, actor in enumerate(actors):
         if actor is None:
             dead += 1
             continue
@@ -507,6 +526,18 @@ def _train(params: Dict,
            _stop_event: Event,
            _failed_actor_ranks: set,
            **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
+    """This is the local train function wrapped by :func:`train() <train>`.
+
+    This function can be thought of one invocation of a multi-actor xgboost
+    training run. It starts the required number of actors, triggers data
+    loading, collects the results, and handles (i.e. registers) actor failures
+    - but it does not handle fault tolerance or general training setup.
+
+    Generally, this function is called one or multiple times by the
+    :func:`train() <train>` function. It is called exactly once if no
+    errors occur. It is called more than once if errors occurred (e.g. an
+    actor died) and failure handling is enabled.
+    """
     _assert_ray_support()
 
     if not ray.is_initialized():
@@ -515,11 +546,15 @@ def _train(params: Dict,
     gpus_per_actor = ray_params.gpus_per_actor
     cpus_per_actor = ray_params.cpus_per_actor
 
+    # Automatically set gpus_per_actor if left at the default value
     if gpus_per_actor == -1:
         gpus_per_actor = 0
         if "tree_method" in params and params["tree_method"].startswith("gpu"):
             gpus_per_actor = 1
 
+    # Automatically set cpus_per_actor if left at the default value
+    # Will be set to the number of cluster CPUs divided by the number of
+    # actors, bounded by the maximum number of CPUs across actors nodes.
     if cpus_per_actor <= 0:
         cluster_cpus = _ray_get_cluster_cpus() or 1
         cpus_per_actor = min(
@@ -535,12 +570,18 @@ def _train(params: Dict,
     else:
         params["nthread"] = cpus_per_actor
 
-    # Create remote actors
+    # This is a callback that handles actor failures.
+    # We identify the rank of the failed actor, add this to a set of
+    # failed actors (which we might want to restart later), and set its
+    # entry in the actor list to None.
     def handle_actor_failure(actor_id):
         rank = _actors.index(actor_id)
         _failed_actor_ranks.add(rank)
         _actors[rank] = None
 
+    # Here we create new actors. In the first invocation of _train(), this
+    # will be all actors. In future invocations, this may be less than
+    # the num_actors setting, depending on the failure mode.
     newly_created = 0
     for i in list(_failed_actor_ranks):
         if _actors[i] is not None:
@@ -555,18 +596,20 @@ def _train(params: Dict,
             resources_per_actor=ray_params.resources_per_actor,
             queue=_queue,
             checkpoint_frequency=ray_params.checkpoint_frequency)
+        # Set actor entry in our list
         _actors[i] = actor
         # Remove from this set so it is not created again
         _failed_actor_ranks.remove(i)
         newly_created += 1
 
-    # Maybe we got a new queue actor
+    # Maybe we got a new Queue actor, so send it to all actors.
     wait_queue = [
         actor.set_queue.remote(_queue) for actor in _actors
         if actor is not None
     ]
     ray.get(wait_queue)
 
+    # Maybe we got a new Event actor, so send it to all actors.
     wait_event = [
         actor.set_stop_event.remote(_stop_event) for actor in _actors
         if actor is not None
@@ -594,26 +637,43 @@ def _train(params: Dict,
 
     logger.info("[RayXGBoost] Starting XGBoost training.")
 
-    # Start tracker
+    # Start Rabit tracker for gradient sharing
     rabit_process, env = _start_rabit_tracker(alive_actors)
     rabit_args = [("%s=%s" % item).encode() for item in env.items()]
 
+    # Load checkpoint if we have one. In that case we need to adjust the
+    # number of training rounds.
     if _checkpoint.value:
         kwargs["xgb_model"] = pickle.loads(_checkpoint.value)
+        if _checkpoint.iteration == -1:
+            # -1 means training already finished.
+            logger.error(
+                f"Trying to load continue from checkpoint, but the checkpoint"
+                f"indicates training already finished. Returning last"
+                f"checkpointed model instead.")
+            return kwargs["xgb_model"], {}, _additional_results
+
         kwargs["num_boost_round"] = kwargs.get("num_boost_round", 10) - \
             _checkpoint.iteration - 1
 
-    # Train
-    training_futures = [
-        actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
-        for actor in _actors if actor is not None
-    ]
-
+    # The callback_returns dict contains actor-rank indexed lists of
+    # results obtained through the `put_queue` function, usually
+    # sent via callbacks.
     callback_returns = _additional_results.get("callback_returns")
     if callback_returns is None:
         callback_returns = [list() for _ in range(len(_actors))]
         _additional_results["callback_returns"] = callback_returns
 
+    # Trigger the train function
+    training_futures = [
+        actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
+        for actor in _actors if actor is not None
+    ]
+
+    # Failure handling loop. Here we wait until all training tasks finished.
+    # If a training task fails, we stop training on the remaining actors,
+    # check which ones are still alive, and raise the error.
+    # The train() wrapper function will then handle the error.
     try:
         not_ready = training_futures
         while not_ready:
@@ -649,9 +709,11 @@ def _train(params: Dict,
 
         raise RayActorError from exc
 
-    # Stop Rabit process
+    # Training is now complete.
+    # Stop Rabit tracking process
     _stop_rabit_tracker(rabit_process)
 
+    # Get all results from all actors.
     all_results: List[Dict[str, Any]] = ray.get(training_futures)
 
     # All results should be the same because of Rabit tracking. So we just
