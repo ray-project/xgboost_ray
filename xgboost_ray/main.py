@@ -432,8 +432,7 @@ def _get_actor_alive_status(actors: List[ActorHandle],
     alive = 0
     dead = 0
 
-    for rank in range(len(actors)):
-        actor = actors[rank]
+    for rank, actor in actors.items():
         if actor is None:
             dead += 1
             continue
