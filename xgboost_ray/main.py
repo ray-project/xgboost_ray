@@ -61,7 +61,19 @@ def _assert_ray_support():
 
 def _start_rabit_tracker(num_workers: int):
     """Start Rabit tracker. The workers connect to this tracker to share
-    their results."""
+    their results.
+
+    The Rabit tracker is the main process that all local workers connect to
+    to share their weights. When one or more actors die, we want to
+    restart the Rabit tracker, too, for two reasons: First we don't want to
+    be potentially stuck with stale connections from old training processes.
+    Second, we might restart training with a different number of actors, and
+    for that we would have to restart the tracker anyway.
+
+    To do this we start the Tracker in its own subprocess with its own PID.
+    We can use this process then to specifically kill/terminate the tracker
+    process in `_stop_rabit_tracker` without touching other functionality.
+    """
     host = get_node_ip_address()
 
     env = {"DMLC_NUM_WORKER": num_workers}
@@ -567,7 +579,7 @@ def _train(params: Dict,
 
     # Split data across workers
     wait_load = []
-    for _, actor in enumerate(_actors):
+    for actor in _actors:
         if actor is None:
             continue
         # If data is already on the node, will not load again
@@ -678,6 +690,25 @@ def train(params: Dict,
     If running inside a Ray Tune session, this function will automatically
     handle results to tune for hyperparameter search.
 
+    Failure handling:
+
+    XGBoost on Ray supports automatic failure handling that can be configured
+    with the :class:`ray_params <RayParams>` argument. If an actor or local
+    training task dies, the Ray actor is marked as dead, and there are
+    three options on how to proceed.
+
+    First, if ``ray_params.elastic_training`` is ``True`` and
+    the number of dead actors is below ``ray_params.max_failed_actors``,
+    training will continue right away with fewer actors. No data will be
+    loaded again and the latest available checkpoint will be used.
+
+    Second, if ``ray_params.elastic_training`` is ``False`` and
+    the number of restarts is below ``ray_params.max_actor_restarts``,
+    Ray will try to schedule the dead actor again, load the data shard
+    on this actor, and then continue training from the latest checkpoint.
+
+    Third, if none of the above is the case, training is aborted.
+
     Args:
         params (Dict): parameter dict passed to ``xgboost.train()``
         dtrain (RayDMatrix): Data object containing the training data.
@@ -742,7 +773,7 @@ def train(params: Dict,
                 _failed_actor_ranks=start_actor_ranks,
                 **kwargs)
             break
-        except (RayActorError, RayTaskError):
+        except (RayActorError, RayTaskError) as exc:
             alive_actors = sum(1 for a in actors if a is not None)
             if ray_params.elastic_training:
                 if alive_actors < ray_params.num_actors - \
@@ -750,7 +781,7 @@ def train(params: Dict,
                     raise RuntimeError(
                         "A Ray actor died during training and the maximum "
                         "number of dead actors in elastic training was "
-                        "reached. Shutting down training.")
+                        "reached. Shutting down training.") from exc
                 # Do not start new actors
                 start_actor_ranks = set()
             if tries + 1 <= max_actor_restarts or ray_params.elastic_training:
@@ -770,7 +801,8 @@ def train(params: Dict,
             else:
                 raise RuntimeError(
                     f"A Ray actor died during training and the maximum number "
-                    f"of retries ({max_actor_restarts}) is exhausted.")
+                    f"of retries ({max_actor_restarts}) is exhausted."
+                ) from exc
             tries += 1
 
     _shutdown(actors=actors, queue=queue, event=stop_event, force=False)
@@ -804,7 +836,7 @@ def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
 
     # Split data across workers
     wait_load = []
-    for _, actor in enumerate(actors):
+    for actor in actors:
         wait_load.extend(_trigger_data_load(actor, data, []))
 
     try:
