@@ -3,6 +3,7 @@ import os
 import shutil
 import tempfile
 import time
+from unittest.mock import patch, DEFAULT
 
 import numpy as np
 import unittest
@@ -20,6 +21,29 @@ def tree_obj(bst: xgb.Booster):
     return [json.loads(j) for j in bst.get_dump(dump_format="json")]
 
 
+def _kill_callback(die_lock_file: str,
+                   actor_rank: int = 0,
+                   fail_iteration: int = 6):
+    class _KillCallback(TrainingCallback):
+        def after_iteration(self, model, epoch, evals_log):
+            if get_actor_rank() == actor_rank:
+                put_queue((epoch, time.time()))
+            if get_actor_rank() == actor_rank and \
+                    epoch == fail_iteration and \
+                    not os.path.exists(die_lock_file):
+
+                # Get PID
+                pid = os.getpid()
+                print(f"Killing process: {pid}")
+                with open(die_lock_file, "wt") as fp:
+                    fp.write("")
+
+                time.sleep(2)
+                os.kill(pid, 9)
+
+    return _KillCallback()
+
+
 def _fail_callback(die_lock_file: str,
                    actor_rank: int = 0,
                    fail_iteration: int = 6):
@@ -31,9 +55,6 @@ def _fail_callback(die_lock_file: str,
             if get_actor_rank() == actor_rank and \
                epoch == fail_iteration and \
                not os.path.exists(die_lock_file):
-                # Only die once
-                if os.path.exists(die_lock_file):
-                    return
 
                 with open(die_lock_file, "wt") as fp:
                     fp.write("")
@@ -44,15 +65,15 @@ def _fail_callback(die_lock_file: str,
     return _FailCallback()
 
 
-def _checkpoint_callback(frequency: int = 1, before_iteration=False):
+def _checkpoint_callback(frequency: int = 1, before_iteration_=False):
     class _CheckpointCallback(TrainingCallback):
         def after_iteration(self, model, epoch, evals_log):
             if epoch % frequency == 0:
                 put_queue(model.save_raw())
 
-    if before_iteration:
-        _CheckpointCallback.before_iteration = \
-            _CheckpointCallback.after_iteration
+        def before_iteration(self, model, epoch, evals_log):
+            if before_iteration_:
+                self.after_iteration(model, epoch, evals_log)
 
     return _CheckpointCallback()
 
@@ -87,25 +108,116 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         if os.path.exists(self.die_lock_file):
             os.remove(self.die_lock_file)
 
-        ray.init(num_cpus=2, num_gpus=0)
+        ray.init(num_cpus=2, num_gpus=0, log_to_driver=True)
 
     def tearDown(self) -> None:
         if os.path.exists(self.tmpdir):
             shutil.rmtree(self.tmpdir)
         ray.shutdown()
 
-    def testTrainingContinuation(self):
+    def testTrainingContinuationKilled(self):
         """This should continue after one actor died."""
-        bst = train(
-            self.params,
-            RayDMatrix(self.x, self.y),
-            callbacks=[_fail_callback(self.die_lock_file)],
-            num_boost_round=20,
-            ray_params=RayParams(max_actor_restarts=1, num_actors=2))
+        additional_results = {}
+        keep_actors = {}
+
+        def keep(actors, *args, **kwargs):
+            keep_actors["actors"] = actors.copy()
+            return DEFAULT
+
+        with patch("xgboost_ray.main._shutdown") as mocked:
+            mocked.side_effect = keep
+            bst = train(
+                self.params,
+                RayDMatrix(self.x, self.y),
+                callbacks=[_kill_callback(self.die_lock_file)],
+                num_boost_round=20,
+                ray_params=RayParams(max_actor_restarts=1, num_actors=2),
+                additional_results=additional_results)
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
+        print(f"Got correct predictions: {pred_y}")
+
+        actors = keep_actors["actors"]
+        # End with two working actors
+        self.assertTrue(actors[0])
+        self.assertTrue(actors[1])
+
+        # Two workers finished, so N=32
+        self.assertEqual(additional_results["total_n"], 32)
+
+    def testTrainingContinuationElasticKilled(self):
+        """This should continue after one actor died."""
+        additional_results = {}
+        keep_actors = {}
+
+        def keep(actors, *args, **kwargs):
+            keep_actors["actors"] = actors.copy()
+            return DEFAULT
+
+        with patch("xgboost_ray.main._shutdown") as mocked:
+            mocked.side_effect = keep
+            bst = train(
+                self.params,
+                RayDMatrix(self.x, self.y),
+                callbacks=[_kill_callback(self.die_lock_file)],
+                num_boost_round=20,
+                ray_params=RayParams(
+                    max_actor_restarts=1,
+                    num_actors=2,
+                    elastic_training=True,
+                    max_failed_actors=1),
+                additional_results=additional_results)
+
+        x_mat = xgb.DMatrix(self.x)
+        pred_y = bst.predict(x_mat)
+        self.assertSequenceEqual(list(self.y), list(pred_y))
+        print(f"Got correct predictions: {pred_y}")
+
+        actors = keep_actors["actors"]
+        # First actor does not get recreated
+        self.assertEqual(actors[0], None)
+        self.assertTrue(actors[1])
+
+        # Only one worker finished, so n=16
+        self.assertEqual(additional_results["total_n"], 16)
+
+    def testTrainingContinuationElasticFailed(self):
+        """This should continue after one actor failed training."""
+        additional_results = {}
+        keep_actors = {}
+
+        def keep(actors, *args, **kwargs):
+            keep_actors["actors"] = actors.copy()
+            return DEFAULT
+
+        with patch("xgboost_ray.main._shutdown") as mocked:
+            mocked.side_effect = keep
+            bst = train(
+                self.params,
+                RayDMatrix(self.x, self.y),
+                callbacks=[_fail_callback(self.die_lock_file)],
+                num_boost_round=20,
+                ray_params=RayParams(
+                    max_actor_restarts=1,
+                    num_actors=2,
+                    elastic_training=True,
+                    max_failed_actors=1),
+                additional_results=additional_results)
+
+        x_mat = xgb.DMatrix(self.x)
+        pred_y = bst.predict(x_mat)
+        self.assertSequenceEqual(list(self.y), list(pred_y))
+        print(f"Got correct predictions: {pred_y}")
+
+        actors = keep_actors["actors"]
+        # End with two working actors since only the training failed
+        self.assertTrue(actors[0])
+        self.assertTrue(actors[1])
+
+        # Two workers finished, so n=32
+        self.assertEqual(additional_results["total_n"], 32)
 
     def testTrainingStop(self):
         """This should now stop training after one actor died."""
@@ -114,9 +226,24 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             train(
                 self.params,
                 RayDMatrix(self.x, self.y),
-                callbacks=[_fail_callback(self.die_lock_file)],
+                callbacks=[_kill_callback(self.die_lock_file)],
                 num_boost_round=20,
                 ray_params=RayParams(max_actor_restarts=0, num_actors=2))
+
+    def testTrainingStopElastic(self):
+        """This should now stop training after one actor died."""
+        # The `train()` function raises a RuntimeError
+        with self.assertRaises(RuntimeError):
+            train(
+                self.params,
+                RayDMatrix(self.x, self.y),
+                callbacks=[_kill_callback(self.die_lock_file)],
+                num_boost_round=20,
+                ray_params=RayParams(
+                    elastic_training=True,
+                    max_failed_actors=0,
+                    max_actor_restarts=1,
+                    num_actors=2))
 
     def testCheckpointContinuationValidity(self):
         """Test that checkpoints are stored and loaded correctly"""
@@ -127,7 +254,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             self.params,
             RayDMatrix(self.x, self.y),
             callbacks=[
-                _checkpoint_callback(frequency=1, before_iteration=False)
+                _checkpoint_callback(frequency=1, before_iteration_=False)
             ],
             num_boost_round=2,
             ray_params=RayParams(num_actors=2),
@@ -148,8 +275,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             self.params,
             RayDMatrix(self.x, self.y),
             callbacks=[
-                _checkpoint_callback(frequency=1, before_iteration=True),
-                _checkpoint_callback(frequency=1, before_iteration=False)
+                _checkpoint_callback(frequency=1, before_iteration_=True),
+                _checkpoint_callback(frequency=1, before_iteration_=False)
             ],
             num_boost_round=4,
             ray_params=RayParams(num_actors=2),

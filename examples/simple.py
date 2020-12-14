@@ -3,6 +3,8 @@ import argparse
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
 
+import ray
+
 from xgboost_ray import RayDMatrix, train, RayParams
 
 
@@ -60,12 +62,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-actors",
         type=int,
-        default=1,
+        default=4,
         help="Sets number of xgboost workers to use.")
+    parser.add_argument(
+        "--smoke-test", action="store_true", default=False, help="gpu")
 
     args, _ = parser.parse_known_args()
 
-    import ray
-    ray.init(address=args.address)
+    if args.smoke_test:
+        ray.init(num_cpus=args.num_actors)
+    else:
+        ray.init(address=args.address)
 
     main(args.cpus_per_actor, args.num_actors)
