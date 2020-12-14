@@ -152,7 +152,11 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             self._testMatrixCreation(dataset, "label", distributed=True)
 
     def testDetectDistributed(self):
-        from ray.util import data as ml_data
+        try:
+            from ray.util import data as ml_data
+        except ImportError:
+            self.skipTest("MLDataset not available in current ray version.")
+            return
 
         with tempfile.TemporaryDirectory() as dir:
             data_file = os.path.join(dir, "file.parquet")
