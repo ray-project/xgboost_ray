@@ -837,6 +837,7 @@ def train(params: Dict,
             break
         except (RayActorError, RayTaskError) as exc:
             alive_actors = sum(1 for a in actors if a is not None)
+            start_again = False
             if ray_params.elastic_training:
                 if alive_actors < ray_params.num_actors - \
                    ray_params.max_failed_actors:
@@ -845,15 +846,26 @@ def train(params: Dict,
                         "number of dead actors in elastic training was "
                         "reached. Shutting down training.") from exc
                 # Do not start new actors
-                start_actor_ranks = set()
-            if tries + 1 <= max_actor_restarts or ray_params.elastic_training:
+                start_actor_ranks.clear()
+                logger.warning(
+                    f"A Ray actor died during training. Trying to continue "
+                    f"training on the remaining actors. "
+                    f"This will use {alive_actors} existing actors and start "
+                    f"{len(start_actor_ranks)} new actors. "
+                    f"Sleeping for 10 seconds for cleanup.")
+                start_again = True
+
+            if tries + 1 <= max_actor_restarts:
                 logger.warning(
                     f"A Ray actor died during training. Trying to restart "
                     f"and continue training from last checkpoint "
                     f"(restart {tries + 1} of {max_actor_restarts}). "
                     f"This will use {alive_actors} existing actors and start "
-                    f"{len(start_actor_ranks)} new actors."
+                    f"{len(start_actor_ranks)} new actors. "
                     f"Sleeping for 10 seconds for cleanup.")
+                start_again = True
+
+            if start_again:
                 time.sleep(5)
                 queue.shutdown()
                 stop_event.shutdown()
