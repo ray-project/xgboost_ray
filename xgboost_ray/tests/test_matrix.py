@@ -130,7 +130,11 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             self._testMatrixCreation([data_file_1, data_file_2], "label")
 
     def testFromMLDataset(self):
-        from ray.util import data as ml_data
+        try:
+            from ray.util import data as ml_data
+        except ImportError:
+            self.skipTest("MLDataset not available in current Ray version.")
+            return
 
         with tempfile.TemporaryDirectory() as dir:
             data_file_1 = os.path.join(dir, "data_1.parquet")
@@ -155,7 +159,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         try:
             from ray.util import data as ml_data
         except ImportError:
-            self.skipTest("MLDataset not available in current ray version.")
+            self.skipTest("MLDataset not available in current Ray version.")
             return
 
         with tempfile.TemporaryDirectory() as dir:
