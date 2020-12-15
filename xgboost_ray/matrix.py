@@ -16,9 +16,18 @@ import pandas as pd
 import os
 
 import ray
+
+try:
+    from ray.util.data import MLDataset
+except ImportError:
+
+    class MLDataset:
+        pass
+
+
 from xgboost.core import DataIter
 
-Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series]
+Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series, MLDataset]
 
 
 def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
@@ -257,6 +266,21 @@ class _RayDMatrixLoader:
             local_df = pd.read_parquet(data, **self.kwargs)
             return self._load_data_pandas(local_df)
 
+    def _load_data_ml_dataset(self, data: MLDataset, indices: List[int]):
+        # Shards can have multiple items, all of which will be DataFrames
+        shards: List[pd.DataFrame] = [
+            pd.concat(data.get_shard(i), copy=False) for i in indices
+        ]
+
+        # Concat all shards
+        local_df = pd.concat(shards, copy=False)
+
+        if self.ignore:
+            local_df = local_df[local_df.columns.difference(self.ignore)]
+
+        x, y, w, b, ll, lu = self._split_dataframe(local_df)
+        return x, y, w, b, ll, lu
+
     def load_data(self,
                   num_actors: int,
                   sharding: RayShardingMode,
@@ -296,6 +320,9 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
             x, y, w, b, ll, lu = self._load_data_numpy(self.data)
         elif isinstance(self.data, (pd.DataFrame, pd.Series)):
             x, y, w, b, ll, lu = self._load_data_pandas(self.data)
+        elif isinstance(self.data, MLDataset):
+            x, y, w, b, ll, lu = self._load_data_ml_dataset(
+                self.data, indices=list(range(0, self.data.num_shards())))
         elif self.filetype == RayFileType.CSV:
             x, y, w, b, ll, lu = self._load_data_csv(self.data)
         elif self.filetype == RayFileType.PARQUET:
@@ -370,7 +397,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 print(f"INVALID: {self.data}")
                 invalid_data = True
 
-        if not isinstance(self.data, Iterable) or invalid_data:
+        if not isinstance(self.data, (Iterable, MLDataset)) or invalid_data:
             raise ValueError(
                 f"Distributed data loading only works with already "
                 f"distributed datasets. These should be specified through a "
@@ -386,18 +413,28 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 f"\nFIX THIS by passing a string indicating the label "
                 f"column of the dataset as the `label` argument.")
 
-        # Shard input sources
-        input_sources = list(self.data)
-        n = len(input_sources)
+        if isinstance(self.data, MLDataset):
+            indices = _get_sharding_indices(sharding, rank, num_actors,
+                                            self.data.num_shards())
+            local_input_sources = []
+        else:
+            # Shard input sources
+            input_sources = list(self.data)
+            n = len(input_sources)
 
-        # Get files this worker should load
-        indices = _get_sharding_indices(sharding, rank, num_actors, n)
-        local_input_sources = [input_sources[i] for i in indices]
+            # Get files this worker should load
+            indices = _get_sharding_indices(sharding, rank, num_actors, n)
+            local_input_sources = [input_sources[i] for i in indices]
 
-        if self.filetype == RayFileType.CSV:
+        if isinstance(self.data, MLDataset):
+            x, y, w, b, ll, lu = self._load_data_ml_dataset(self.data, indices)
+        elif self.filetype == RayFileType.CSV:
             x, y, w, b, ll, lu = self._load_data_csv(local_input_sources)
         elif self.filetype == RayFileType.PARQUET:
             x, y, w, b, ll, lu = self._load_data_parquet(local_input_sources)
+        elif self.filetype == RayFileType.ML_DATASET:
+            x, y, w, b, ll, lu = self._load_data_ml_dataset(
+                local_input_sources)
         else:
             raise ValueError(
                 "Invalid data source type: {} with FileType: {} for a "
@@ -662,6 +699,9 @@ def _can_load_distributed(source: Data) -> bool:
     """Returns True if it might be possible to use distributed data loading"""
     if isinstance(source, (int, float, bool)):
         return False
+    elif isinstance(source, MLDataset):
+        # MLDataset is distributed already
+        return True
     elif isinstance(source, str):
         # Strings should point to files or URLs
         return True
@@ -682,6 +722,8 @@ def _detect_distributed(source: Data) -> bool:
     """Returns True if we should try to use distributed data loading"""
     if not _can_load_distributed(source):
         return False
+    if isinstance(source, MLDataset):
+        return True
     if isinstance(source, Iterable) and not isinstance(source, str) and \
        not (isinstance(source, Sequence) and isinstance(source[0], str)):
         # This is an iterable but not a Sequence of strings, and not a
