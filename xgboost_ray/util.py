@@ -1,7 +1,9 @@
+from typing import Dict
+
 import ray
 import asyncio
 
-from ray.util.queue import Queue as RayQueue
+from ray.util.queue import Queue as RayQueue, _QueueActor
 
 
 @ray.remote
@@ -20,8 +22,8 @@ class _EventActor:
 
 
 class Event:
-    def __init__(self):
-        self.actor = _EventActor.remote()
+    def __init__(self, actor_options: Dict = {}):
+        self.actor = _EventActor.options(**actor_options).remote()
 
     def set(self):
         self.actor.set.remote()
@@ -37,8 +39,12 @@ class Event:
             ray.kill(self.actor)
         self.actor = None
 
-
+# TODO: Propogate this into RayQueue.
 class Queue(RayQueue):
+    def __init__(self, maxsize: int = 0, actor_options: Dict = {}) -> None:
+        self.maxsize = maxsize
+        self.actor = _QueueActor.options(**actor_options).remote(self.maxsize)
+
     def shutdown(self):
         if self.actor:
             ray.kill(self.actor)

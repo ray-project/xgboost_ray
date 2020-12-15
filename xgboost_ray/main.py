@@ -10,6 +10,8 @@ import time
 import numpy as np
 
 import xgboost as xgb
+from ray.util import placement_group
+from ray.util.placement_group import PlacementGroup, remove_placement_group
 from xgboost.core import XGBoostError
 
 try:
@@ -411,13 +413,15 @@ def _create_actor(rank: int,
                   num_cpus_per_actor: int,
                   num_gpus_per_actor: int,
                   resources_per_actor: Optional[Dict] = None,
+                  placement_group: Optional[PlacementGroup] = None,
                   queue: Optional[Queue] = None,
                   checkpoint_frequency: int = 5) -> ActorHandle:
 
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
-        resources=resources_per_actor).remote(
+        resources=resources_per_actor,
+        placement_group=placement_group).remote(
             rank=rank,
             num_actors=num_actors,
             queue=queue,
@@ -495,6 +499,7 @@ def _get_actor_alive_status(actors: List[ActorHandle],
 def _shutdown(actors: List[ActorHandle],
               queue: Optional[Queue] = None,
               event: Optional[Event] = None,
+              placement_group: Optional[PlacementGroup] = None,
               force: bool = False):
     for i in range(len(actors)):
         actor = actors[i]
@@ -512,6 +517,36 @@ def _shutdown(actors: List[ActorHandle],
         queue.shutdown()
     if event:
         event.shutdown()
+    if placement_group:
+        remove_placement_group(placement_group)
+
+def _create_communication_processes():
+    # Create Queue and Event actors and make sure to colocate with driver node.
+    node_ip = ray.services.get_node_ip_address()
+    # Have to explicitly set num_cpus to 0.
+    placement_option = {"num_cpus": 0, "resources": {f"node:{node_ip}": 0.01}}
+    queue = Queue(actor_options=placement_option)  # Queue actor
+    stop_event = Event(actor_options=placement_option)  # Stop event actor
+    return queue, stop_event
+
+def _create_placement_group(cpus_per_actor, gpus_per_actor,
+                            resources_per_actor, num_actors):
+    resources_per_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
+    extra_resources_per_bundle = {} if resources_per_actor is None else \
+        resources_per_actor
+    # Create placement group for training worker colocation.
+    bundles = [{**resources_per_bundle, **extra_resources_per_bundle} for _ in range(num_actors)]
+    pg = placement_group(bundles, strategy="PACK")
+    # Wait for placement group to get created.
+    logger.debug("Waiting for placement group to start.")
+    ready = ray.wait([pg.ready()], timeout=100)
+    if ready:
+        logger.debug("Placement group has started.")
+    else:
+        raise TimeoutError("Placement group creation timed out. Make sure "
+                           "your cluster either has enough resources or use "
+                           "an autoscaling cluster.")
+    return pg
 
 
 def _train(params: Dict,
@@ -519,11 +554,14 @@ def _train(params: Dict,
            *args,
            evals=(),
            ray_params: RayParams,
+           cpus_per_actor: int,
+           gpus_per_actor: int,
            _checkpoint: _Checkpoint,
            _additional_results: Dict,
            _actors: List,
            _queue: Queue,
            _stop_event: Event,
+           _placement_group: PlacementGroup,
            _failed_actor_ranks: set,
            **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
     """This is the local train function wrapped by :func:`train() <train>`.
@@ -538,29 +576,6 @@ def _train(params: Dict,
     errors occur. It is called more than once if errors occurred (e.g. an
     actor died) and failure handling is enabled.
     """
-    _assert_ray_support()
-
-    if not ray.is_initialized():
-        ray.init()
-
-    gpus_per_actor = ray_params.gpus_per_actor
-    cpus_per_actor = ray_params.cpus_per_actor
-
-    # Automatically set gpus_per_actor if left at the default value
-    if gpus_per_actor == -1:
-        gpus_per_actor = 0
-        if "tree_method" in params and params["tree_method"].startswith("gpu"):
-            gpus_per_actor = 1
-
-    # Automatically set cpus_per_actor if left at the default value
-    # Will be set to the number of cluster CPUs divided by the number of
-    # actors, bounded by the maximum number of CPUs across actors nodes.
-    if cpus_per_actor <= 0:
-        cluster_cpus = _ray_get_cluster_cpus() or 1
-        cpus_per_actor = min(
-            int(_get_max_node_cpus() or 1),
-            int(cluster_cpus // ray_params.num_actors))
-
     if "nthread" in params:
         if params["nthread"] > cpus_per_actor:
             raise ValueError(
@@ -594,6 +609,7 @@ def _train(params: Dict,
             num_cpus_per_actor=cpus_per_actor,
             num_gpus_per_actor=gpus_per_actor,
             resources_per_actor=ray_params.resources_per_actor,
+            placement_group=_placement_group,
             queue=_queue,
             checkpoint_frequency=ray_params.checkpoint_frequency)
         # Set actor entry in our list
@@ -733,7 +749,6 @@ def _train(params: Dict,
 
     return bst, evals_result, _additional_results
 
-
 def train(params: Dict,
           dtrain: RayDMatrix,
           *args,
@@ -800,6 +815,27 @@ def train(params: Dict,
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(
                 type(dtrain)))
 
+    if not ray.is_initialized():
+        ray.init()
+
+    gpus_per_actor = ray_params.gpus_per_actor
+    cpus_per_actor = ray_params.cpus_per_actor
+
+    # Automatically set gpus_per_actor if left at the default value
+    if gpus_per_actor == -1:
+        gpus_per_actor = 0
+        if "tree_method" in params and params["tree_method"].startswith("gpu"):
+            gpus_per_actor = 1
+
+    # Automatically set cpus_per_actor if left at the default value
+    # Will be set to the number of cluster CPUs divided by the number of
+    # actors, bounded by the maximum number of CPUs across actors nodes.
+    if cpus_per_actor <= 0:
+        cluster_cpus = _ray_get_cluster_cpus() or 1
+        cpus_per_actor = min(
+            int(_get_max_node_cpus() or 1),
+            int(cluster_cpus // ray_params.num_actors))
+
     _try_add_tune_callback(kwargs)
 
     if not dtrain.loaded and not dtrain.distributed:
@@ -816,8 +852,14 @@ def train(params: Dict,
     checkpoint = _Checkpoint()  # Keep track of latest checkpoint
     current_results = {}  # Keep track of additional results
     actors = [None] * ray_params.num_actors  # All active actors
-    queue = Queue()  # Queue actor
-    stop_event = Event()  # Stop event actor
+
+    # Create the Queue and Event actors.
+    queue, stop_event = _create_communication_processes()
+
+    pg = _create_placement_group(cpus_per_actor, gpus_per_actor,
+                                 ray_params.resources_per_actor,
+                                 ray_params.num_actors)
+
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
     while tries <= max_actor_restarts:
         try:
@@ -827,11 +869,14 @@ def train(params: Dict,
                 *args,
                 evals=evals,
                 ray_params=ray_params,
+                cpus_per_actor=cpus_per_actor,
+                gpus_per_actor=gpus_per_actor,
                 _checkpoint=checkpoint,
                 _additional_results=current_results,
                 _actors=actors,
                 _queue=queue,
                 _stop_event=stop_event,
+                _placement_group=pg,
                 _failed_actor_ranks=start_actor_ranks,
                 **kwargs)
             break
@@ -869,9 +914,11 @@ def train(params: Dict,
                 time.sleep(5)
                 queue.shutdown()
                 stop_event.shutdown()
+                #remove_placement_group(pg)
                 time.sleep(5)
-                queue = Queue()
-                stop_event = Event()
+                queue, stop_event = _create_communication_processes()
+                # pg = _create_placement_group(cpus_per_actor, gpus_per_actor,
+                #                              resources_per_actor=ray_params.resources_per_actor, num_actors=alive_actors+len(start_actor_ranks))
             else:
                 raise RuntimeError(
                     f"A Ray actor died during training and the maximum number "
@@ -879,7 +926,8 @@ def train(params: Dict,
                 ) from exc
             tries += 1
 
-    _shutdown(actors=actors, queue=queue, event=stop_event, force=False)
+    _shutdown(actors=actors, queue=queue, event=stop_event,
+              placement_group=pg, force=False)
 
     if isinstance(evals_result, dict):
         evals_result.update(train_evals_result)
