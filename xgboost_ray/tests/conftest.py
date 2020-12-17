@@ -14,6 +14,7 @@ def get_default_fixure_system_config():
     }
     return system_config
 
+
 def get_default_fixture_ray_kwargs():
     system_config = get_default_fixure_system_config()
     ray_kwargs = {
@@ -22,6 +23,7 @@ def get_default_fixture_ray_kwargs():
         "_system_config": system_config,
     }
     return ray_kwargs
+
 
 @contextmanager
 def _ray_start_cluster(**kwargs):
