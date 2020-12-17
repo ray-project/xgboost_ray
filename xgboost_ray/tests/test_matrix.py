@@ -77,6 +77,39 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         in_df["label"] = self.y
         self._testMatrixCreation(in_df, "label")
 
+    def testFromModinDfDf(self):
+        try:
+            from modin.pandas import DataFrame, Series
+        except ImportError:
+            self.skipTest("Modin not installed.")
+            return
+
+        in_x = DataFrame(self.x)
+        in_y = DataFrame(self.y)
+        self._testMatrixCreation(in_x, in_y)
+
+    def testFromModinDfSeries(self):
+        try:
+            from modin.pandas import DataFrame, Series
+        except ImportError:
+            self.skipTest("Modin not installed.")
+            return
+
+        in_x = DataFrame(self.x)
+        in_y = Series(self.y)
+        self._testMatrixCreation(in_x, in_y)
+
+    def testFromModinDfString(self):
+        try:
+            from modin.pandas import DataFrame, Series
+        except ImportError:
+            self.skipTest("Modin not installed.")
+            return
+
+        in_df = DataFrame(self.x)
+        in_df["label"] = self.y
+        self._testMatrixCreation(in_df, "label")
+
     def testFromCSVString(self):
         with tempfile.TemporaryDirectory() as dir:
             data_file = os.path.join(dir, "data.csv")
