@@ -15,6 +15,7 @@ class _MockQueueActor(_QueueActor):
     def get_node_id(self):
         return ray.state.current_node_id()
 
+
 class _MockEventActor(_EventActor):
     def get_node_id(self):
         return ray.state.current_node_id()
@@ -24,11 +25,11 @@ class TestColocation:
     def setup_method(self):
         repeat = 8  # Repeat data a couple of times for stability
         self.x = np.array([
-                         [1, 0, 0, 0],  # Feature 0 -> Label 0
-                         [0, 1, 0, 0],  # Feature 1 -> Label 1
-                         [0, 0, 1, 1],  # Feature 2+3 -> Label 0
-                         [0, 0, 1, 0],  # Feature 2+!3 -> Label 1
-                     ] * repeat)
+            [1, 0, 0, 0],  # Feature 0 -> Label 0
+            [0, 1, 0, 0],  # Feature 1 -> Label 1
+            [0, 0, 1, 1],  # Feature 2+3 -> Label 0
+            [0, 0, 1, 0],  # Feature 2+!3 -> Label 1
+        ] * repeat)
         self.y = np.array([0, 1, 0, 1] * repeat)
 
         self.params = {
@@ -56,7 +57,7 @@ class TestColocation:
     @patch("xgboost_ray.util._QueueActor", _MockQueueActor)
     @patch("xgboost_ray.util._EventActor", _MockEventActor)
     def test_communication_colocation(self, ray_start_cluster):
-        # Make sure that the Queue and Event actors are colocated with the driver.
+        # Make sure that Queue and Event actors are colocated with the driver.
         cluster = ray_start_cluster
         cluster.add_node(num_cpus=3)
         cluster.add_node(num_cpus=3)
@@ -68,21 +69,22 @@ class TestColocation:
         assert len(ray.state.node_ids()) == 2
         assert local_node in ray.state.node_ids()
 
-
         def _mock_train(*args, _queue, _stop_event, **kwargs):
-            assert ray.get(
-                _queue.actor.get_node_id.remote()) == ray.state.current_node_id()
+            assert ray.get(_queue.actor.get_node_id.remote()
+                           ) == ray.state.current_node_id()
             assert ray.get(
                 _stop_event.actor.get_node_id.remote()) == \
-                   ray.state.current_node_id()
-            return _train(*args, _queue=_queue, _stop_event=_stop_event, **kwargs)
+                ray.state.current_node_id()
+            return _train(
+                *args, _queue=_queue, _stop_event=_stop_event, **kwargs)
 
         with patch("xgboost_ray.main._train", _mock_train):
-            bst = train(
+            train(
                 self.params,
                 RayDMatrix(self.x, self.y),
-                callbacks=[_kill_callback(self.die_lock_file,
-                                          fail_iteration=1)],
+                callbacks=[
+                    _kill_callback(self.die_lock_file, fail_iteration=1)
+                ],
                 num_boost_round=2,
                 ray_params=RayParams(max_actor_restarts=1, num_actors=6))
 

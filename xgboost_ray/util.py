@@ -3,7 +3,7 @@ from typing import Dict
 import ray
 import asyncio
 
-from ray.util.queue import Queue as RayQueue, _QueueActor, Empty, Full
+from ray.util.queue import Queue as RayQueue, Empty, Full
 
 
 class _EventActor:
@@ -38,9 +38,11 @@ class Event:
             ray.kill(self.actor)
         self.actor = None
 
+
 # Remove after Ray 1.2 release.
 if getattr(RayQueue, "shutdown", None) is not None:
     Queue = RayQueue
+    from ray.util.queue import _QueueActor
 else:
     # Have to copy the class here so that we can subclass this for mocking.
     # If we have the @ray.remote decorator, then we can't subclass it.

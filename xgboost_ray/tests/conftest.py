@@ -1,2 +1,1 @@
-import pytest
-from ray.tests.conftest import ray_start_cluster
+from ray.tests.conftest import ray_start_cluster  # noqa: F401

@@ -513,6 +513,7 @@ def _shutdown(actors: List[ActorHandle],
     if event:
         event.shutdown()
 
+
 def _create_communication_processes():
     # Create Queue and Event actors and make sure to colocate with driver node.
     node_ip = ray.services.get_node_ip_address()
@@ -521,6 +522,7 @@ def _create_communication_processes():
     queue = Queue(actor_options=placement_option)  # Queue actor
     stop_event = Event(actor_options=placement_option)  # Stop event actor
     return queue, stop_event
+
 
 def _train(params: Dict,
            dtrain: RayDMatrix,
