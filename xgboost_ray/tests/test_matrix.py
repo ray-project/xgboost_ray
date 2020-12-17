@@ -189,12 +189,6 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             self._testMatrixCreation(dataset, "label", distributed=True)
 
     def testDetectDistributed(self):
-        try:
-            from ray.util import data as ml_data
-        except ImportError:
-            self.skipTest("MLDataset not available in current Ray version.")
-            return
-
         with tempfile.TemporaryDirectory() as dir:
             data_file = os.path.join(dir, "file.parquet")
 
@@ -209,9 +203,14 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             mat = RayDMatrix([data_file] * 3, lazy=True)
             self.assertTrue(mat.distributed)
 
-            mat = RayDMatrix(
-                ml_data.read_parquet(data_file, num_shards=1), lazy=True)
-            self.assertTrue(mat.distributed)
+            try:
+                from ray.util import data as ml_data
+                mat = RayDMatrix(
+                    ml_data.read_parquet(data_file, num_shards=1), lazy=True)
+                self.assertTrue(mat.distributed)
+            except ImportError:
+                print("MLDataset not available in current Ray version. "
+                      "Skipping part of test.")
 
 
 if __name__ == "__main__":
