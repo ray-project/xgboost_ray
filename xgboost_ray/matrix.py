@@ -17,10 +17,12 @@ import os
 
 import ray
 
+from xgboost_ray.util import Unavailable
+
 try:
     from ray.util.data import MLDataset
 except ImportError:
-    MLDataset = object
+    MLDataset = Unavailable
 
 try:
     import modin  # noqa: F401

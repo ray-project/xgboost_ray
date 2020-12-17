@@ -4,6 +4,13 @@ import asyncio
 from ray.util.queue import Queue as RayQueue
 
 
+class Unavailable:
+    """No object should be instance of this class"""
+
+    def __init__(self):
+        raise RuntimeError("This class should never be instantiated.")
+
+
 @ray.remote
 class _EventActor:
     def __init__(self):
