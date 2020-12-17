@@ -79,7 +79,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testFromModinDfDf(self):
         try:
-            from modin.pandas import DataFrame, Series
+            from modin.pandas import DataFrame
         except ImportError:
             self.skipTest("Modin not installed.")
             return
@@ -101,7 +101,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testFromModinDfString(self):
         try:
-            from modin.pandas import DataFrame, Series
+            from modin.pandas import DataFrame
         except ImportError:
             self.skipTest("Modin not installed.")
             return

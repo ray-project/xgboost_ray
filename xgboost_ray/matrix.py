@@ -20,10 +20,7 @@ import ray
 try:
     from ray.util.data import MLDataset
 except ImportError:
-
-    class MLDataset:
-        pass
-
+    MLDataset = object
 
 from xgboost.core import DataIter
 
@@ -432,9 +429,6 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             x, y, w, b, ll, lu = self._load_data_csv(local_input_sources)
         elif self.filetype == RayFileType.PARQUET:
             x, y, w, b, ll, lu = self._load_data_parquet(local_input_sources)
-        elif self.filetype == RayFileType.ML_DATASET:
-            x, y, w, b, ll, lu = self._load_data_ml_dataset(
-                local_input_sources)
         else:
             raise ValueError(
                 "Invalid data source type: {} with FileType: {} for a "
