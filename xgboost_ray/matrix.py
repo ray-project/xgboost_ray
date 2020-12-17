@@ -22,6 +22,12 @@ try:
 except ImportError:
     MLDataset = object
 
+try:
+    import modin  # noqa: F401
+    MODIN_INSTALLED = True
+except ImportError:
+    MODIN_INSTALLED = False
+
 from xgboost.core import DataIter
 
 Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series, MLDataset]
@@ -31,6 +37,20 @@ def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
     if any(df is None for df in dfs):
         return None
     return pd.concat(dfs, ignore_index=True, copy=False)
+
+
+def _is_modin_df(df):
+    if not MODIN_INSTALLED:
+        return False
+    from modin.pandas.dataframe import DataFrame as ModinDataFrame
+    return isinstance(df, ModinDataFrame)
+
+
+def _is_modin_series(df):
+    if not MODIN_INSTALLED:
+        return False
+    from modin.pandas.dataframe import Series as ModinSeries
+    return isinstance(df, ModinSeries)
 
 
 class RayFileType(Enum):
@@ -171,6 +191,10 @@ class _RayDMatrixLoader:
         elif column is not None:
             if isinstance(column, pd.DataFrame):
                 col = pd.Series(column.squeeze())
+            elif _is_modin_df(column):
+                col = pd.Series(column._to_pandas().squeeze())
+            elif _is_modin_series(column):
+                col = column._to_pandas()
             elif not isinstance(column, pd.Series):
                 col = pd.Series(column)
             else:
@@ -230,6 +254,20 @@ class _RayDMatrixLoader:
 
     def _load_data_pandas(self, data: Data):
         local_df = data
+
+        if self.ignore:
+            local_df = local_df[local_df.columns.difference(self.ignore)]
+
+        x, y, w, b, ll, lu = self._split_dataframe(local_df)
+        return x, y, w, b, ll, lu
+
+    def _load_data_modin(self, data: Data,
+                         indices: Optional[List[int]] = None):
+        local_df = data
+        if indices:
+            local_df = local_df.iloc(indices)
+
+        local_df = local_df._to_pandas()
 
         if self.ignore:
             local_df = local_df[local_df.columns.difference(self.ignore)]
@@ -303,7 +341,8 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
 
         if self.label is not None and not isinstance(self.label, str) and \
            not (isinstance(self.data, pd.DataFrame) and
-                isinstance(self.label, pd.Series)):
+                isinstance(self.label, pd.Series)) and \
+           not (_is_modin_df(self.data) and _is_modin_series(self.label)):
             if type(self.data) != type(self.label):  # noqa: E721
                 raise ValueError(
                     "The passed `data` and `label` types are not compatible."
@@ -317,6 +356,8 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
             x, y, w, b, ll, lu = self._load_data_numpy(self.data)
         elif isinstance(self.data, (pd.DataFrame, pd.Series)):
             x, y, w, b, ll, lu = self._load_data_pandas(self.data)
+        elif _is_modin_df(self.data) or _is_modin_series(self.data):
+            x, y, w, b, ll, lu = self._load_data_modin(self.data)
         elif isinstance(self.data, MLDataset):
             x, y, w, b, ll, lu = self._load_data_ml_dataset(
                 self.data, indices=list(range(0, self.data.num_shards())))
