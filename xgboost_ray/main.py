@@ -836,7 +836,12 @@ def train(params: Dict,
             int(_get_max_node_cpus() or 1),
             int(cluster_cpus // ray_params.num_actors))
 
-    _try_add_tune_callback(kwargs)
+    added_tune_callback = _try_add_tune_callback(kwargs)
+    # Tune currently does not support elastic training.
+    if added_tune_callback and ray_params.elastic_training:
+        raise ValueError("Elastic Training cannot be used with Ray Tune. "
+                         "Please disable elastic_training in RayParams in "
+                         "order to use xgboost_ray with Tune.")
 
     if not dtrain.loaded and not dtrain.distributed:
         dtrain.load_data(ray_params.num_actors)
@@ -900,7 +905,7 @@ def train(params: Dict,
                     f"Sleeping for 10 seconds for cleanup.")
                 start_again = True
 
-            if tries + 1 <= max_actor_restarts:
+            elif tries + 1 <= max_actor_restarts:
                 logger.warning(
                     f"A Ray actor died during training. Trying to restart "
                     f"and continue training from last checkpoint "
