@@ -1,9 +1,16 @@
-from typing import Dict
+from typing import Dict, Optional
 
 import ray
 import asyncio
 
 from ray.util.queue import Queue as RayQueue, Empty, Full
+
+
+class Unavailable:
+    """No object should be instance of this class"""
+
+    def __init__(self):
+        raise RuntimeError("This class should never be instantiated.")
 
 
 class _EventActor:
@@ -21,7 +28,8 @@ class _EventActor:
 
 
 class Event:
-    def __init__(self, actor_options: Dict = {}):
+    def __init__(self, actor_options: Optional[Dict] = None):
+        actor_options = {} if not actor_options else actor_options
         self.actor = ray.remote(_EventActor).options(**actor_options).remote()
 
     def set(self):
@@ -93,7 +101,10 @@ else:
             return [self.queue.get_nowait() for _ in range(num_items)]
 
     class Queue(RayQueue):
-        def __init__(self, maxsize: int = 0, actor_options: Dict = {}) -> None:
+        def __init__(self,
+                     maxsize: int = 0,
+                     actor_options: Optional[Dict] = None) -> None:
+            actor_options = {} if not actor_options else actor_options
             self.maxsize = maxsize
             self.actor = ray.remote(_QueueActor).options(
                 **actor_options).remote(self.maxsize)

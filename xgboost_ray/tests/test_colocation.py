@@ -5,10 +5,9 @@ from unittest.mock import patch
 import numpy as np
 
 import ray
-from ray import tune
 from xgboost_ray import train, RayDMatrix, RayParams
 from xgboost_ray.main import _train
-from xgboost_ray.tests.test_fault_tolerance import _kill_callback
+from xgboost_ray.tests.utils import _kill_callback
 from xgboost_ray.util import _EventActor, _QueueActor
 
 
@@ -128,6 +127,11 @@ class TestColocation:
 
     def test_tune_pack(self, ray_start_cluster):
         """Tests whether workers are packed when using Tune."""
+        try:
+            from ray import tune
+        except ImportError:
+            pytest.skip("Tune is not installed.")
+            return
         cluster = ray_start_cluster
         cluster.add_node(num_cpus=2)
         cluster.add_node(num_cpus=2)
@@ -176,7 +180,6 @@ class TestColocation:
             },
             num_samples=1,
         )
-
 
 if __name__ == "__main__":
     import pytest

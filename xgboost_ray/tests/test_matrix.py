@@ -77,6 +77,39 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         in_df["label"] = self.y
         self._testMatrixCreation(in_df, "label")
 
+    def testFromModinDfDf(self):
+        try:
+            from modin.pandas import DataFrame
+        except ImportError:
+            self.skipTest("Modin not installed.")
+            return
+
+        in_x = DataFrame(self.x)
+        in_y = DataFrame(self.y)
+        self._testMatrixCreation(in_x, in_y)
+
+    def testFromModinDfSeries(self):
+        try:
+            from modin.pandas import DataFrame, Series
+        except ImportError:
+            self.skipTest("Modin not installed.")
+            return
+
+        in_x = DataFrame(self.x)
+        in_y = Series(self.y)
+        self._testMatrixCreation(in_x, in_y)
+
+    def testFromModinDfString(self):
+        try:
+            from modin.pandas import DataFrame
+        except ImportError:
+            self.skipTest("Modin not installed.")
+            return
+
+        in_df = DataFrame(self.x)
+        in_df["label"] = self.y
+        self._testMatrixCreation(in_df, "label")
+
     def testFromCSVString(self):
         with tempfile.TemporaryDirectory() as dir:
             data_file = os.path.join(dir, "data.csv")
@@ -156,12 +189,6 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             self._testMatrixCreation(dataset, "label", distributed=True)
 
     def testDetectDistributed(self):
-        try:
-            from ray.util import data as ml_data
-        except ImportError:
-            self.skipTest("MLDataset not available in current Ray version.")
-            return
-
         with tempfile.TemporaryDirectory() as dir:
             data_file = os.path.join(dir, "file.parquet")
 
@@ -176,9 +203,14 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             mat = RayDMatrix([data_file] * 3, lazy=True)
             self.assertTrue(mat.distributed)
 
-            mat = RayDMatrix(
-                ml_data.read_parquet(data_file, num_shards=1), lazy=True)
-            self.assertTrue(mat.distributed)
+            try:
+                from ray.util import data as ml_data
+                mat = RayDMatrix(
+                    ml_data.read_parquet(data_file, num_shards=1), lazy=True)
+                self.assertTrue(mat.distributed)
+            except ImportError:
+                print("MLDataset not available in current Ray version. "
+                      "Skipping part of test.")
 
 
 if __name__ == "__main__":

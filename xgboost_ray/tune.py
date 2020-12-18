@@ -7,6 +7,7 @@ import logging
 from xgboost.callback import TrainingCallback
 
 from xgboost_ray.session import put_queue
+from xgboost_ray.util import Unavailable
 
 try:
     from ray import tune
@@ -18,8 +19,9 @@ try:
         TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback
     TUNE_INSTALLED = True
 except ImportError:
-    tune = TuneReportCallback = _TuneCheckpointCallback = \
-        TuneReportCheckpointCallback = None
+    tune = None
+    TuneReportCallback = _TuneCheckpointCallback = \
+        TuneReportCheckpointCallback = Unavailable
     OrigTuneReportCallback = _OrigTuneCheckpointCallback = \
         OrigTuneReportCheckpointCallback = object
 
@@ -36,7 +38,7 @@ if not hasattr(OrigTuneReportCallback, "_get_report_dict") or not issubclass(
 else:
     TUNE_LEGACY = False
 
-if TUNE_LEGACY:
+if TUNE_LEGACY and TUNE_INSTALLED:
     # Until the next release, keep compatible callbacks here.
     class TuneReportCallback(OrigTuneReportCallback, TrainingCallback):
         def _get_report_dict(self, evals_log):
@@ -100,7 +102,7 @@ if TUNE_LEGACY:
             self._checkpoint.after_iteration(model, epoch, evals_log)
             self._report.after_iteration(model, epoch, evals_log)
 
-else:
+elif TUNE_INSTALLED:
     # New style callbacks.
     class TuneReportCallback(OrigTuneReportCallback):
         def after_iteration(self, model, epoch: int, evals_log: Dict):
