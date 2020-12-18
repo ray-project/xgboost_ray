@@ -164,17 +164,19 @@ Memory usage
 -------------
 XGBoost uses a compute-optimized datastructure, the `DMatrix`,
 to hold training data. When converting a dataset to a `DMatrix`,
-XGBoost creates copies of the data and ends up holding a
-complete copy of the full data. Depending on the system,
-this matrix can be smaller or larger than the original
-dataset.
+XGBoost creates intermediate copies and ends up 
+holding a complete copy of the full data. The data will be converted
+into the local dataformat (on a 64 bit system these are 64 bit floats.)
+Depending on the system and original dataset dtype, this matrix can 
+thus occupy more memory than the original dataset.
 
 The **peak memory usage** for CPU-based training is at least
-**3x** the dataset size plus about **300 KiB** of other resources,
+**3x** the dataset size (assuming dtype `float32` on a 64bit system) 
+plus about **300,000 KiB** for other resources,
 like operating system requirements and storing of intermediate
 results.
 
-**Example**:
+**Example**
 - Machine type: AWS m5.xlarge (4 vCPUs, 16 GiB RAM)
 - Usable RAM: ~15,350,000 KiB
 - Dataset: 1,250,000 rows with 1024 features, dtype float32.
@@ -185,7 +187,7 @@ This dataset will fit exactly on this node for training.
 
 Note that the DMatrix size might be lower on a 32 bit system.
 
-**GPUs**:
+**GPUs**
 
 Generally, the same memory requirements exist for GPU-based
 training. Additionally, the GPU must have enough memory
@@ -194,10 +196,10 @@ to hold the dataset.
 In the example above, the GPU must have at least 
 10,000,000 KiB (about 9.6 GiB) memory. However, 
 empirically we found that using a `DeviceQuantileDMatrix`
-seems to have more peak GPU memory usage, possibly 
-for intermediate storage when loading data.
+seems to show more peak GPU memory usage, possibly 
+for intermediate storage when loading data (about 10%).
 
-**Best practices**:
+**Best practices**
 
 In order to reduce peak memory usage, consider the following
 suggestions:
@@ -205,9 +207,9 @@ suggestions:
 - Store data as `float32` or less. More precision is often 
   not needed, and keeping data in a smaller format will
   help reduce peak memory usage for initial data loading.
-- Pass dtype when loading data from CSV. Otherwise,
+- Pass the `dtype` when loading data from CSV. Otherwise,
   floating point values will be loaded as `np.float64` 
-  per default.
+  per default, increasing peak memory usage by 33%.
 
 
 More examples
