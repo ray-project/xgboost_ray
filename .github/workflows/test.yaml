@@ -95,3 +95,45 @@ jobs:
         echo "running simple_tune.py" && python simple_tune.py --smoke-test
         echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
       # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
+
+  test_linux_compat:
+    # Test compatibility when some optional libraries are missing
+    # Test runs on latest ray release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.7
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install codecov
+        python -m pip install -U ray
+        if [ -f requirements-test.txt ]; then python -m pip install -r requirements-test.txt; fi
+    - name: Uninstall unavailable dependencies
+      # Disables modin and Ray Tune (via tabulate)
+      run: |
+        python -m pip uninstall -y modin
+        python -m pip uninstall -y tabulate
+    - name: Install package
+      run: |
+        python -m pip install -e .
+    - name: Test with pytest
+      run: |
+        pushd xgboost_ray/tests
+        python -m pytest -v --durations=0 -x test_matrix.py
+        python -m pytest -v --durations=0 -x test_xgboost_api.py
+        python -m pytest -v --durations=0 -x test_fault_tolerance.py
+        python -m pytest -v --durations=0 -x test_end_to_end.py
+        echo "running smoke test on benchmark_cpu_gpu.py" && python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
+        popd
+        pushd examples/
+        ray stop || true
+        echo "running simple.py" && python simple.py --smoke-test
+        echo "running simple_predict.py" && python simple_predict.py
+        echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
+      # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
