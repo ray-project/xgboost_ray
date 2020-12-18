@@ -184,6 +184,6 @@ class TestColocation:
 
 
 if __name__ == "__main__":
-    import pytest
+    import pytest  # noqa: F811
     import sys
     sys.exit(pytest.main(["-v", __file__]))
