@@ -172,7 +172,7 @@ thus occupy more memory than the original dataset.
 
 The **peak memory usage** for CPU-based training is at least
 **3x** the dataset size (assuming dtype `float32` on a 64bit system) 
-plus about **300,000 KiB** for other resources,
+plus about **400,000 KiB** for other resources,
 like operating system requirements and storing of intermediate
 results.
 
