@@ -514,6 +514,16 @@ def _shutdown(actors: List[ActorHandle],
         event.shutdown()
 
 
+def _create_communication_processes():
+    # Create Queue and Event actors and make sure to colocate with driver node.
+    node_ip = ray.services.get_node_ip_address()
+    # Have to explicitly set num_cpus to 0.
+    placement_option = {"num_cpus": 0, "resources": {f"node:{node_ip}": 0.01}}
+    queue = Queue(actor_options=placement_option)  # Queue actor
+    stop_event = Event(actor_options=placement_option)  # Stop event actor
+    return queue, stop_event
+
+
 def _train(params: Dict,
            dtrain: RayDMatrix,
            *args,
@@ -816,8 +826,7 @@ def train(params: Dict,
     checkpoint = _Checkpoint()  # Keep track of latest checkpoint
     current_results = {}  # Keep track of additional results
     actors = [None] * ray_params.num_actors  # All active actors
-    queue = Queue()  # Queue actor
-    stop_event = Event()  # Stop event actor
+    queue, stop_event = _create_communication_processes()
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
     while tries <= max_actor_restarts:
         try:
@@ -870,8 +879,7 @@ def train(params: Dict,
                 queue.shutdown()
                 stop_event.shutdown()
                 time.sleep(5)
-                queue = Queue()
-                stop_event = Event()
+                queue, stop_event = _create_communication_processes()
             else:
                 raise RuntimeError(
                     f"A Ray actor died during training and the maximum number "

@@ -1,9 +1,16 @@
+import json
 import os
 import tempfile
+import time
 from typing import Tuple, Union, List, Dict
 
 import numpy as np
 import pandas as pd
+
+import xgboost as xgb
+from xgboost.callback import TrainingCallback
+
+from xgboost_ray.session import get_actor_rank, put_queue
 
 
 def create_data(num_rows: int, num_cols: int, dtype: np.dtype = np.float32):
@@ -77,3 +84,95 @@ def flatten_obj(obj: Union[List, Dict], keys=None, base=None):
     else:
         base["/".join(keys)] = obj
     return base
+
+
+def tree_obj(bst: xgb.Booster):
+    return [json.loads(j) for j in bst.get_dump(dump_format="json")]
+
+
+def _kill_callback(die_lock_file: str,
+                   actor_rank: int = 0,
+                   fail_iteration: int = 6):
+    """Returns a callback to kill an actor process.
+
+    Args:
+        die_lock_file (str): A file lock used to prevent race conditions
+            when killing the actor.
+        actor_rank (int): The rank of the actor to kill.
+        fail_iteration (int): The iteration after which the actor is killed.
+
+    """
+
+    class _KillCallback(TrainingCallback):
+        def after_iteration(self, model, epoch, evals_log):
+            if get_actor_rank() == actor_rank:
+                put_queue((epoch, time.time()))
+            if get_actor_rank() == actor_rank and \
+                    epoch == fail_iteration and \
+                    not os.path.exists(die_lock_file):
+
+                # Get PID
+                pid = os.getpid()
+                print(f"Killing process: {pid}")
+                with open(die_lock_file, "wt") as fp:
+                    fp.write("")
+
+                time.sleep(2)
+                os.kill(pid, 9)
+
+    return _KillCallback()
+
+
+def _fail_callback(die_lock_file: str,
+                   actor_rank: int = 0,
+                   fail_iteration: int = 6):
+    """Returns a callback to cause an Xgboost actor to fail training.
+
+    Args:
+        die_lock_file (str): A file lock used to prevent race conditions
+            when causing the actor to fail.
+        actor_rank (int): The rank of the actor to fail.
+        fail_iteration (int): The iteration after which the training for
+            the specified actor fails.
+
+    """
+
+    class _FailCallback(TrainingCallback):
+        def after_iteration(self, model, epoch, evals_log):
+
+            if get_actor_rank() == actor_rank:
+                put_queue((epoch, time.time()))
+            if get_actor_rank() == actor_rank and \
+               epoch == fail_iteration and \
+               not os.path.exists(die_lock_file):
+
+                with open(die_lock_file, "wt") as fp:
+                    fp.write("")
+                time.sleep(2)
+                import sys
+                sys.exit(1)
+
+    return _FailCallback()
+
+
+def _checkpoint_callback(frequency: int = 1, before_iteration_=False):
+    """Returns a callback to checkpoint a model.
+
+    Args:
+        frequency (int): The interval at which checkpointing occurs. If
+            frequency is set to n, checkpointing occurs every n epochs.
+        before_iteration_ (bool): If True, checkpoint before the iteration
+            begins. Else, checkpoint after the iteration ends.
+
+    """
+
+    class _CheckpointCallback(TrainingCallback):
+        def after_iteration(self, model, epoch, evals_log):
+            if epoch % frequency == 0:
+                put_queue(model.save_raw())
+
+        def before_iteration(self, model, epoch, evals_log):
+            if before_iteration_:
+                self.after_iteration(model, epoch, evals_log)
+
+    return _CheckpointCallback()
