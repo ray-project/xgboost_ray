@@ -501,17 +501,19 @@ def _shutdown(actors: List[ActorHandle],
               event: Optional[Event] = None,
               placement_group: Optional[PlacementGroup] = None,
               force: bool = False):
-    for i in range(len(actors)):
-        actor = actors[i]
-        if actor is None:
-            continue
-        if force:
+    alive_actors = [a for a in actors if a is not None]
+    if force:
+        for actor in alive_actors:
             ray.kill(actor)
-        else:
-            try:
-                ray.get(actor.__ray_terminate__.remote())
-            except RayActorError:
+    else:
+        done_refs = [a.__ray_terminate__.remote() for a in alive_actors]
+        # Wait 5 seconds for actors to die gracefully.
+        done, not_done = ray.wait(done_refs, timeout=5)
+        if not_done:
+            # If all actors are not able to die gracefully, then kill them.
+            for actor in alive_actors:
                 ray.kill(actor)
+    for i in range(len(actors)):
         actors[i] = None
     if queue:
         queue.shutdown()
