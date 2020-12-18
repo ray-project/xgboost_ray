@@ -549,6 +549,16 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
     return pg
 
 
+def _create_communication_processes():
+    # Create Queue and Event actors and make sure to colocate with driver node.
+    node_ip = ray.services.get_node_ip_address()
+    # Have to explicitly set num_cpus to 0.
+    placement_option = {"num_cpus": 0, "resources": {f"node:{node_ip}": 0.01}}
+    queue = Queue(actor_options=placement_option)  # Queue actor
+    stop_event = Event(actor_options=placement_option)  # Stop event actor
+    return queue, stop_event
+
+
 def _train(params: Dict,
            dtrain: RayDMatrix,
            *args,
