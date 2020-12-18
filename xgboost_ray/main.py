@@ -130,8 +130,8 @@ def _ray_get_cluster_cpus():
     return ray.cluster_resources().get("CPU", None)
 
 
-def _get_max_node_cpus():
-    max_node_cpus = max(
+def _get_min_node_cpus():
+    max_node_cpus = min(
         node.get("Resources", {}).get("CPU", 0.0) for node in ray.nodes())
     return max_node_cpus if max_node_cpus > 0.0 else _ray_get_cluster_cpus()
 
@@ -530,22 +530,25 @@ def _create_communication_processes():
     return queue, stop_event
 
 def _create_placement_group(cpus_per_actor, gpus_per_actor,
-                            resources_per_actor, num_actors):
+                            resources_per_actor, num_actors, strategy):
     resources_per_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
     extra_resources_per_bundle = {} if resources_per_actor is None else \
         resources_per_actor
     # Create placement group for training worker colocation.
     bundles = [{**resources_per_bundle, **extra_resources_per_bundle} for _ in range(num_actors)]
-    pg = placement_group(bundles, strategy="PACK")
+    pg = placement_group(bundles, strategy=strategy)
     # Wait for placement group to get created.
     logger.debug("Waiting for placement group to start.")
-    ready = ray.wait([pg.ready()], timeout=100)
-    if ready:
+    ready, _ = ray.wait([pg.ready()], timeout=100)
+    if ready is not None:
         logger.debug("Placement group has started.")
     else:
         raise TimeoutError("Placement group creation timed out. Make sure "
                            "your cluster either has enough resources or use "
-                           "an autoscaling cluster.")
+                           "an autoscaling cluster. Current resources "
+                           "available: {}, resources requested by the "
+                           "placement group: {}".format(
+            ray.available_resources(), pg.bundle_specs))
     return pg
 
 
@@ -843,8 +846,12 @@ def train(params: Dict,
     if cpus_per_actor <= 0:
         cluster_cpus = _ray_get_cluster_cpus() or 1
         cpus_per_actor = min(
-            int(_get_max_node_cpus() or 1),
+            int(_get_min_node_cpus() or 1),
             int(cluster_cpus // ray_params.num_actors))
+
+    if gpus_per_actor == 0 and cpus_per_actor == 0:
+        raise ValueError("cpus_per_actor and gpus_per_actor both cannot be "
+                         "0. Are you sure your cluster has CPUs available?")
 
     added_tune_callback = _try_add_tune_callback(kwargs)
     # Tune currently does not support elastic training.
@@ -871,9 +878,13 @@ def train(params: Dict,
     # Create the Queue and Event actors.
     queue, stop_event = _create_communication_processes()
 
-    pg = _create_placement_group(cpus_per_actor, gpus_per_actor,
-                                 ray_params.resources_per_actor,
-                                 ray_params.num_actors)
+    if not ray_params.elastic_training:
+        strategy = "PACK" if added_tune_callback else "SPREAD"
+        pg = _create_placement_group(cpus_per_actor, gpus_per_actor,
+                                     ray_params.resources_per_actor,
+                                     ray_params.num_actors, strategy)
+    else:
+        pg = None
 
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
     while tries <= max_actor_restarts:
@@ -929,11 +940,8 @@ def train(params: Dict,
                 time.sleep(5)
                 queue.shutdown()
                 stop_event.shutdown()
-                #remove_placement_group(pg)
                 time.sleep(5)
                 queue, stop_event = _create_communication_processes()
-                # pg = _create_placement_group(cpus_per_actor, gpus_per_actor,
-                #                              resources_per_actor=ray_params.resources_per_actor, num_actors=alive_actors+len(start_actor_ranks))
             else:
                 raise RuntimeError(
                     f"A Ray actor died during training and the maximum number "
