@@ -526,10 +526,11 @@ class RayDMatrix:
 
     Args:
         data: Data object. Can be a pandas dataframe, pandas series,
-            numpy array, string pointing to a csv or parquet file, or
-            list of strings pointing to csv or parquet files.
-        label: Optional label object. Can be a pandas series,
-            numpy array, string pointing to a csv or parquet file, or
+            numpy array, Ray MLDataset, modin dataframe, string pointing to
+            a csv or parquet file, or list of strings pointing to csv or
+            parquet files.
+        label: Optional label object. Can be a pandas series, numpy array,
+            modin series, string pointing to a csv or parquet file, or
             a string indicating the column of the data dataframe that
             contains the label. If this is not a string it must be of the
             same type as the data argument.
