@@ -38,6 +38,7 @@ class Event:
             ray.kill(self.actor)
         self.actor = None
 
+
 # Remove after Ray 1.2 release.
 if getattr(RayQueue, "shutdown", None) is not None:
     Queue = RayQueue

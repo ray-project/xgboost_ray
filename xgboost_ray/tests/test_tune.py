@@ -81,13 +81,17 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
     def testElasticFails(self):
         """Test if error is thrown when using Tune with elastic training."""
-        ray_params = RayParams(cpus_per_actor=1, num_actors=1,
-                               elastic_training=True)
+        ray_params = RayParams(
+            cpus_per_actor=1, num_actors=1, elastic_training=True)
         with self.assertRaises(TuneError):
-            tune.run(self.train_func(ray_params), config=self.params, resources_per_trial={
-                "cpu": 1,
-                "extra_cpu": 1
-            }, num_samples=1)
+            tune.run(
+                self.train_func(ray_params),
+                config=self.params,
+                resources_per_trial={
+                    "cpu": 1,
+                    "extra_cpu": 1
+                },
+                num_samples=1)
 
     def testReplaceTuneCheckpoints(self):
         """Test if ray.tune.integration.xgboost callbacks are replaced"""

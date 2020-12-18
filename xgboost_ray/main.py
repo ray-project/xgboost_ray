@@ -520,14 +520,6 @@ def _shutdown(actors: List[ActorHandle],
     if placement_group:
         remove_placement_group(placement_group)
 
-def _create_communication_processes():
-    # Create Queue and Event actors and make sure to colocate with driver node.
-    node_ip = ray.services.get_node_ip_address()
-    # Have to explicitly set num_cpus to 0.
-    placement_option = {"num_cpus": 0, "resources": {f"node:{node_ip}": 0.01}}
-    queue = Queue(actor_options=placement_option)  # Queue actor
-    stop_event = Event(actor_options=placement_option)  # Stop event actor
-    return queue, stop_event
 
 def _create_placement_group(cpus_per_actor, gpus_per_actor,
                             resources_per_actor, num_actors, strategy):
@@ -535,7 +527,10 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
     extra_resources_per_bundle = {} if resources_per_actor is None else \
         resources_per_actor
     # Create placement group for training worker colocation.
-    bundles = [{**resources_per_bundle, **extra_resources_per_bundle} for _ in range(num_actors)]
+    bundles = [{
+        **resources_per_bundle,
+        **extra_resources_per_bundle
+    } for _ in range(num_actors)]
     pg = placement_group(bundles, strategy=strategy)
     # Wait for placement group to get created.
     logger.debug("Waiting for placement group to start.")
@@ -548,7 +543,7 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
                            "an autoscaling cluster. Current resources "
                            "available: {}, resources requested by the "
                            "placement group: {}".format(
-            ray.available_resources(), pg.bundle_specs))
+                               ray.available_resources(), pg.bundle_specs))
     return pg
 
 
@@ -762,6 +757,7 @@ def _train(params: Dict,
 
     return bst, evals_result, _additional_results
 
+
 def train(params: Dict,
           dtrain: RayDMatrix,
           *args,
@@ -949,8 +945,12 @@ def train(params: Dict,
                 ) from exc
             tries += 1
 
-    _shutdown(actors=actors, queue=queue, event=stop_event,
-              placement_group=pg, force=False)
+    _shutdown(
+        actors=actors,
+        queue=queue,
+        event=stop_event,
+        placement_group=pg,
+        force=False)
 
     if isinstance(evals_result, dict):
         evals_result.update(train_evals_result)
