@@ -85,6 +85,7 @@ def flatten_obj(obj: Union[List, Dict], keys=None, base=None):
         base["/".join(keys)] = obj
     return base
 
+
 def tree_obj(bst: xgb.Booster):
     return [json.loads(j) for j in bst.get_dump(dump_format="json")]
 
@@ -92,6 +93,16 @@ def tree_obj(bst: xgb.Booster):
 def _kill_callback(die_lock_file: str,
                    actor_rank: int = 0,
                    fail_iteration: int = 6):
+    """Returns a callback to kill an actor process.
+
+    Args:
+        die_lock_file (str): A file lock used to prevent race conditions
+            when killing the actor.
+        actor_rank (int): The rank of the actor to kill.
+        fail_iteration (int): The iteration after which the actor is killed.
+
+    """
+
     class _KillCallback(TrainingCallback):
         def after_iteration(self, model, epoch, evals_log):
             if get_actor_rank() == actor_rank:
@@ -115,6 +126,17 @@ def _kill_callback(die_lock_file: str,
 def _fail_callback(die_lock_file: str,
                    actor_rank: int = 0,
                    fail_iteration: int = 6):
+    """Returns a callback to cause an Xgboost actor to fail training.
+
+    Args:
+        die_lock_file (str): A file lock used to prevent race conditions
+            when causing the actor to fail.
+        actor_rank (int): The rank of the actor to fail.
+        fail_iteration (int): The iteration after which the training for
+            the specified actor fails.
+
+    """
+
     class _FailCallback(TrainingCallback):
         def after_iteration(self, model, epoch, evals_log):
 
@@ -134,6 +156,16 @@ def _fail_callback(die_lock_file: str,
 
 
 def _checkpoint_callback(frequency: int = 1, before_iteration_=False):
+    """Returns a callback to checkpoint a model.
+
+    Args:
+        frequency (int): The interval at which checkpointing occurs. If
+            frequency is set to n, checkpointing occurs every n epochs.
+        before_iteration_ (bool): If True, checkpoint before the iteration
+            begins. Else, checkpoint after the iteration ends.
+
+    """
+
     class _CheckpointCallback(TrainingCallback):
         def after_iteration(self, model, epoch, evals_log):
             if epoch % frequency == 0:

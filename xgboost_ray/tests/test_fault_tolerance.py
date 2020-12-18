@@ -1,4 +1,3 @@
-import json
 import os
 import shutil
 import tempfile
@@ -12,7 +11,7 @@ import ray
 
 from xgboost_ray import train, RayDMatrix, RayParams
 from xgboost_ray.tests.utils import flatten_obj, _checkpoint_callback, \
-    _fail_callback, tree_obj
+    _fail_callback, tree_obj, _kill_callback
 
 
 class XGBoostRayFaultToleranceTest(unittest.TestCase):
