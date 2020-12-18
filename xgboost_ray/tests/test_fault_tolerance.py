@@ -2,80 +2,17 @@ import json
 import os
 import shutil
 import tempfile
-import time
 from unittest.mock import patch, DEFAULT
 
 import numpy as np
 import unittest
 import xgboost as xgb
-from xgboost.callback import TrainingCallback
 
 import ray
 
 from xgboost_ray import train, RayDMatrix, RayParams
-from xgboost_ray.session import put_queue, get_actor_rank
-from xgboost_ray.tests.utils import flatten_obj
-
-
-def tree_obj(bst: xgb.Booster):
-    return [json.loads(j) for j in bst.get_dump(dump_format="json")]
-
-
-def _kill_callback(die_lock_file: str,
-                   actor_rank: int = 0,
-                   fail_iteration: int = 6):
-    class _KillCallback(TrainingCallback):
-        def after_iteration(self, model, epoch, evals_log):
-            if get_actor_rank() == actor_rank:
-                put_queue((epoch, time.time()))
-            if get_actor_rank() == actor_rank and \
-                    epoch == fail_iteration and \
-                    not os.path.exists(die_lock_file):
-
-                # Get PID
-                pid = os.getpid()
-                print(f"Killing process: {pid}")
-                with open(die_lock_file, "wt") as fp:
-                    fp.write("")
-
-                time.sleep(2)
-                os.kill(pid, 9)
-
-    return _KillCallback()
-
-
-def _fail_callback(die_lock_file: str,
-                   actor_rank: int = 0,
-                   fail_iteration: int = 6):
-    class _FailCallback(TrainingCallback):
-        def after_iteration(self, model, epoch, evals_log):
-
-            if get_actor_rank() == actor_rank:
-                put_queue((epoch, time.time()))
-            if get_actor_rank() == actor_rank and \
-               epoch == fail_iteration and \
-               not os.path.exists(die_lock_file):
-
-                with open(die_lock_file, "wt") as fp:
-                    fp.write("")
-                time.sleep(2)
-                import sys
-                sys.exit(1)
-
-    return _FailCallback()
-
-
-def _checkpoint_callback(frequency: int = 1, before_iteration_=False):
-    class _CheckpointCallback(TrainingCallback):
-        def after_iteration(self, model, epoch, evals_log):
-            if epoch % frequency == 0:
-                put_queue(model.save_raw())
-
-        def before_iteration(self, model, epoch, evals_log):
-            if before_iteration_:
-                self.after_iteration(model, epoch, evals_log)
-
-    return _CheckpointCallback()
+from xgboost_ray.tests.utils import flatten_obj, _checkpoint_callback, \
+    _fail_callback, tree_obj
 
 
 class XGBoostRayFaultToleranceTest(unittest.TestCase):

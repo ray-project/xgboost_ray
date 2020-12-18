@@ -7,7 +7,7 @@ import numpy as np
 import ray
 from xgboost_ray import train, RayDMatrix, RayParams
 from xgboost_ray.main import _train
-from xgboost_ray.tests.test_fault_tolerance import _kill_callback
+from xgboost_ray.tests.utils import _kill_callback
 from xgboost_ray.util import _EventActor, _QueueActor
 
 
