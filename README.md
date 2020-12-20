@@ -160,6 +160,29 @@ setting this explicitly.
 The number of XGBoost actors always has to be set manually with
 the `num_actors` argument. 
 
+Placement Strategies
+---------------------
+`xgboost_ray` leverages Ray's Placement Group API (https://docs.ray.io/en/master/placement-group.html)
+to implement placement strategies for better fault tolerance. 
+
+By default, a SPREAD strategy is used for training, which attempts to spread all of the training workers
+across the nodes in a cluster on a best-effort basis. This improves fault tolerance since it minimizes the 
+number of worker failures when a node goes down, but comes at a cost of increased inter-node communication
+To disable this strategy, set the `USE_SPREAD_STRATEGY` environment variable to 0. If disabled, no
+particular placement strategy will be used.
+
+Note that this strategy is used only when `elastic_training` is not used. If `elastic_trainin` is set to `True`,
+no placement strategy is used.
+
+When `xgboost_ray` is used with Ray Tune for hyperparameter tuning, a PACK strategy is used. This strategy
+attempts to place all workers for each trial on the same node on a best-effort basis. This means that if a node
+goes down, it will be less likely to impact multiple trials.
+
+When placement strategies are used, `xgboost_ray` will wait for 100 seconds for the required resources
+to become available, and will fail if the required resources cannot be reserved and the cluster cannot autoscale
+to increase the number of resources. You can change the `PLACEMENT_GROUP_TIMEOUT_S` environment variable to modify 
+how long this timeout should be. 
+
 More examples
 -------------
 
