@@ -415,7 +415,7 @@ class RayXGBoostActor:
 
 
 def _autodetect_resources(ray_params: Union[None, RayParams, Dict] = None,
-                          use_tree_method: bool = False):
+                          use_tree_method: bool = False) -> Tuple[int, int]:
     gpus_per_actor = ray_params.gpus_per_actor
     cpus_per_actor = ray_params.cpus_per_actor
 
