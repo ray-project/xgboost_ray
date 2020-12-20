@@ -41,7 +41,6 @@ from xgboost_ray.matrix import RayDMatrix, combine_data, \
 from xgboost_ray.session import init_session, put_queue, \
     set_session_queue
 
-
 PLACEMENT_GROUP_TIMEOUT_S = os.getenv("PLACEMENT_GROUP_TIMEOUT_S", 100)
 
 
@@ -431,6 +430,7 @@ def _autodetect_resources(ray_params: Union[None, RayParams, Dict] = None,
             int(_get_min_node_cpus() or 1),
             int(cluster_cpus // ray_params.num_actors))
     return cpus_per_actor, gpus_per_actor
+
 
 def _create_actor(rank: int,
                   num_actors: int,
@@ -854,7 +854,9 @@ def train(params: Dict,
         ray.init()
 
     cpus_per_actor, gpus_per_actor = _autodetect_resources(
-        ray_params=ray_params, use_tree_method="tree_method" in params and params["tree_method"].startswith("gpu"))
+        ray_params=ray_params,
+        use_tree_method="tree_method" in params
+        and params["tree_method"].startswith("gpu"))
 
     if gpus_per_actor == 0 and cpus_per_actor == 0:
         raise ValueError("cpus_per_actor and gpus_per_actor both cannot be "
