@@ -42,7 +42,7 @@ from xgboost_ray.session import init_session, put_queue, \
     set_session_queue
 
 # How long to wait for placement group creation before failing.
-PLACEMENT_GROUP_TIMEOUT_S = os.getenv("PLACEMENT_GROUP_TIMEOUT_S", 100)
+PLACEMENT_GROUP_TIMEOUT_S = int(os.getenv("PLACEMENT_GROUP_TIMEOUT_S", 100))
 
 
 class RayXGBoostTrainingError(RuntimeError):
