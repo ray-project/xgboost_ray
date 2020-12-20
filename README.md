@@ -160,8 +160,59 @@ setting this explicitly.
 The number of XGBoost actors always has to be set manually with
 the `num_actors` argument. 
 
+Memory usage
+-------------
+XGBoost uses a compute-optimized datastructure, the `DMatrix`,
+to hold training data. When converting a dataset to a `DMatrix`,
+XGBoost creates intermediate copies and ends up 
+holding a complete copy of the full data. The data will be converted
+into the local dataformat (on a 64 bit system these are 64 bit floats.)
+Depending on the system and original dataset dtype, this matrix can 
+thus occupy more memory than the original dataset.
+
+The **peak memory usage** for CPU-based training is at least
+**3x** the dataset size (assuming dtype `float32` on a 64bit system) 
+plus about **400,000 KiB** for other resources,
+like operating system requirements and storing of intermediate
+results.
+
+**Example**
+- Machine type: AWS m5.xlarge (4 vCPUs, 16 GiB RAM)
+- Usable RAM: ~15,350,000 KiB
+- Dataset: 1,250,000 rows with 1024 features, dtype float32.
+  Total size: 5,000,000 KiB
+- XGBoost DMatrix size: ~10,000,000 KiB
+
+This dataset will fit exactly on this node for training.
+
+Note that the DMatrix size might be lower on a 32 bit system.
+
+**GPUs**
+
+Generally, the same memory requirements exist for GPU-based
+training. Additionally, the GPU must have enough memory
+to hold the dataset. 
+
+In the example above, the GPU must have at least 
+10,000,000 KiB (about 9.6 GiB) memory. However, 
+empirically we found that using a `DeviceQuantileDMatrix`
+seems to show more peak GPU memory usage, possibly 
+for intermediate storage when loading data (about 10%).
+
+**Best practices**
+
+In order to reduce peak memory usage, consider the following
+suggestions:
+
+- Store data as `float32` or less. More precision is often 
+  not needed, and keeping data in a smaller format will
+  help reduce peak memory usage for initial data loading.
+- Pass the `dtype` when loading data from CSV. Otherwise,
+  floating point values will be loaded as `np.float64` 
+  per default, increasing peak memory usage by 33%.
+
 Placement Strategies
----------------------
+--------------------
 `xgboost_ray` leverages Ray's Placement Group API (https://docs.ray.io/en/master/placement-group.html)
 to implement placement strategies for better fault tolerance. 
 
