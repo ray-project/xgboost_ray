@@ -592,6 +592,8 @@ def _train(params: Dict,
            *args,
            evals=(),
            ray_params: RayParams,
+           cpus_per_actor: int,
+           gpus_per_actor: int,
            _checkpoint: _Checkpoint,
            _additional_results: Dict,
            _actors: List,
@@ -613,13 +615,13 @@ def _train(params: Dict,
     actor died) and failure handling is enabled.
     """
     if "nthread" in params:
-        if params["nthread"] > ray_params.cpus_per_actor:
+        if params["nthread"] > cpus_per_actor:
             raise ValueError(
                 "Specified number of threads greater than number of CPUs. "
                 "\nFIX THIS by passing a lower value for the `nthread` "
                 "parameter or a higher number for `cpus_per_actor`.")
     else:
-        params["nthread"] = ray_params.cpus_per_actor
+        params["nthread"] = cpus_per_actor
 
     # This is a callback that handles actor failures.
     # We identify the rank of the failed actor, add this to a set of
@@ -642,8 +644,8 @@ def _train(params: Dict,
         actor = _create_actor(
             rank=i,
             num_actors=ray_params.num_actors,
-            num_cpus_per_actor=ray_params.cpus_per_actor,
-            num_gpus_per_actor=ray_params.gpus_per_actor,
+            num_cpus_per_actor=cpus_per_actor,
+            num_gpus_per_actor=gpus_per_actor,
             resources_per_actor=ray_params.resources_per_actor,
             placement_group=_placement_group,
             queue=_queue,
@@ -864,9 +866,6 @@ def train(params: Dict,
         raise ValueError("cpus_per_actor and gpus_per_actor both cannot be "
                          "0. Are you sure your cluster has CPUs available?")
 
-    ray_params.cpus_per_actor = cpus_per_actor
-    ray_params.gpus_per_actor = gpus_per_actor
-
     added_tune_callback = _try_add_tune_callback(kwargs)
     # Tune currently does not support elastic training.
     if added_tune_callback and ray_params.elastic_training:
@@ -915,6 +914,8 @@ def train(params: Dict,
                 *args,
                 evals=evals,
                 ray_params=ray_params,
+                cpus_per_actor=cpus_per_actor,
+                gpus_per_actor=gpus_per_actor,
                 _checkpoint=checkpoint,
                 _additional_results=current_results,
                 _actors=actors,
