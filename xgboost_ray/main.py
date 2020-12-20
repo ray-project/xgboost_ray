@@ -41,6 +41,7 @@ from xgboost_ray.matrix import RayDMatrix, combine_data, \
 from xgboost_ray.session import init_session, put_queue, \
     set_session_queue
 
+# How long to wait for placement group creation before failing.
 PLACEMENT_GROUP_TIMEOUT_S = os.getenv("PLACEMENT_GROUP_TIMEOUT_S", 100)
 
 
