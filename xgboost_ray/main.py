@@ -41,6 +41,9 @@ from xgboost_ray.matrix import RayDMatrix, combine_data, \
 from xgboost_ray.session import init_session, put_queue, \
     set_session_queue
 
+# Whether to use SPREAD placement group strategy for training.
+_USE_SPREAD_STRATEGY = int(os.getenv("USE_SPREAD_STRATEGY", 1))
+
 # How long to wait for placement group creation before failing.
 PLACEMENT_GROUP_TIMEOUT_S = int(os.getenv("PLACEMENT_GROUP_TIMEOUT_S", 100))
 
@@ -888,11 +891,17 @@ def train(params: Dict,
     # Create the Queue and Event actors.
     queue, stop_event = _create_communication_processes()
 
+    placement_strategy = None
     if not ray_params.elastic_training:
-        strategy = "PACK" if added_tune_callback else "SPREAD"
+        if added_tune_callback:
+            placement_strategy = "PACK"
+        elif bool(_USE_SPREAD_STRATEGY):
+            placement_strategy = "SPREAD"
+
+    if placement_strategy is not None:
         pg = _create_placement_group(cpus_per_actor, gpus_per_actor,
                                      ray_params.resources_per_actor,
-                                     ray_params.num_actors, strategy)
+                                     ray_params.num_actors, placement_strategy)
     else:
         pg = None
 
