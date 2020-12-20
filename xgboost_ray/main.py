@@ -42,6 +42,9 @@ from xgboost_ray.session import init_session, put_queue, \
     set_session_queue
 
 
+PLACEMENT_GROUP_TIMEOUT_S = os.getenv("PLACEMENT_GROUP_TIMEOUT_S", 100)
+
+
 class RayXGBoostTrainingError(RuntimeError):
     """Raised from RayXGBoostActor.train() when the local xgb.train function
     did not complete."""
@@ -408,6 +411,27 @@ class RayXGBoostActor:
         return predictions
 
 
+def _autodetect_resources(ray_params: Union[None, RayParams, Dict] = None,
+                          use_tree_method: bool = False):
+    gpus_per_actor = ray_params.gpus_per_actor
+    cpus_per_actor = ray_params.cpus_per_actor
+
+    # Automatically set gpus_per_actor if left at the default value
+    if gpus_per_actor == -1:
+        gpus_per_actor = 0
+        if use_tree_method:
+            gpus_per_actor = 1
+
+    # Automatically set cpus_per_actor if left at the default value
+    # Will be set to the number of cluster CPUs divided by the number of
+    # actors, bounded by the minimum number of CPUs across actors nodes.
+    if cpus_per_actor <= 0:
+        cluster_cpus = _ray_get_cluster_cpus() or 1
+        cpus_per_actor = min(
+            int(_get_min_node_cpus() or 1),
+            int(cluster_cpus // ray_params.num_actors))
+    return cpus_per_actor, gpus_per_actor
+
 def _create_actor(rank: int,
                   num_actors: int,
                   num_cpus_per_actor: int,
@@ -536,7 +560,7 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
     pg = placement_group(bundles, strategy=strategy)
     # Wait for placement group to get created.
     logger.debug("Waiting for placement group to start.")
-    ready, _ = ray.wait([pg.ready()], timeout=100)
+    ready, _ = ray.wait([pg.ready()], timeout=PLACEMENT_GROUP_TIMEOUT_S)
     if ready is not None:
         logger.debug("Placement group has started.")
     else:
@@ -829,23 +853,8 @@ def train(params: Dict,
     if not ray.is_initialized():
         ray.init()
 
-    gpus_per_actor = ray_params.gpus_per_actor
-    cpus_per_actor = ray_params.cpus_per_actor
-
-    # Automatically set gpus_per_actor if left at the default value
-    if gpus_per_actor == -1:
-        gpus_per_actor = 0
-        if "tree_method" in params and params["tree_method"].startswith("gpu"):
-            gpus_per_actor = 1
-
-    # Automatically set cpus_per_actor if left at the default value
-    # Will be set to the number of cluster CPUs divided by the number of
-    # actors, bounded by the minimum number of CPUs across actors nodes.
-    if cpus_per_actor <= 0:
-        cluster_cpus = _ray_get_cluster_cpus() or 1
-        cpus_per_actor = min(
-            int(_get_min_node_cpus() or 1),
-            int(cluster_cpus // ray_params.num_actors))
+    cpus_per_actor, gpus_per_actor = _autodetect_resources(
+        ray_params=ray_params, use_tree_method="tree_method" in params and params["tree_method"].startswith("gpu"))
 
     if gpus_per_actor == 0 and cpus_per_actor == 0:
         raise ValueError("cpus_per_actor and gpus_per_actor both cannot be "
