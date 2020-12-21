@@ -20,7 +20,10 @@ def train_ray(path,
               num_files=0,
               regression=False,
               use_gpu=False,
-              smoke_test=False):
+              smoke_test=False,
+              ray_params=None,
+              xgboost_params=None,
+              **kwargs):
     if num_files:
         files = sorted(glob.glob(f"{path}/**/*.parquet"))
         while num_files > len(files):
@@ -50,7 +53,9 @@ def train_ray(path,
             ignore=["partition"],
             filetype=RayFileType.PARQUET)
 
-    config = {"tree_method": "hist" if not use_gpu else "gpu_hist"}
+    config = xgboost_params or {
+        "tree_method": "hist" if not use_gpu else "gpu_hist"
+    }
     if not regression:
         # Classification
         config.update({
@@ -71,7 +76,7 @@ def train_ray(path,
         dtrain,
         evals_result=evals_result,
         num_boost_round=num_boost_rounds,
-        ray_params=RayParams(
+        ray_params=ray_params or RayParams(
             max_actor_restarts=2,
             num_actors=num_workers,
             cpus_per_actor=4 if not smoke_test else 1,
@@ -80,7 +85,8 @@ def train_ray(path,
                 "actor_cpus": 4 if not smoke_test else 0,
                 "actor_gpus": 0 if not use_gpu else 1
             }),
-        evals=[(dtrain, "train")])
+        evals=[(dtrain, "train")],
+        **kwargs)
     taken = time.time() - start
     print(f"TRAIN TIME TAKEN: {taken:.2f} seconds")
 
