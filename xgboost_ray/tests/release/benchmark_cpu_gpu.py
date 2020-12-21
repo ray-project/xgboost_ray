@@ -18,6 +18,7 @@ def train_ray(path,
               num_workers,
               num_boost_rounds,
               num_files=0,
+              regression=False,
               use_gpu=False,
               smoke_test=False):
     if num_files:
@@ -49,10 +50,19 @@ def train_ray(path,
             ignore=["partition"],
             filetype=RayFileType.PARQUET)
 
-    config = {
-        "tree_method": "hist" if not use_gpu else "gpu_hist",
-        "eval_metric": ["logloss", "error"],
-    }
+    config = {"tree_method": "hist" if not use_gpu else "gpu_hist"}
+    if not regression:
+        # Classification
+        config.update({
+            "objective": "binary:logistic",
+            "eval_metric": ["logloss", "error"],
+        })
+    else:
+        # Regression
+        config.update({
+            "objective": "reg:squarederror",
+            "eval_metric": ["logloss", "rmse"],
+        })
 
     start = time.time()
     evals_result = {}
@@ -88,10 +98,16 @@ if __name__ == "__main__":
     parser.add_argument("num_files", type=int, help="num files")
 
     parser.add_argument(
+        "--file", default="/data/parted.parquet", type=str, help="data file")
+
+    parser.add_argument(
+        "--regression", action="store_true", default=False, help="regression")
+
+    parser.add_argument(
         "--gpu", action="store_true", default=False, help="gpu")
 
     parser.add_argument(
-        "--smoke-test", action="store_true", default=False, help="gpu")
+        "--smoke-test", action="store_true", default=False, help="smoke test")
 
     args = parser.parse_args()
 
@@ -110,7 +126,7 @@ if __name__ == "__main__":
             num_partitions=args.num_workers * 10)
         use_gpu = False
     else:
-        path = "/data/parted.parquet"
+        path = args.file
         if not os.path.exists(path):
             raise ValueError(
                 f"Benchmarking data not found: {path}."
@@ -125,10 +141,11 @@ if __name__ == "__main__":
 
     full_start = time.time()
     train_taken = train_ray(
-        path,
-        num_workers,
-        num_boost_rounds,
-        num_files,
+        path=path,
+        num_workers=num_workers,
+        num_boost_rounds=num_boost_rounds,
+        num_files=num_files,
+        regression=args.regression,
         use_gpu=use_gpu,
         smoke_test=args.smoke_test)
     full_taken = time.time() - full_start
