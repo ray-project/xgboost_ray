@@ -130,7 +130,11 @@ def _try_add_tune_callback(kwargs: Dict):
                       "directly in your calls to `xgboost_ray.train()`."
 
         for cb in callbacks:
-            if isinstance(cb, OrigTuneReportCallback):
+            if isinstance(cb,
+                          (TuneReportCallback, TuneReportCheckpointCallback)):
+                has_tune_callback = True
+                new_callbacks.append(cb)
+            elif isinstance(cb, OrigTuneReportCallback):
                 replace_cb = TuneReportCallback(metrics=cb._metrics)
                 new_callbacks.append(replace_cb)
                 logging.warning(
@@ -156,10 +160,6 @@ def _try_add_tune_callback(kwargs: Dict):
                         target="xgboost_ray.tune.TuneReportCheckpointCallback")
                 )
                 has_tune_callback = True
-            elif isinstance(
-                    cb, (TuneReportCallback, TuneReportCheckpointCallback)):
-                has_tune_callback = True
-                new_callbacks.append(cb)
             else:
                 new_callbacks.append(cb)
 
