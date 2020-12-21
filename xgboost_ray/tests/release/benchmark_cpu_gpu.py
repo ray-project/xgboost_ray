@@ -93,7 +93,7 @@ def train_ray(path,
     bst.save_model("benchmark_{}.xgb".format("cpu" if not use_gpu else "gpu"))
     print("Final training error: {:.4f}".format(
         evals_result["train"]["error"][-1]))
-    return taken
+    return bst, taken
 
 
 if __name__ == "__main__":
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     init_taken = time.time() - init_start
 
     full_start = time.time()
-    train_taken = train_ray(
+    bst, train_taken = train_ray(
         path=path,
         num_workers=num_workers,
         num_boost_rounds=num_boost_rounds,
