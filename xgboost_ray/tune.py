@@ -168,3 +168,6 @@ def _try_add_tune_callback(kwargs: Dict):
             new_callbacks.append(TuneReportCallback())
 
         kwargs["callbacks"] = new_callbacks
+        return True
+    else:
+        return False

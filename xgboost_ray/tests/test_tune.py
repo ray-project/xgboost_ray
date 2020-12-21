@@ -8,6 +8,7 @@ import numpy as np
 
 import ray
 from ray import tune
+from ray.tune import TuneError
 from ray.tune.integration.xgboost import \
     TuneReportCallback as OrigTuneReportCallback, \
     TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback
@@ -41,14 +42,13 @@ class XGBoostRayTuneTest(unittest.TestCase):
             "num_boost_round": tune.choice([1, 3])
         }
 
-        def train_func(num_actors=1, callbacks=None, **kwargs):
+        def train_func(ray_params, callbacks=None, **kwargs):
             def _inner_train(config, checkpoint_dir):
                 train_set = RayDMatrix(x, y)
                 train(
                     config["xgb"],
                     dtrain=train_set,
-                    ray_params=RayParams(
-                        cpus_per_actor=1, num_actors=num_actors),
+                    ray_params=ray_params,
                     num_boost_round=config["num_boost_round"],
                     evals=[(train_set, "train")],
                     callbacks=callbacks,
@@ -65,8 +65,9 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
     # noinspection PyTypeChecker
     def testNumIters(self):
+        ray_params = RayParams(cpus_per_actor=1, num_actors=1)
         analysis = tune.run(
-            self.train_func(),
+            self.train_func(ray_params),
             config=self.params,
             resources_per_trial={
                 "cpu": 1,
@@ -77,6 +78,20 @@ class XGBoostRayTuneTest(unittest.TestCase):
         self.assertTrue(
             all(analysis.results_df["training_iteration"] ==
                 analysis.results_df["config.num_boost_round"]))
+
+    def testElasticFails(self):
+        """Test if error is thrown when using Tune with elastic training."""
+        ray_params = RayParams(
+            cpus_per_actor=1, num_actors=1, elastic_training=True)
+        with self.assertRaises(TuneError):
+            tune.run(
+                self.train_func(ray_params),
+                config=self.params,
+                resources_per_trial={
+                    "cpu": 1,
+                    "extra_cpu": 1
+                },
+                num_samples=1)
 
     def testReplaceTuneCheckpoints(self):
         """Test if ray.tune.integration.xgboost callbacks are replaced"""
@@ -108,10 +123,11 @@ class XGBoostRayTuneTest(unittest.TestCase):
         self.assertEqual(replaced._checkpoint._filename, "test")
 
     def testEndToEndCheckpointing(self):
+        ray_params = RayParams(cpus_per_actor=1, num_actors=2)
         analysis = tune.run(
             self.train_func(
-                callbacks=[TuneReportCheckpointCallback(frequency=1)],
-                num_actors=2),
+                ray_params,
+                callbacks=[TuneReportCheckpointCallback(frequency=1)]),
             config=self.params,
             resources_per_trial={
                 "cpu": 1,
@@ -126,9 +142,10 @@ class XGBoostRayTuneTest(unittest.TestCase):
         self.assertTrue(os.path.exists(analysis.best_checkpoint))
 
     def testEndToEndCheckpointingOrigTune(self):
+        ray_params = RayParams(cpus_per_actor=1, num_actors=2)
         analysis = tune.run(
             self.train_func(
-                num_actors=2, callbacks=[OrigTuneReportCheckpointCallback()]),
+                ray_params, callbacks=[OrigTuneReportCheckpointCallback()]),
             config=self.params,
             resources_per_trial={
                 "cpu": 1,
