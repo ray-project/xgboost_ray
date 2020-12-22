@@ -153,7 +153,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 RayDMatrix(self.x, self.y),
                 callbacks=[
                     _kill_callback(self.die_lock_file, fail_iteration=6),
-                    _sleep_callback(sleep_iteration=7, sleep_seconds=15)
+                    _sleep_callback(sleep_iteration=7, sleep_seconds=15),
+                    _sleep_callback(sleep_iteration=9, sleep_seconds=5)
                 ],
                 num_boost_round=20,
                 ray_params=RayParams(

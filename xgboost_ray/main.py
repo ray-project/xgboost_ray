@@ -123,10 +123,13 @@ def _start_rabit_tracker(num_workers: int):
     process.daemon = True
     process.start()
 
+    logger.debug(f"Started Rabit tracker process with PID {process.pid}")
+
     return process, env
 
 
-def _stop_rabit_tracker(rabit_process):
+def _stop_rabit_tracker(rabit_process: multiprocessing.Process):
+    logger.debug(f"Stopping Rabit process with PID {rabit_process.pid}")
     rabit_process.terminate()
 
 
@@ -320,6 +323,9 @@ class RayXGBoostActor:
     def set_stop_event(self, stop_event: Event):
         self._stop_event = stop_event
 
+    def _get_stop_event(self):
+        return self._stop_event
+
     def pid(self):
         """Get process PID. Used for checking if still alive"""
         return os.getpid()
@@ -344,10 +350,15 @@ class RayXGBoostActor:
     def _stop_callback(self):
         """Stop if event is set"""
         this = self
+        # Keep track of initial stop event. Since we're training in a thread,
+        # the stop event might be overwritten, which should he handled
+        # as if the previous stop event was set.
+        initial_stop_event = self._stop_event
 
         class _StopCallback(TrainingCallback):
             def after_iteration(self, model, epoch, evals_log):
-                if this._stop_event.is_set():
+                if this._stop_event.is_set() \
+                        or this._get_stop_event() is not initial_stop_event:
                     # Returning True stops training
                     return True
 
@@ -606,8 +617,7 @@ def _get_actor_alive_status(actors: List[ActorHandle],
             try:
                 pid = ray.get(obj)
                 rank = obj_to_rank[obj]
-                logger.debug(
-                    f"Actor {actors[rank]} with PID {pid} is still alive.")
+                logger.debug(f"Actor {actors[rank]} with PID {pid} is alive.")
                 alive += 1
             except Exception:
                 rank = obj_to_rank[obj]
