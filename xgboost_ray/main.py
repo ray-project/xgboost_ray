@@ -706,12 +706,16 @@ def _maybe_schedule_new_actors(
 
     # No resources available
     if n_resources_available == 0:
+        logger.debug(
+            "No new resources available to re-schedule failed actors.")
         return False
 
     new_pending_actors: Dict[int, Tuple[ActorHandle, _PrepareActorTask]] = {}
     for rank in missing_actor_ranks:
         # If we used up all available resources, stop scheduling new actors.
         if len(new_pending_actors) >= n_resources_available:
+            logger.debug(
+                "No more resources available to re-schedule failed actors.")
             break
 
         # Actor rank should not be already pending
@@ -737,7 +741,12 @@ def _maybe_schedule_new_actors(
             load_data=load_data)
 
         new_pending_actors[rank] = (actor, task)
+        logger.debug(f"Re-scheduled actor with rank {rank}. Waiting for "
+                     f"data loading before promoting it to training.")
     training_state.pending_actors.update(new_pending_actors)
+    logger.info(f"Re-scheduled {len(new_pending_actors)} actors for training. "
+                f"Once data loading finished, they will be integrated into "
+                f"training again.")
     return bool(new_pending_actors)
 
 
@@ -773,6 +782,9 @@ def _update_scheduled_actor_states(training_state: _TrainingState):
         # ready as well (e.g. if a large node came up).
         grace_period = int(os.environ.get("XGBOOST_RAY_ELASTIC_WAIT_S", 10))
         if training_state.restart_training_at is None:
+            logger.debug(
+                f"An RayXGBoostActor became ready for training. Waiting "
+                f"{grace_period} seconds before triggering training restart.")
             training_state.restart_training_at = now + grace_period
 
     if training_state.restart_training_at is not None:
