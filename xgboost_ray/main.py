@@ -65,8 +65,9 @@ ELASTIC_RESTART_RESOURCE_CHECK_S = int(
 ELASTIC_RESTART_GRACE_PERIOD_S = int(
     os.getenv("ELASTIC_RESTART_GRACE_PERIOD_S", 10))
 
+logging.basicConfig(level=100, format=LOGGER_FORMAT)
 logger = logging.getLogger(__name__)
-logging.basicConfig(format=LOGGER_FORMAT)
+logger.setLevel(logging.INFO)
 
 
 class RayXGBoostTrainingError(RuntimeError):
@@ -94,6 +95,15 @@ def _assert_ray_support():
             "Try: `pip install ray`")
 
 
+class _RabitTracker(xgb.RabitTracker):
+    def start(self, nslave):
+        def run():
+            self.accept_slaves(nslave)
+
+        self.thread = multiprocessing.Process(target=run, args=())
+        self.thread.start()
+
+
 def _start_rabit_tracker(num_workers: int):
     """Start Rabit tracker. The workers connect to this tracker to share
     their results.
@@ -112,24 +122,27 @@ def _start_rabit_tracker(num_workers: int):
     host = get_node_ip_address()
 
     env = {"DMLC_NUM_WORKER": num_workers}
-    rabit_tracker = xgb.RabitTracker(hostIP=host, nslave=num_workers)
+
+    rabit_tracker = _RabitTracker(hostIP=host, nslave=num_workers)
 
     # Get tracker Host + IP
     env.update(rabit_tracker.slave_envs())
     rabit_tracker.start(num_workers)
 
     # Wait until context completion
-    process = multiprocessing.Process(target=rabit_tracker.join)
+    process = threading.Thread(target=rabit_tracker.join)
     process.daemon = True
     process.start()
 
-    logger.debug(f"Started Rabit tracker process with PID {process.pid}")
+    logger.debug(
+        f"Started Rabit tracker process with PID {rabit_tracker.thread.pid}")
 
-    return process, env
+    return rabit_tracker.thread, env
 
 
 def _stop_rabit_tracker(rabit_process: multiprocessing.Process):
     logger.debug(f"Stopping Rabit process with PID {rabit_process.pid}")
+    rabit_process.join(timeout=5)
     rabit_process.terminate()
 
 
@@ -357,9 +370,12 @@ class RayXGBoostActor:
 
         class _StopCallback(TrainingCallback):
             def after_iteration(self, model, epoch, evals_log):
-                if this._stop_event.is_set() \
-                        or this._get_stop_event() is not initial_stop_event:
-                    # Returning True stops training
+                try:
+                    if this._stop_event.is_set() or \
+                            this._get_stop_event() is not initial_stop_event:
+                        # Returning True stops training
+                        return True
+                except RayActorError:
                     return True
 
         return _StopCallback()
