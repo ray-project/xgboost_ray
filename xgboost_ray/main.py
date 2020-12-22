@@ -129,11 +129,6 @@ def _start_rabit_tracker(num_workers: int):
     env.update(rabit_tracker.slave_envs())
     rabit_tracker.start(num_workers)
 
-    # Wait until context completion
-    process = threading.Thread(target=rabit_tracker.join)
-    process.daemon = True
-    process.start()
-
     logger.debug(
         f"Started Rabit tracker process with PID {rabit_tracker.thread.pid}")
 
