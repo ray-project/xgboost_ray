@@ -746,7 +746,7 @@ def _maybe_schedule_new_actors(
 
     now = time.time()
 
-    # Check periodically ever n seconds.
+    # Check periodically every n seconds.
     if now < training_state.last_resource_check_at + \
             ELASTIC_RESTART_RESOURCE_CHECK_S:
         return False
