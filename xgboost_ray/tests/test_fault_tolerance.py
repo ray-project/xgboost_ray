@@ -13,7 +13,7 @@ import ray
 from xgboost_ray import train, RayDMatrix, RayParams
 from xgboost_ray.main import RayXGBoostActorAvailable
 from xgboost_ray.tests.utils import flatten_obj, _checkpoint_callback, \
-    _fail_callback, tree_obj, _kill_callback
+    _fail_callback, tree_obj, _kill_callback, _sleep_callback
 
 
 class _FakeTask(MagicMock):
@@ -94,6 +94,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingContinuationElasticKilled(self):
         """This should continue after one actor died."""
+        os.environ["ELASTIC_RESTART_DISABLED"] = "1"
+
         additional_results = {}
         keep_actors = {}
 
@@ -128,8 +130,53 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         # Only one worker finished, so n=16
         self.assertEqual(additional_results["total_n"], 16)
 
+    def testTrainingContinuationElasticKilledRestarted(self):
+        """This should continue after one actor died and restart it."""
+        from ray import logger
+        logger.setLevel(10)
+
+        additional_results = {}
+        keep_actors = {}
+
+        def keep(actors, *args, **kwargs):
+            keep_actors["actors"] = actors.copy()
+            return DEFAULT
+
+        with patch("xgboost_ray.main._shutdown") as mocked:
+            mocked.side_effect = keep
+            bst = train(
+                self.params,
+                RayDMatrix(self.x, self.y),
+                callbacks=[
+                    _kill_callback(self.die_lock_file, fail_iteration=6),
+                    _sleep_callback(sleep_iteration=7, sleep_seconds=5)
+                ],
+                num_boost_round=20,
+                ray_params=RayParams(
+                    max_actor_restarts=1,
+                    num_actors=2,
+                    elastic_training=True,
+                    max_failed_actors=1),
+                additional_results=additional_results)
+
+        x_mat = xgb.DMatrix(self.x)
+        pred_y = bst.predict(x_mat)
+        self.assertSequenceEqual(list(self.y), list(pred_y))
+        print(f"Got correct predictions: {pred_y}")
+
+        actors = keep_actors["actors"]
+
+        # First actor gets recreated
+        self.assertTrue(actors[0])
+        self.assertTrue(actors[1])
+
+        # Both workers finished, so n=32
+        self.assertEqual(additional_results["total_n"], 32)
+
     def testTrainingContinuationElasticFailed(self):
         """This should continue after one actor failed training."""
+        os.environ["ELASTIC_RESTART_DISABLED"] = "1"
+
         additional_results = {}
         keep_actors = {}
 
@@ -426,7 +473,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             created_actors.append(rank)
             return MagicMock()
 
-        os.environ["XGBOOST_RAY_ELASTIC_WAIT_S"] = "30"
+        os.environ["ELASTIC_RESTART_GRACE_PERIOD_S"] = "30"
 
         with patch("ray.nodes") as nodes, \
                 patch("xgboost_ray.main._create_actor") as create_actor:

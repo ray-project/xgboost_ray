@@ -3,6 +3,7 @@ import threading
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass, field
 
+import logging
 import multiprocessing
 import os
 import pickle
@@ -24,7 +25,6 @@ except ImportError:
 
 try:
     import ray
-    from ray import logger
     from ray.services import get_node_ip_address
     from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
@@ -32,7 +32,7 @@ try:
 
     RAY_INSTALLED = True
 except ImportError:
-    ray = logger = get_node_ip_address = Queue = Event = ActorHandle = None
+    ray = get_node_ip_address = Queue = Event = ActorHandle = None
     RAY_INSTALLED = False
 
 from xgboost_ray.tune import _try_add_tune_callback
@@ -47,6 +47,24 @@ _USE_SPREAD_STRATEGY = int(os.getenv("USE_SPREAD_STRATEGY", 1))
 
 # How long to wait for placement group creation before failing.
 PLACEMENT_GROUP_TIMEOUT_S = int(os.getenv("PLACEMENT_GROUP_TIMEOUT_S", 100))
+
+# Status report frequency when waiting for initial actors and during training
+STATUS_FREQUENCY_S = int(os.getenv("STATUS_FREQUENCY_S", 30))
+
+# If restarting failed actors is disabled
+ELASTIC_RESTART_DISABLED = not bool(
+    int(os.getenv("ELASTIC_RESTART_DISABLED", "0")))
+
+# How often to check for new available resources
+ELASTIC_RESTART_RESOURCE_CHECK_S = int(
+    os.getenv("ELASTIC_RESTART_RESOURCE_CHECK_S", 30))
+
+# How long to wait before triggering a new start of the training loop
+# when new actors become available
+ELASTIC_RESTART_GRACE_PERIOD_S = int(
+    os.getenv("ELASTIC_RESTART_GRACE_PERIOD_S", 10))
+
+logger = logging.getLogger(__name__)
 
 
 class RayXGBoostTrainingError(RuntimeError):
@@ -671,7 +689,7 @@ class _TrainingState:
 def _maybe_schedule_new_actors(
         training_state: _TrainingState, num_cpus_per_actor: int,
         num_gpus_per_actor: int, resources_per_actor: Optional[Dict],
-        ray_params: RayParams, load_data: List[RayDMatrix]):
+        ray_params: RayParams, load_data: List[RayDMatrix]) -> bool:
     """Schedule new actors for elastic training if resources are available.
 
     Potentially starts new actors and triggers data loading."""
@@ -689,11 +707,10 @@ def _maybe_schedule_new_actors(
         return False
 
     now = time.time()
-    resource_check_interval = int(
-        os.environ.get("XGBOOST_RAY_RESOURCE_CHECK_S", 30))
 
     # Check periodically ever n seconds.
-    if now < training_state.last_resource_check_at + resource_check_interval:
+    if now < training_state.last_resource_check_at + \
+            ELASTIC_RESTART_RESOURCE_CHECK_S:
         return False
 
     training_state.last_resource_check_at = now
@@ -780,7 +797,7 @@ def _update_scheduled_actor_states(training_state: _TrainingState):
         # If an actor became ready but other actors are pending, we wait
         # for n seconds before restarting, as chances are that they become
         # ready as well (e.g. if a large node came up).
-        grace_period = int(os.environ.get("XGBOOST_RAY_ELASTIC_WAIT_S", 10))
+        grace_period = ELASTIC_RESTART_GRACE_PERIOD_S
         if training_state.restart_training_at is None:
             logger.debug(
                 f"An RayXGBoostActor became ready for training. Waiting "
@@ -879,13 +896,11 @@ def _train(params: Dict,
 
     start_wait = time.time()
     last_status = 0
-    report_status_frequency = int(
-        os.environ.get("XGBOOST_RAY_WAIT_STATUS_S", 30))
     try:
         # Construct list before calling any() to force evaluation
         ready_states = [task.is_ready() for task in prepare_actor_tasks]
         while not all(ready_states):
-            if time.time() >= last_status + report_status_frequency:
+            if time.time() >= last_status + STATUS_FREQUENCY_S:
                 wait_time = time.time() - start_wait
                 logger.info(f"Waiting until actors are ready "
                             f"({wait_time:.0f} seconds passed).")
@@ -948,16 +963,18 @@ def _train(params: Dict,
                     checkpoint=_training_state.checkpoint,
                     callback_returns=callback_returns)
 
-                _maybe_schedule_new_actors(
-                    training_state=_training_state,
-                    num_cpus_per_actor=cpus_per_actor,
-                    num_gpus_per_actor=gpus_per_actor,
-                    resources_per_actor=ray_params.resources_per_actor,
-                    ray_params=ray_params,
-                    load_data=load_data)
+                if ray_params.elastic_training \
+                        and not ELASTIC_RESTART_DISABLED:
+                    _maybe_schedule_new_actors(
+                        training_state=_training_state,
+                        num_cpus_per_actor=cpus_per_actor,
+                        num_gpus_per_actor=gpus_per_actor,
+                        resources_per_actor=ray_params.resources_per_actor,
+                        ray_params=ray_params,
+                        load_data=load_data)
 
-                # This may raise RayXGBoostActorAvailable
-                _update_scheduled_actor_states(_training_state)
+                    # This may raise RayXGBoostActorAvailable
+                    _update_scheduled_actor_states(_training_state)
 
             ready, not_ready = ray.wait(not_ready, timeout=0)
             logger.debug("[RayXGBoost] Waiting for results...")

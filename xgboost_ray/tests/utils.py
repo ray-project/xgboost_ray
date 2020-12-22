@@ -176,3 +176,23 @@ def _checkpoint_callback(frequency: int = 1, before_iteration_=False):
                 self.after_iteration(model, epoch, evals_log)
 
     return _CheckpointCallback()
+
+
+def _sleep_callback(sleep_iteration: int = 6, sleep_seconds: int = 5):
+    """Returns a callback to sleep after an iteration.
+
+    This artificially infaltes training time.
+
+    Args:
+        sleep_iteration (int): The iteration after which the actor should
+            sleep.
+        sleep_seconds (int): Time in seconds the actor should sleep.
+
+    """
+
+    class _SleepCallback(TrainingCallback):
+        def after_iteration(self, model, epoch, evals_log):
+            if epoch == sleep_iteration:
+                time.sleep(sleep_seconds)
+
+    return _SleepCallback()
