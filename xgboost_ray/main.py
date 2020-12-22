@@ -1,6 +1,6 @@
 import threading
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import multiprocessing
 import os
@@ -27,7 +27,7 @@ try:
     from ray.services import get_node_ip_address
     from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
-    from xgboost_ray.util import Event, Queue
+    from xgboost_ray.util import Event, Queue, MultiActorTask
 
     RAY_INSTALLED = True
 except ImportError:
@@ -325,7 +325,6 @@ class RayXGBoostActor:
         data.unload_data()  # Free object store
 
         matrix = _get_dmatrix(data, param)
-
         self._data[data] = matrix
 
     def train(self, rabit_args: List[str], params: Dict[str, Any],
@@ -412,6 +411,18 @@ class RayXGBoostActor:
 
         predictions = model.predict(local_data, **kwargs)
         return predictions
+
+
+class _PrepareActorTask(MultiActorTask):
+    def __init__(self, actor: ActorHandle, queue: Queue, stop_event: Event,
+                 load_data: List[RayDMatrix]):
+        futures = []
+        futures.append(actor.set_queue.remote(queue))
+        futures.append(actor.set_stop_event.remote(stop_event))
+        for data in load_data:
+            futures.append(actor.load_data.remote(data))
+
+        super(_PrepareActorTask, self).__init__(futures)
 
 
 def _autodetect_resources(ray_params: Union[None, RayParams, Dict] = None,
@@ -596,9 +607,10 @@ class _TrainingState:
     checkpoint: _Checkpoint
     additional_results: Dict
 
-    placement_group: PlacementGroup
+    placement_group: Optional[PlacementGroup] = None
 
-    failed_actor_ranks: set
+    failed_actor_ranks: set = field(default_factory=set)
+    pending_actor_ranks: Dict[int, ray.ObjectRef] = field(default_factory=dict)
 
 
 def _train(params: Dict,
@@ -664,34 +676,38 @@ def _train(params: Dict,
         _training_state.failed_actor_ranks.remove(i)
         newly_created += 1
 
-    # Maybe we got a new Queue actor, so send it to all actors.
-    wait_queue = [
-        actor.set_queue.remote(_training_state.queue)
-        for actor in _training_state.actors if actor is not None
-    ]
-    ray.get(wait_queue)
-
-    # Maybe we got a new Event actor, so send it to all actors.
-    wait_event = [
-        actor.set_stop_event.remote(_training_state.stop_event)
-        for actor in _training_state.actors if actor is not None
-    ]
-    ray.get(wait_event)
-
     alive_actors = sum(1 for a in _training_state.actors if a is not None)
     logger.info(f"[RayXGBoost] Created {newly_created} new actors "
-                f"({alive_actors} total actors).")
+                f"({alive_actors} total actors). Waiting until actors"
+                f"are ready for training.")
 
-    # Split data across workers
-    wait_load = []
-    for actor in _training_state.actors:
-        if actor is None:
-            continue
-        # If data is already on the node, will not load again
-        wait_load.extend(_trigger_data_load(actor, dtrain, evals))
+    prepare_actor_tasks = [
+        _PrepareActorTask(
+            actor,
+            # Maybe we got a new Queue actor, so send it to all actors.
+            queue=_training_state.queue,
+            # Maybe we got a new Event actor, so send it to all actors.
+            stop_event=_training_state.stop_event,
+            # Trigger data loading
+            load_data=[dtrain] + [eval[0] for eval in evals])
+        for actor in _training_state.actors if actor is not None
+    ]
 
+    start_wait = time.time()
+    last_status = 0
+    report_status_frequency = 2  # Todo: env variable?
     try:
-        ray.get(wait_load)
+        # Construct list before calling any() to force evaluation
+        ready_states = [task.is_ready() for task in prepare_actor_tasks]
+        while not all(ready_states):
+            if time.time() >= last_status + report_status_frequency:
+                wait_time = time.time() - start_wait
+                logger.info(f"Waiting until actors are ready "
+                            f"({wait_time:.0f} seconds passed).")
+                last_status = time.time()
+            time.sleep(0.1)
+            ready_states = [task.is_ready() for task in prepare_actor_tasks]
+
     except Exception as exc:
         _training_state.stop_event.set()
         _get_actor_alive_status(_training_state.actors, handle_actor_failure)
@@ -746,6 +762,7 @@ def _train(params: Dict,
                     queue=_training_state.queue,
                     checkpoint=_training_state.checkpoint,
                     callback_returns=callback_returns)
+
             ready, not_ready = ray.wait(not_ready, timeout=0)
             logger.debug("[RayXGBoost] Waiting for results...")
             ray.get(ready)

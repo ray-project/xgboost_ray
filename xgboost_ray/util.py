@@ -1,8 +1,9 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 import ray
 import asyncio
 
+from ray import ObjectRef
 from ray.util.queue import Queue as RayQueue, Empty, Full
 
 
@@ -113,3 +114,24 @@ else:
             if self.actor:
                 ray.kill(self.actor)
             self.actor = None
+
+
+class MultiActorTask:
+    def __init__(self, pending_futures: Optional[List[ObjectRef]] = None):
+        self._pending_futures = pending_futures or []
+        self._ready_futures = []
+
+    def is_ready(self):
+        if not self._pending_futures:
+            return True
+
+        ready = True
+        while ready:
+            ready, not_ready = ray.wait(self._pending_futures, timeout=0)
+            if ready:
+                for obj in ready:
+                    ray.get(obj)
+                    self._pending_futures.remove(obj)
+                    self._ready_futures.append(obj)
+
+        return not bool(self._pending_futures)
