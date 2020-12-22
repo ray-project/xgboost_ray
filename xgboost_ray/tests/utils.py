@@ -118,6 +118,7 @@ def _kill_callback(die_lock_file: str,
                     fp.write("")
 
                 time.sleep(2)
+                print(f"Testing: Rank {get_actor_rank()} will now die.")
                 os.kill(pid, 9)
 
     return _KillCallback()
@@ -150,6 +151,7 @@ def _fail_callback(die_lock_file: str,
                     fp.write("")
                 time.sleep(2)
                 import sys
+                print(f"Testing: Rank {get_actor_rank()} will now fail.")
                 sys.exit(1)
 
     return _FailCallback()
@@ -193,6 +195,8 @@ def _sleep_callback(sleep_iteration: int = 6, sleep_seconds: int = 5):
     class _SleepCallback(TrainingCallback):
         def after_iteration(self, model, epoch, evals_log):
             if epoch == sleep_iteration:
+                print(f"Testing: Rank {get_actor_rank()} will now sleep "
+                      f"for {sleep_seconds} seconds.")
                 time.sleep(sleep_seconds)
 
     return _SleepCallback()

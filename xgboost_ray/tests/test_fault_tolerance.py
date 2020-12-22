@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import tempfile
@@ -96,6 +97,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         """This should continue after one actor died."""
         os.environ["ELASTIC_RESTART_DISABLED"] = "1"
 
+        logging.getLogger().setLevel(10)
+
         additional_results = {}
         keep_actors = {}
 
@@ -132,8 +135,9 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingContinuationElasticKilledRestarted(self):
         """This should continue after one actor died and restart it."""
-        from ray import logger
-        logger.setLevel(10)
+        os.environ["ELASTIC_RESTART_DISABLED"] = "0"
+
+        logging.getLogger().setLevel(10)
 
         additional_results = {}
         keep_actors = {}
@@ -149,7 +153,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 RayDMatrix(self.x, self.y),
                 callbacks=[
                     _kill_callback(self.die_lock_file, fail_iteration=6),
-                    _sleep_callback(sleep_iteration=7, sleep_seconds=5)
+                    _sleep_callback(sleep_iteration=7, sleep_seconds=15)
                 ],
                 num_boost_round=20,
                 ray_params=RayParams(
