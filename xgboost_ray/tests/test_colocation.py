@@ -70,14 +70,13 @@ class TestColocation:
         assert len(ray.state.node_ids()) == 2
         assert local_node in ray.state.node_ids()
 
-        def _mock_train(*args, _queue, _stop_event, **kwargs):
-            assert ray.get(_queue.actor.get_node_id.remote()
+        def _mock_train(*args, _training_state, **kwargs):
+            assert ray.get(_training_state.queue.actor.get_node_id.remote()
                            ) == ray.state.current_node_id()
             assert ray.get(
-                _stop_event.actor.get_node_id.remote()) == \
+                _training_state.stop_event.actor.get_node_id.remote()) == \
                 ray.state.current_node_id()
-            return _train(
-                *args, _queue=_queue, _stop_event=_stop_event, **kwargs)
+            return _train(*args, _training_state=_training_state, **kwargs)
 
         with patch("xgboost_ray.main._train", _mock_train):
             train(
@@ -99,18 +98,19 @@ class TestColocation:
         ray_params = RayParams(
             max_actor_restarts=1, num_actors=2, cpus_per_actor=2)
 
-        def _mock_train(*args, _actors, **kwargs):
+        def _mock_train(*args, _training_state, **kwargs):
             try:
-                results = _train(*args, _actors=_actors, **kwargs)
+                results = _train(
+                    *args, _training_state=_training_state, **kwargs)
                 return results
             except Exception:
                 raise
             finally:
-                assert len(_actors) == 2
-                if not any(a is None for a in _actors):
+                assert len(_training_state.actors) == 2
+                if not any(a is None for a in _training_state.actors):
                     actor_infos = ray.actors()
                     actor_nodes = []
-                    for a in _actors:
+                    for a in _training_state.actors:
                         actor_info = actor_infos.get(a._actor_id.hex())
                         actor_node = actor_info["Address"]["NodeID"]
                         actor_nodes.append(actor_node)
@@ -141,18 +141,19 @@ class TestColocation:
         ray_params = RayParams(
             max_actor_restarts=1, num_actors=2, cpus_per_actor=1)
 
-        def _mock_train(*args, _actors, **kwargs):
+        def _mock_train(*args, _training_state, **kwargs):
             try:
-                results = _train(*args, _actors=_actors, **kwargs)
+                results = _train(
+                    *args, _training_state=_training_state, **kwargs)
                 return results
             except Exception:
                 raise
             finally:
-                assert len(_actors) == 2
-                if not any(a is None for a in _actors):
+                assert len(_training_state.actors) == 2
+                if not any(a is None for a in _training_state.actors):
                     actor_infos = ray.actors()
                     actor_nodes = []
-                    for a in _actors:
+                    for a in _training_state.actors:
                         actor_info = actor_infos.get(a._actor_id.hex())
                         actor_node = actor_info["Address"]["NodeID"]
                         actor_nodes.append(actor_node)
