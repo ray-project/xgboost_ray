@@ -1,3 +1,4 @@
+import math
 import threading
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass, field
@@ -57,6 +58,12 @@ class RayXGBoostTrainingError(RuntimeError):
 class RayXGBoostTrainingStopped(RuntimeError):
     """Raised from RayXGBoostActor.train() when training was deliberately
     stopped."""
+    pass
+
+
+class RayXGBoostActorAvailable(RuntimeError):
+    """Raise from `_update_scheduled_actor_states()` when new actors become
+    available in elastic training"""
     pass
 
 
@@ -425,7 +432,7 @@ class _PrepareActorTask(MultiActorTask):
         super(_PrepareActorTask, self).__init__(futures)
 
 
-def _autodetect_resources(ray_params: Union[None, RayParams, Dict] = None,
+def _autodetect_resources(ray_params: RayParams,
                           use_tree_method: bool = False) -> Tuple[int, int]:
     gpus_per_actor = ray_params.gpus_per_actor
     cpus_per_actor = ray_params.cpus_per_actor
@@ -445,6 +452,49 @@ def _autodetect_resources(ray_params: Union[None, RayParams, Dict] = None,
             int(_get_min_node_cpus() or 1),
             int(cluster_cpus // ray_params.num_actors))
     return cpus_per_actor, gpus_per_actor
+
+
+def _num_possible_actors(num_cpus_per_actor: int,
+                         num_gpus_per_actor: int,
+                         resources_per_actor: Optional[Dict] = None,
+                         max_needed: int = -1) -> int:
+    """Returns number of actors that could be scheduled on this cluster."""
+    if max_needed < 0:
+        max_needed = float("inf")
+
+    def _check_resources(resource_dict: Dict):
+        # Check how many actors could be scheduled given available
+        # resources in `resource_dict`
+        available_cpus = resource_dict.get("CPU", 0.)
+        available_gpus = resource_dict.get("GPU", 0.)
+        available_custom = {
+            k: resource_dict.get(k, 0.)
+            for k in resources_per_actor
+        }
+
+        actors_cpu = actors_gpu = actors_custom = float("inf")
+
+        if num_cpus_per_actor > 0:
+            actors_cpu = math.floor(available_cpus / num_cpus_per_actor)
+        if num_gpus_per_actor > 0:
+            actors_gpu = math.floor(available_gpus / num_gpus_per_actor)
+        if resources_per_actor:
+            actors_custom = min(
+                math.floor(available_custom[k] / resources_per_actor[k])
+                if available_custom[k] > 0. else float("inf")
+                for k in resources_per_actor)
+
+        return min(actors_cpu, actors_gpu, actors_custom)
+
+    num_possible_actors = 0
+    for node in ray.nodes():
+        # Loop through all nodes and count how many actors
+        # could be scheduled on each
+        num_possible_actors += _check_resources(node["Resources"])
+        if num_possible_actors >= max_needed \
+                or num_possible_actors == float("inf"):
+            return num_possible_actors
+    return num_possible_actors
 
 
 def _create_actor(rank: int,
@@ -600,7 +650,7 @@ def _create_communication_processes():
 
 @dataclass
 class _TrainingState:
-    actors: List
+    actors: List[Optional[ActorHandle]]
     queue: Queue
     stop_event: Event
 
@@ -610,7 +660,127 @@ class _TrainingState:
     placement_group: Optional[PlacementGroup] = None
 
     failed_actor_ranks: set = field(default_factory=set)
-    pending_actor_ranks: Dict[int, ray.ObjectRef] = field(default_factory=dict)
+
+    # Last time we checked resources to schedule new actors
+    last_resource_check_at: float = 0
+    pending_actors: Dict[int, Tuple[ActorHandle, _PrepareActorTask]] = field(
+        default_factory=dict)
+    restart_training_at: Optional[float] = None
+
+
+def _maybe_schedule_new_actors(
+        training_state: _TrainingState, num_cpus_per_actor: int,
+        num_gpus_per_actor: int, resources_per_actor: Optional[Dict],
+        ray_params: RayParams, load_data: List[RayDMatrix]):
+    """Schedule new actors for elastic training if resources are available.
+
+    Potentially starts new actors and triggers data loading."""
+
+    # This is only enabled for elastic training.
+    if not ray_params.elastic_training:
+        return False
+
+    missing_actor_ranks = [
+        i for i, actor in enumerate(training_state.actors) if actor is None
+    ]
+
+    # If all actors are alive, there is nothing to do.
+    if not missing_actor_ranks:
+        return False
+
+    now = time.time()
+    resource_check_interval = int(
+        os.environ.get("XGBOOST_RAY_RESOURCE_CHECK_S", 30))
+
+    # Check periodically ever n seconds.
+    if now < training_state.last_resource_check_at + resource_check_interval:
+        return False
+
+    training_state.last_resource_check_at = now
+
+    n_resources_available = _num_possible_actors(
+        num_cpus_per_actor=num_cpus_per_actor,
+        num_gpus_per_actor=num_gpus_per_actor,
+        resources_per_actor=resources_per_actor,
+        max_needed=len(missing_actor_ranks))
+
+    # No resources available
+    if n_resources_available == 0:
+        return False
+
+    new_pending_actors: Dict[int, Tuple[ActorHandle, _PrepareActorTask]] = {}
+    for rank in missing_actor_ranks:
+        # If we used up all available resources, stop scheduling new actors.
+        if len(new_pending_actors) >= n_resources_available:
+            break
+
+        # Actor rank should not be already pending
+        if rank in training_state.pending_actors \
+                or rank in new_pending_actors:
+            continue
+
+        # We have resources available, so let's try to schedule this actor
+        actor = _create_actor(
+            rank=rank,
+            num_actors=ray_params.num_actors,
+            num_cpus_per_actor=num_cpus_per_actor,
+            num_gpus_per_actor=num_gpus_per_actor,
+            resources_per_actor=resources_per_actor,
+            placement_group=training_state.placement_group,
+            queue=training_state.queue,
+            checkpoint_frequency=ray_params.checkpoint_frequency)
+
+        task = _PrepareActorTask(
+            actor,
+            queue=training_state.queue,
+            stop_event=training_state.stop_event,
+            load_data=load_data)
+
+        new_pending_actors[rank] = (actor, task)
+    training_state.pending_actors.update(new_pending_actors)
+    return bool(new_pending_actors)
+
+
+def _update_scheduled_actor_states(training_state: _TrainingState):
+    """Update status of scheduled actors in elastic training.
+
+    If actors finished their preparation tasks, promote them to
+    proper training actors (set the `training_state.actors` entry).
+
+    Also schedule a `RayXGBoostActorAvailable` exception so that training
+    is restarted with the new actors.
+
+    """
+    now = time.time()
+    actor_became_ready = False
+
+    # Wrap in list so we can alter the `training_state.pending_actors` dict
+    for rank in list(training_state.pending_actors.keys()):
+        actor, task = training_state.pending_actors[rank]
+        if task.is_ready():
+            # Promote to proper actor
+            training_state.actors[rank] = actor
+            del training_state.pending_actors[rank]
+            actor_became_ready = True
+
+    if actor_became_ready:
+        if not training_state.pending_actors:
+            # No other actors are pending, so let's restart right away.
+            training_state.restart_training_at = now - 1.
+
+        # If an actor became ready but other actors are pending, we wait
+        # for n seconds before restarting, as chances are that they become
+        # ready as well (e.g. if a large node came up).
+        grace_period = int(os.environ.get("XGBOOST_RAY_ELASTIC_WAIT_S", 10))
+        if training_state.restart_training_at is None:
+            training_state.restart_training_at = now + grace_period
+
+    if training_state.restart_training_at is not None:
+        if now > training_state.restart_training_at:
+            training_state.restart_training_at = None
+            raise RayXGBoostActorAvailable(
+                "A new RayXGBoostActor became available for training. "
+                "Triggering restart.")
 
 
 def _train(params: Dict,
@@ -681,6 +851,8 @@ def _train(params: Dict,
                 f"({alive_actors} total actors). Waiting until actors"
                 f"are ready for training.")
 
+    load_data = [dtrain] + [eval[0] for eval in evals]
+
     prepare_actor_tasks = [
         _PrepareActorTask(
             actor,
@@ -689,13 +861,14 @@ def _train(params: Dict,
             # Maybe we got a new Event actor, so send it to all actors.
             stop_event=_training_state.stop_event,
             # Trigger data loading
-            load_data=[dtrain] + [eval[0] for eval in evals])
-        for actor in _training_state.actors if actor is not None
+            load_data=load_data) for actor in _training_state.actors
+        if actor is not None
     ]
 
     start_wait = time.time()
     last_status = 0
-    report_status_frequency = 2  # Todo: env variable?
+    report_status_frequency = int(
+        os.environ.get("XGBOOST_RAY_WAIT_STATUS_S", 30))
     try:
         # Construct list before calling any() to force evaluation
         ready_states = [task.is_ready() for task in prepare_actor_tasks]
@@ -762,6 +935,17 @@ def _train(params: Dict,
                     queue=_training_state.queue,
                     checkpoint=_training_state.checkpoint,
                     callback_returns=callback_returns)
+
+                _maybe_schedule_new_actors(
+                    training_state=_training_state,
+                    num_cpus_per_actor=cpus_per_actor,
+                    num_gpus_per_actor=gpus_per_actor,
+                    resources_per_actor=ray_params.resources_per_actor,
+                    ray_params=ray_params,
+                    load_data=load_data)
+
+                # This may raise RayXGBoostActorAvailable
+                _update_scheduled_actor_states(_training_state)
 
             ready, not_ready = ray.wait(not_ready, timeout=0)
             logger.debug("[RayXGBoost] Waiting for results...")
@@ -967,14 +1151,22 @@ def train(params: Dict,
                         "A Ray actor died during training and the maximum "
                         "number of dead actors in elastic training was "
                         "reached. Shutting down training.") from exc
+
+                if exc.__cause__ and isinstance(exc.__cause__,
+                                                RayXGBoostActorAvailable):
+                    logger.info(
+                        f"A new actor became available. Re-starting training "
+                        f"from latest checkpoint with new actor.")
+                else:
+                    logger.warning(
+                        f"A Ray actor died during training. Trying to "
+                        f"continue training on the remaining actors. "
+                        f"This will use {alive_actors} existing actors and "
+                        f"start {len(start_actor_ranks)} new actors. "
+                        f"Sleeping for 10 seconds for cleanup.")
+
                 # Do not start new actors
                 start_actor_ranks.clear()
-                logger.warning(
-                    f"A Ray actor died during training. Trying to continue "
-                    f"training on the remaining actors. "
-                    f"This will use {alive_actors} existing actors and start "
-                    f"{len(start_actor_ranks)} new actors. "
-                    f"Sleeping for 10 seconds for cleanup.")
                 start_again = True
 
             elif tries + 1 <= max_actor_restarts:
