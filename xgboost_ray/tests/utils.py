@@ -183,7 +183,7 @@ def _checkpoint_callback(frequency: int = 1, before_iteration_=False):
 def _sleep_callback(sleep_iteration: int = 6, sleep_seconds: int = 5):
     """Returns a callback to sleep after an iteration.
 
-    This artificially infaltes training time.
+    This artificially inflates training time.
 
     Args:
         sleep_iteration (int): The iteration after which the actor should
