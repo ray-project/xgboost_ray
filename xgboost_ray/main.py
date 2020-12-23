@@ -26,7 +26,6 @@ try:
     from ray.services import get_node_ip_address
     from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
-    from ray.ray_constants import LOGGER_FORMAT
     from ray.util import placement_group
     from ray.util.placement_group import PlacementGroup, remove_placement_group
 
@@ -65,9 +64,7 @@ ELASTIC_RESTART_RESOURCE_CHECK_S = int(
 ELASTIC_RESTART_GRACE_PERIOD_S = int(
     os.getenv("ELASTIC_RESTART_GRACE_PERIOD_S", 10))
 
-logging.basicConfig(level=100, format=LOGGER_FORMAT)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 class RayXGBoostTrainingError(RuntimeError):
@@ -96,6 +93,12 @@ def _assert_ray_support():
 
 
 class _RabitTracker(xgb.RabitTracker):
+    """
+    This method overwrites the xgboost-provided RabitTracker to switch
+    from a daemon thread to a multiprocessing Process. This is so that
+    we are able to terminate/kill the tracking process at will.
+    """
+
     def start(self, nslave):
         def run():
             self.accept_slaves(nslave)
@@ -548,8 +551,7 @@ def _num_possible_actors(num_cpus_per_actor: int,
         # Loop through all nodes and count how many actors
         # could be scheduled on each
         num_possible_actors += _check_resources(node["Resources"])
-        if num_possible_actors >= max_needed \
-                or num_possible_actors == float("inf"):
+        if num_possible_actors >= max_needed:
             return num_possible_actors
     return num_possible_actors
 

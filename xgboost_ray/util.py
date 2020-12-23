@@ -117,6 +117,15 @@ else:
 
 
 class MultiActorTask:
+    """Utility class to hold multiple futures.
+
+    The `is_ready()` method will return True once all futures are ready.
+
+    Args:
+        pending_futures (list): List of object references (futures)
+            that should be tracked.
+    """
+
     def __init__(self, pending_futures: Optional[List[ObjectRef]] = None):
         self._pending_futures = pending_futures or []
         self._ready_futures = []
@@ -130,7 +139,6 @@ class MultiActorTask:
             ready, not_ready = ray.wait(self._pending_futures, timeout=0)
             if ready:
                 for obj in ready:
-                    ray.get(obj)
                     self._pending_futures.remove(obj)
                     self._ready_futures.append(obj)
 
