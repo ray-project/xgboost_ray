@@ -1,4 +1,3 @@
-import math
 import threading
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass, field
@@ -512,50 +511,6 @@ def _autodetect_resources(ray_params: RayParams,
     return cpus_per_actor, gpus_per_actor
 
 
-def _num_possible_actors(num_cpus_per_actor: int,
-                         num_gpus_per_actor: int,
-                         resources_per_actor: Optional[Dict] = None,
-                         max_needed: int = -1) -> int:
-    """Returns number of actors that could be scheduled on this cluster."""
-    if max_needed < 0:
-        max_needed = float("inf")
-
-    resources_per_actor = resources_per_actor or {}
-
-    def _check_resources(resource_dict: Dict):
-        # Check how many actors could be scheduled given available
-        # resources in `resource_dict`
-        available_cpus = resource_dict.get("CPU", 0.)
-        available_gpus = resource_dict.get("GPU", 0.)
-        available_custom = {
-            k: resource_dict.get(k, 0.)
-            for k in resources_per_actor
-        }
-
-        actors_cpu = actors_gpu = actors_custom = float("inf")
-
-        if num_cpus_per_actor > 0:
-            actors_cpu = math.floor(available_cpus / num_cpus_per_actor)
-        if num_gpus_per_actor > 0:
-            actors_gpu = math.floor(available_gpus / num_gpus_per_actor)
-        if resources_per_actor:
-            actors_custom = min(
-                math.floor(available_custom[k] / resources_per_actor[k])
-                if available_custom[k] > 0. else float("inf")
-                for k in resources_per_actor)
-
-        return min(actors_cpu, actors_gpu, actors_custom)
-
-    num_possible_actors = 0
-    for node in ray.nodes():
-        # Loop through all nodes and count how many actors
-        # could be scheduled on each
-        num_possible_actors += _check_resources(node["Resources"])
-        if num_possible_actors >= max_needed:
-            return num_possible_actors
-    return num_possible_actors
-
-
 def _create_actor(rank: int,
                   num_actors: int,
                   num_cpus_per_actor: int,
@@ -605,42 +560,6 @@ def _handle_queue(queue: Queue, checkpoint: _Checkpoint,
             checkpoint.__dict__.update(item.__dict__)
         else:
             callback_returns[actor_rank].append(item)
-
-
-def _get_actor_alive_status(actors: List[ActorHandle],
-                            callback: Callable[[ActorHandle], None]):
-    """Loop through all actors. Invoke a callback on dead actors. """
-    obj_to_rank = {}
-
-    alive = 0
-    dead = 0
-
-    for rank, actor in enumerate(actors):
-        if actor is None:
-            dead += 1
-            continue
-        obj = actor.pid.remote()
-        obj_to_rank[obj] = rank
-
-    not_ready = list(obj_to_rank.keys())
-    while not_ready:
-        ready, not_ready = ray.wait(not_ready, timeout=0)
-
-        for obj in ready:
-            try:
-                pid = ray.get(obj)
-                rank = obj_to_rank[obj]
-                logger.debug(f"Actor {actors[rank]} with PID {pid} is alive.")
-                alive += 1
-            except Exception:
-                rank = obj_to_rank[obj]
-                logger.debug(f"Actor {actors[rank]} is _not_ alive.")
-                dead += 1
-                callback(actors[rank])
-    logger.info(f"Actor status: {alive} alive, {dead} dead "
-                f"({alive+dead} total)")
-
-    return alive, dead
 
 
 def _shutdown(actors: List[ActorHandle],
@@ -731,132 +650,6 @@ class _TrainingState:
     restart_training_at: Optional[float] = None
 
 
-def _maybe_schedule_new_actors(
-        training_state: _TrainingState, num_cpus_per_actor: int,
-        num_gpus_per_actor: int, resources_per_actor: Optional[Dict],
-        ray_params: RayParams, load_data: List[RayDMatrix]) -> bool:
-    """Schedule new actors for elastic training if resources are available.
-
-    Potentially starts new actors and triggers data loading."""
-
-    # This is only enabled for elastic training.
-    if not ray_params.elastic_training:
-        return False
-
-    missing_actor_ranks = [
-        i for i, actor in enumerate(training_state.actors) if actor is None
-    ]
-
-    # If all actors are alive, there is nothing to do.
-    if not missing_actor_ranks:
-        return False
-
-    now = time.time()
-
-    # Check periodically every n seconds.
-    if now < training_state.last_resource_check_at + \
-            ELASTIC_RESTART_RESOURCE_CHECK_S:
-        return False
-
-    training_state.last_resource_check_at = now
-
-    n_resources_available = _num_possible_actors(
-        num_cpus_per_actor=num_cpus_per_actor,
-        num_gpus_per_actor=num_gpus_per_actor,
-        resources_per_actor=resources_per_actor,
-        max_needed=len(missing_actor_ranks))
-
-    # No resources available
-    if n_resources_available == 0:
-        logger.debug(
-            "No new resources available to re-schedule failed actors.")
-        return False
-
-    new_pending_actors: Dict[int, Tuple[ActorHandle, _PrepareActorTask]] = {}
-    for rank in missing_actor_ranks:
-        # If we used up all available resources, stop scheduling new actors.
-        if len(new_pending_actors) >= n_resources_available:
-            logger.debug(
-                "No more resources available to re-schedule failed actors.")
-            break
-
-        # Actor rank should not be already pending
-        if rank in training_state.pending_actors \
-                or rank in new_pending_actors:
-            continue
-
-        # We have resources available, so let's try to schedule this actor
-        actor = _create_actor(
-            rank=rank,
-            num_actors=ray_params.num_actors,
-            num_cpus_per_actor=num_cpus_per_actor,
-            num_gpus_per_actor=num_gpus_per_actor,
-            resources_per_actor=resources_per_actor,
-            placement_group=training_state.placement_group,
-            queue=training_state.queue,
-            checkpoint_frequency=ray_params.checkpoint_frequency)
-
-        task = _PrepareActorTask(
-            actor,
-            queue=training_state.queue,
-            stop_event=training_state.stop_event,
-            load_data=load_data)
-
-        new_pending_actors[rank] = (actor, task)
-        logger.debug(f"Re-scheduled actor with rank {rank}. Waiting for "
-                     f"data loading before promoting it to training.")
-    training_state.pending_actors.update(new_pending_actors)
-    logger.info(f"Re-scheduled {len(new_pending_actors)} actors for training. "
-                f"Once data loading finished, they will be integrated into "
-                f"training again.")
-    return bool(new_pending_actors)
-
-
-def _update_scheduled_actor_states(training_state: _TrainingState):
-    """Update status of scheduled actors in elastic training.
-
-    If actors finished their preparation tasks, promote them to
-    proper training actors (set the `training_state.actors` entry).
-
-    Also schedule a `RayXGBoostActorAvailable` exception so that training
-    is restarted with the new actors.
-
-    """
-    now = time.time()
-    actor_became_ready = False
-
-    # Wrap in list so we can alter the `training_state.pending_actors` dict
-    for rank in list(training_state.pending_actors.keys()):
-        actor, task = training_state.pending_actors[rank]
-        if task.is_ready():
-            # Promote to proper actor
-            training_state.actors[rank] = actor
-            del training_state.pending_actors[rank]
-            actor_became_ready = True
-
-    if actor_became_ready:
-        if not training_state.pending_actors:
-            # No other actors are pending, so let's restart right away.
-            training_state.restart_training_at = now - 1.
-
-        # If an actor became ready but other actors are pending, we wait
-        # for n seconds before restarting, as chances are that they become
-        # ready as well (e.g. if a large node came up).
-        grace_period = ELASTIC_RESTART_GRACE_PERIOD_S
-        if training_state.restart_training_at is None:
-            logger.debug(
-                f"An RayXGBoostActor became ready for training. Waiting "
-                f"{grace_period} seconds before triggering training restart.")
-            training_state.restart_training_at = now + grace_period
-
-    if training_state.restart_training_at is not None:
-        if now > training_state.restart_training_at:
-            training_state.restart_training_at = None
-            raise RayXGBoostActorAvailable(
-                "A new RayXGBoostActor became available for training. "
-                "Triggering restart.")
-
-
 def _train(params: Dict,
            dtrain: RayDMatrix,
            *args,
@@ -878,6 +671,9 @@ def _train(params: Dict,
     errors occur. It is called more than once if errors occurred (e.g. an
     actor died) and failure handling is enabled.
     """
+    from xgboost_ray.elastic import _maybe_schedule_new_actors, \
+        _update_scheduled_actor_states, _get_actor_alive_status
+
     if "nthread" in params:
         if params["nthread"] > cpus_per_actor:
             raise ValueError(

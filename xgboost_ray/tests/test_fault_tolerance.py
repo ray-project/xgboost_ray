@@ -353,7 +353,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         if the number of actors that could be started on these nodes is
         correct.
         """
-        from xgboost_ray.main import _num_possible_actors
+        from xgboost_ray.util import _num_possible_actors
 
         node1 = {"Resources": {"CPU": 8.0, "GPU": 2.0, "custom": 20.0}}
         node2 = {"Resources": {"CPU": 15.0, "GPU": 0.0, "custom": 2.0}}
@@ -430,7 +430,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     max_needed=3), 8)
 
     @patch("xgboost_ray.main._PrepareActorTask", _FakeTask)
-    @patch("xgboost_ray.main.RayXGBoostActor", MagicMock)
+    @patch("xgboost_ray.main.RayXGBoostActor", MagicMock())
     @patch("xgboost_ray.main.ELASTIC_RESTART_GRACE_PERIOD_S", 30)
     def testMaybeScheduleNewActors(self):
         """Test scheduling of new actors if resources become available.
@@ -443,8 +443,9 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         after each call.
 
         """
-        from xgboost_ray.main import _TrainingState,\
-            _maybe_schedule_new_actors, _update_scheduled_actor_states
+        from xgboost_ray.main import _TrainingState
+        from xgboost_ray.elastic import _update_scheduled_actor_states
+        from xgboost_ray.elastic import _maybe_schedule_new_actors
 
         # Three actors are dead
         actors = [

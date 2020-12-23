@@ -1,9 +1,9 @@
+import math
 from typing import Dict, Optional, List
 
-import ray
 import asyncio
 
-from ray import ObjectRef
+import ray
 from ray.util.queue import Queue as RayQueue, Empty, Full
 
 
@@ -126,7 +126,7 @@ class MultiActorTask:
             that should be tracked.
     """
 
-    def __init__(self, pending_futures: Optional[List[ObjectRef]] = None):
+    def __init__(self, pending_futures: Optional[List[ray.ObjectRef]] = None):
         self._pending_futures = pending_futures or []
         self._ready_futures = []
 
@@ -143,3 +143,47 @@ class MultiActorTask:
                     self._ready_futures.append(obj)
 
         return not bool(self._pending_futures)
+
+
+def _num_possible_actors(num_cpus_per_actor: int,
+                         num_gpus_per_actor: int,
+                         resources_per_actor: Optional[Dict] = None,
+                         max_needed: int = -1) -> int:
+    """Returns number of actors that could be scheduled on this cluster."""
+    if max_needed < 0:
+        max_needed = float("inf")
+
+    resources_per_actor = resources_per_actor or {}
+
+    def _check_resources(resource_dict: Dict):
+        # Check how many actors could be scheduled given available
+        # resources in `resource_dict`
+        available_cpus = resource_dict.get("CPU", 0.)
+        available_gpus = resource_dict.get("GPU", 0.)
+        available_custom = {
+            k: resource_dict.get(k, 0.)
+            for k in resources_per_actor
+        }
+
+        actors_cpu = actors_gpu = actors_custom = float("inf")
+
+        if num_cpus_per_actor > 0:
+            actors_cpu = math.floor(available_cpus / num_cpus_per_actor)
+        if num_gpus_per_actor > 0:
+            actors_gpu = math.floor(available_gpus / num_gpus_per_actor)
+        if resources_per_actor:
+            actors_custom = min(
+                math.floor(available_custom[k] / resources_per_actor[k])
+                if available_custom[k] > 0. else float("inf")
+                for k in resources_per_actor)
+
+        return min(actors_cpu, actors_gpu, actors_custom)
+
+    num_possible_actors = 0
+    for node in ray.nodes():
+        # Loop through all nodes and count how many actors
+        # could be scheduled on each
+        num_possible_actors += _check_resources(node["Resources"])
+        if num_possible_actors >= max_needed:
+            return num_possible_actors
+    return num_possible_actors
