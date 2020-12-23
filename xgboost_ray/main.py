@@ -43,25 +43,27 @@ from xgboost_ray.session import init_session, put_queue, \
     set_session_queue
 
 # Whether to use SPREAD placement group strategy for training.
-_USE_SPREAD_STRATEGY = int(os.getenv("USE_SPREAD_STRATEGY", 1))
+_USE_SPREAD_STRATEGY = int(os.getenv("RXGB_USE_SPREAD_STRATEGY", 1))
 
 # How long to wait for placement group creation before failing.
-PLACEMENT_GROUP_TIMEOUT_S = int(os.getenv("PLACEMENT_GROUP_TIMEOUT_S", 100))
+PLACEMENT_GROUP_TIMEOUT_S = int(
+    os.getenv("RXGB_PLACEMENT_GROUP_TIMEOUT_S", 100))
 
 # Status report frequency when waiting for initial actors and during training
-STATUS_FREQUENCY_S = int(os.getenv("STATUS_FREQUENCY_S", 30))
+STATUS_FREQUENCY_S = int(os.getenv("RXGB_STATUS_FREQUENCY_S", 30))
 
 # If restarting failed actors is disabled
-ELASTIC_RESTART_DISABLED = bool(int(os.getenv("ELASTIC_RESTART_DISABLED", 0)))
+ELASTIC_RESTART_DISABLED = bool(
+    int(os.getenv("RXGB_ELASTIC_RESTART_DISABLED", 0)))
 
 # How often to check for new available resources
 ELASTIC_RESTART_RESOURCE_CHECK_S = int(
-    os.getenv("ELASTIC_RESTART_RESOURCE_CHECK_S", 30))
+    os.getenv("RXGB_ELASTIC_RESTART_RESOURCE_CHECK_S", 30))
 
 # How long to wait before triggering a new start of the training loop
 # when new actors become available
 ELASTIC_RESTART_GRACE_PERIOD_S = int(
-    os.getenv("ELASTIC_RESTART_GRACE_PERIOD_S", 10))
+    os.getenv("RXGB_ELASTIC_RESTART_GRACE_PERIOD_S", 10))
 
 logger = logging.getLogger(__name__)
 
