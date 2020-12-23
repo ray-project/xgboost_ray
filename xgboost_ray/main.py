@@ -644,11 +644,16 @@ def _get_actor_alive_status(actors: List[ActorHandle],
 
 
 def _shutdown(actors: List[ActorHandle],
+              pending_actors: Optional[Dict[int, Tuple[
+                  ActorHandle, _PrepareActorTask]]] = None,
               queue: Optional[Queue] = None,
               event: Optional[Event] = None,
               placement_group: Optional[PlacementGroup] = None,
               force: bool = False):
     alive_actors = [a for a in actors if a is not None]
+    if pending_actors:
+        alive_actors += [a for (a, _) in pending_actors.values()]
+
     if force:
         for actor in alive_actors:
             ray.kill(actor)
@@ -1278,6 +1283,7 @@ def train(params: Dict,
 
     _shutdown(
         actors=actors,
+        pending_actors=training_state.pending_actors,
         queue=queue,
         event=stop_event,
         placement_group=pg,
