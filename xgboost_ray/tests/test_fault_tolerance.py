@@ -430,7 +430,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     max_needed=3), 8)
 
     @patch("xgboost_ray.main._PrepareActorTask", _FakeTask)
-    @patch("xgboost_ray.main.RayXGBoostActor", MagicMock())
+    @patch("xgboost_ray.main.RayXGBoostActor", MagicMock)
     @patch("xgboost_ray.main.ELASTIC_RESTART_GRACE_PERIOD_S", 30)
     def testMaybeScheduleNewActors(self):
         """Test scheduling of new actors if resources become available.
@@ -479,7 +479,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             return MagicMock()
 
         with patch("ray.nodes") as nodes, \
-                patch("xgboost_ray.main._create_actor") as create_actor:
+                patch("xgboost_ray.elastic._create_actor") as create_actor:
             nodes.return_value = [node1, node2, node3]
             create_actor.side_effect = fake_create_actor
 
