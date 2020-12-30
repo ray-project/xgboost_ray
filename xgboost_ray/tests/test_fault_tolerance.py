@@ -355,12 +355,13 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         """
         from xgboost_ray.util import _num_possible_actors
 
-        node1 = {"Resources": {"CPU": 8.0, "GPU": 2.0, "custom": 20.0}}
-        node2 = {"Resources": {"CPU": 15.0, "GPU": 0.0, "custom": 2.0}}
-        node3 = {"Resources": {"CPU": 3.0, "GPU": 1.0, "custom": 3.0}}
+        node1 = {"node1": {"CPU": 8.0, "GPU": 2.0, "custom": 20.0}}
+        node2 = {"node2": {"CPU": 15.0, "GPU": 0.0, "custom": 2.0}}
+        node3 = {"node3": {"CPU": 3.0, "GPU": 1.0, "custom": 3.0}}
 
-        with patch("ray.nodes") as mocked:
-            mocked.return_value = [node1]
+        with patch(
+                "ray.ray.state.state._available_resources_per_node") as mocked:
+            mocked.return_value = dict(**node1)
             # Bounded by 8 CPUs with 2 CPUs per actor
             self.assertEqual(
                 _num_possible_actors(
@@ -394,8 +395,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     resources_per_actor={"custom": 11.0},
                     max_needed=-1), 1)
 
-        with patch("ray.nodes") as mocked:
-            mocked.return_value = [node1, node2, node3]
+        with patch("ray.state.state._available_resources_per_node") as mocked:
+            mocked.return_value = dict(**node1, **node2, **node3)
 
             # Per node: 4 + 7 + 1 = 12
             self.assertEqual(
@@ -470,9 +471,9 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
         # Node resources. We just require 8 CPUs per actor, so 2
         # actors could be scheduled (one on node1, one on node2).
-        node1 = {"Resources": {"CPU": 8.0, "GPU": 2.0, "custom": 20.0}}
-        node2 = {"Resources": {"CPU": 15.0, "GPU": 0.0, "custom": 2.0}}
-        node3 = {"Resources": {"CPU": 3.0, "GPU": 1.0, "custom": 3.0}}
+        node1 = {"node1": {"CPU": 8.0, "GPU": 2.0, "custom": 20.0}}
+        node2 = {"node2": {"CPU": 15.0, "GPU": 0.0, "custom": 2.0}}
+        node3 = {"node3": {"CPU": 3.0, "GPU": 1.0, "custom": 3.0}}
 
         created_actors = []
 
@@ -480,9 +481,9 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             created_actors.append(rank)
             return MagicMock()
 
-        with patch("ray.nodes") as nodes, \
+        with patch("ray.state.state._available_resources_per_node") as nodes, \
                 patch("xgboost_ray.elastic._create_actor") as create_actor:
-            nodes.return_value = [node1, node2, node3]
+            nodes.return_value = dict(**node1, **node2, **node3)
             create_actor.side_effect = fake_create_actor
 
             _maybe_schedule_new_actors(
@@ -498,10 +499,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             self.assertEqual(len(state.pending_actors), 2)
 
             # We have to adjust the available resources in this test
-            node1["Resources"]["CPU"] -= 8.0
-            node1["Resources"]["custom"] -= 1.0
-            node2["Resources"]["CPU"] -= 8.0
-            node2["Resources"]["custom"] -= 1.0
+            node1["node1"]["CPU"] -= 8.0
+            node1["node1"]["custom"] -= 1.0
+            node2["node2"]["CPU"] -= 8.0
+            node2["node2"]["custom"] -= 1.0
 
             # The number of created actors shouldn't change even
             # if we run this function again. This is because we
