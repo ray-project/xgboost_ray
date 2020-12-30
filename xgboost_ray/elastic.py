@@ -25,7 +25,8 @@ def _maybe_schedule_new_actors(
         return False
 
     missing_actor_ranks = [
-        i for i, actor in enumerate(training_state.actors) if actor is None
+        rank for rank, actor in enumerate(training_state.actors)
+        if actor is None and rank not in training_state.pending_actors
     ]
 
     # If all actors are alive, there is nothing to do.

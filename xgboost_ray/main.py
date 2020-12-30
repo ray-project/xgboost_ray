@@ -2,7 +2,6 @@ import threading
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union
 from dataclasses import dataclass, field
 
-import logging
 import multiprocessing
 import os
 import pickle
@@ -326,6 +325,7 @@ class RayXGBoostActor:
         self._stop_event = stop_event
 
         _set_omp_num_threads()
+        logger.debug(f"Initialized remote XGBoost actor with rank {self.rank}")
 
     def set_queue(self, queue: Queue):
         self.queue = queue
