@@ -22,6 +22,7 @@ except ImportError:
 
 try:
     import ray
+    from ray import logger
     from ray.services import get_node_ip_address
     from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
@@ -32,7 +33,7 @@ try:
 
     RAY_INSTALLED = True
 except ImportError:
-    ray = get_node_ip_address = Queue = Event = ActorHandle = None
+    ray = get_node_ip_address = Queue = Event = ActorHandle = logger = None
     RAY_INSTALLED = False
 
 from xgboost_ray.tune import _try_add_tune_callback
@@ -64,8 +65,6 @@ ELASTIC_RESTART_RESOURCE_CHECK_S = int(
 # when new actors become available
 ELASTIC_RESTART_GRACE_PERIOD_S = int(
     os.getenv("RXGB_ELASTIC_RESTART_GRACE_PERIOD_S", 10))
-
-logger = logging.getLogger(__name__)
 
 
 class RayXGBoostTrainingError(RuntimeError):
