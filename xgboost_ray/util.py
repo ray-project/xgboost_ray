@@ -180,10 +180,10 @@ def _num_possible_actors(num_cpus_per_actor: int,
         return min(actors_cpu, actors_gpu, actors_custom)
 
     num_possible_actors = 0
-    for node in ray.nodes():
+    for resources in ray.state.state._available_resources_per_node().values():
         # Loop through all nodes and count how many actors
         # could be scheduled on each
-        num_possible_actors += _check_resources(node["Resources"])
+        num_possible_actors += _check_resources(resources)
         if num_possible_actors >= max_needed:
             return num_possible_actors
     return num_possible_actors
