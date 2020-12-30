@@ -180,6 +180,7 @@ def _num_possible_actors(num_cpus_per_actor: int,
         return min(actors_cpu, actors_gpu, actors_custom)
 
     num_possible_actors = 0
+    ray.state.state._check_connected()  # Initialize global state
     for resources in ray.state.state._available_resources_per_node().values():
         # Loop through all nodes and count how many actors
         # could be scheduled on each
