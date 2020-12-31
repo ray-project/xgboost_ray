@@ -969,10 +969,10 @@ def train(params: Dict,
 
     if ray_params.elastic_training and ray_params.max_failed_actors == 0:
         raise ValueError(
-            "Elastic training enabled but the maximum number of failed actors"
-            "is set to 0. This means that elastic training is effectively "
-            "disabled. Please set `RayParams.max_failed_actors` to "
-            "something larger than 0 to enable elastic training.")
+            "Elastic training enabled but the maximum number of failed "
+            "actors is set to 0. This means that elastic training is "
+            "effectively disabled. Please set `RayParams.max_failed_actors` "
+            "to something larger than 0 to enable elastic training.")
 
     if ray_params.elastic_training and ray_params.max_actor_restarts == 0:
         raise ValueError(

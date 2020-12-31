@@ -236,7 +236,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 num_boost_round=20,
                 ray_params=RayParams(
                     elastic_training=True,
-                    max_failed_actors=0,
+                    max_failed_actors=1,
                     max_actor_restarts=1,
                     num_actors=2))
 
@@ -492,7 +492,11 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 num_gpus_per_actor=0,
                 resources_per_actor={"custom": 1.0},
                 load_data=[],
-                ray_params=RayParams(num_actors=8, elastic_training=True))
+                ray_params=RayParams(
+                    num_actors=8,
+                    elastic_training=True,
+                    max_failed_actors=1,
+                    max_actor_restarts=2))
 
             # 2 new actors should have been created
             self.assertEqual(len(created_actors), 2)
@@ -513,7 +517,11 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 num_gpus_per_actor=0,
                 resources_per_actor={"custom": 1.0},
                 load_data=[],
-                ray_params=RayParams(num_actors=8, elastic_training=True))
+                ray_params=RayParams(
+                    num_actors=8,
+                    elastic_training=True,
+                    max_failed_actors=1,
+                    max_actor_restarts=2))
 
             self.assertEqual(len(created_actors), 2)
             self.assertEqual(len(state.pending_actors), 2)
