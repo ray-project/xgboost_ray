@@ -54,12 +54,22 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         if os.path.exists(self.die_lock_file):
             os.remove(self.die_lock_file)
 
+        self.die_lock_file_2 = "/tmp/died_worker_2.lock"
+        if os.path.exists(self.die_lock_file_2):
+            os.remove(self.die_lock_file_2)
+
         ray.init(num_cpus=2, num_gpus=0, log_to_driver=True)
 
     def tearDown(self) -> None:
         if os.path.exists(self.tmpdir):
             shutil.rmtree(self.tmpdir)
         ray.shutdown()
+
+        if os.path.exists(self.die_lock_file):
+            os.remove(self.die_lock_file)
+
+        if os.path.exists(self.die_lock_file_2):
+            os.remove(self.die_lock_file_2)
 
     def testTrainingContinuationKilled(self):
         """This should continue after one actor died."""
@@ -233,8 +243,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 self.params,
                 RayDMatrix(self.x, self.y),
                 callbacks=[
-                    _kill_callback(self.die_lock_file, actor_rank=0),
-                    _kill_callback("/tmp/xgbray_test.lock", actor_rank=1)
+                    _kill_callback(
+                        self.die_lock_file, actor_rank=0, fail_iteration=3),
+                    _kill_callback(
+                        self.die_lock_file_2, actor_rank=1, fail_iteration=6)
                 ],
                 num_boost_round=20,
                 ray_params=RayParams(
@@ -362,8 +374,11 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         node2 = {"node2": {"CPU": 15.0, "GPU": 0.0, "custom": 2.0}}
         node3 = {"node3": {"CPU": 3.0, "GPU": 1.0, "custom": 3.0}}
 
-        with patch(
-                "ray.ray.state.state._available_resources_per_node") as mocked:
+        patch_target = "ray.ray.state.state.available_resources_per_node"
+        if not hasattr(ray.ray.state.state, "available_resources_per_node"):
+            patch_target = "ray.ray.state.state._available_resources_per_node"
+
+        with patch(patch_target) as mocked:
             mocked.return_value = dict(**node1)
             # Bounded by 8 CPUs with 2 CPUs per actor
             self.assertEqual(
@@ -398,7 +413,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     resources_per_actor={"custom": 11.0},
                     max_needed=-1), 1)
 
-        with patch("ray.state.state._available_resources_per_node") as mocked:
+        with patch(patch_target) as mocked:
             mocked.return_value = dict(**node1, **node2, **node3)
 
             # Per node: 4 + 7 + 1 = 12
@@ -484,7 +499,11 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             created_actors.append(rank)
             return MagicMock()
 
-        with patch("ray.state.state._available_resources_per_node") as nodes, \
+        patch_target = "ray.ray.state.state.available_resources_per_node"
+        if not hasattr(ray.ray.state.state, "available_resources_per_node"):
+            patch_target = "ray.ray.state.state._available_resources_per_node"
+
+        with patch(patch_target) as nodes, \
                 patch("xgboost_ray.elastic._create_actor") as create_actor:
             nodes.return_value = dict(**node1, **node2, **node3)
             create_actor.side_effect = fake_create_actor
