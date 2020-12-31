@@ -232,7 +232,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             train(
                 self.params,
                 RayDMatrix(self.x, self.y),
-                callbacks=[_kill_callback(self.die_lock_file)],
+                callbacks=[
+                    _kill_callback(self.die_lock_file, actor_rank=0),
+                    _kill_callback("/tmp/xgbray_test.lock", actor_rank=1)
+                ],
                 num_boost_round=20,
                 ray_params=RayParams(
                     elastic_training=True,
