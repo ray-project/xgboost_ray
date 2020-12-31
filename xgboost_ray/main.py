@@ -246,7 +246,6 @@ class RayParams:
             we still continue training.
         max_actor_restarts (int): Number of retries when Ray actors fail.
             Defaults to 0 (no retries). Set to -1 for unlimited retries.
-            Ignored when `elastic_training` is set.
         checkpoint_frequency (int): How often to save checkpoints. Defaults
             to ``5`` (every 5th iteration).
     """
@@ -910,6 +909,8 @@ def train(params: Dict,
     the number of dead actors is below ``ray_params.max_failed_actors``,
     training will continue right away with fewer actors. No data will be
     loaded again and the latest available checkpoint will be used.
+    A maximum of ``ray_params.max_actor_restarts`` restarts will be tried
+    before exiting.
 
     Second, if ``ray_params.elastic_training`` is ``False`` and
     the number of restarts is below ``ray_params.max_actor_restarts``,
@@ -966,6 +967,20 @@ def train(params: Dict,
                          "Please disable elastic_training in RayParams in "
                          "order to use xgboost_ray with Tune.")
 
+    if ray_params.elastic_training and ray_params.max_failed_actors == 0:
+        raise ValueError(
+            "Elastic training enabled but the maximum number of failed actors"
+            "is set to 0. This means that elastic training is effectively "
+            "disabled. Please set `RayParams.max_failed_actors` to "
+            "something larger than 0 to enable elastic training.")
+
+    if ray_params.elastic_training and ray_params.max_actor_restarts == 0:
+        raise ValueError(
+            "Elastic training enabled but the maximum number of actor "
+            "restarts is set to 0. This means that elastic training is "
+            "effectively disabled. Please set `RayParams.max_actor_restarts` "
+            "to something larger than 0 to enable elastic training.")
+
     if not dtrain.loaded and not dtrain.distributed:
         dtrain.load_data(ray_params.num_actors)
     for (deval, name) in evals:
@@ -980,6 +995,7 @@ def train(params: Dict,
     checkpoint = _Checkpoint()  # Keep track of latest checkpoint
     current_results = {}  # Keep track of additional results
     actors = [None] * ray_params.num_actors  # All active actors
+    pending_actors = {}
 
     # Create the Queue and Event actors.
     queue, stop_event = _create_communication_processes()
@@ -1000,7 +1016,7 @@ def train(params: Dict,
 
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
 
-    while True:
+    while tries <= max_actor_restarts:
         training_state = _TrainingState(
             actors=actors,
             queue=queue,
@@ -1008,7 +1024,8 @@ def train(params: Dict,
             checkpoint=checkpoint,
             additional_results=current_results,
             placement_group=pg,
-            failed_actor_ranks=start_actor_ranks)
+            failed_actor_ranks=start_actor_ranks,
+            pending_actors=pending_actors)
 
         try:
             bst, train_evals_result, train_additional_results = _train(
@@ -1039,21 +1056,24 @@ def train(params: Dict,
 
                 if exc.__cause__ and isinstance(exc.__cause__,
                                                 RayXGBoostActorAvailable):
+                    # New actor available, integrate into training loop
                     logger.info(
                         f"A new actor became available. Re-starting training "
                         f"from latest checkpoint with new actor. "
                         f"This will use {alive_actors} existing actors and "
                         f"start {len(start_actor_ranks)} new actors. "
                         f"Sleeping for 10 seconds for cleanup.")
-                else:
+                    tries -= 1  # This is deliberate so shouldn't count
+                    start_again = True
+
+                elif tries + 1 <= max_actor_restarts:
                     logger.warning(
                         f"A Ray actor died during training. Trying to "
                         f"continue training on the remaining actors. "
                         f"This will use {alive_actors} existing actors and "
                         f"start {len(start_actor_ranks)} new actors. "
                         f"Sleeping for 10 seconds for cleanup.")
-
-                start_again = True
+                    start_again = True
 
             elif tries + 1 <= max_actor_restarts:
                 logger.warning(
@@ -1080,7 +1100,7 @@ def train(params: Dict,
 
     _shutdown(
         actors=actors,
-        pending_actors=training_state.pending_actors,
+        pending_actors=pending_actors,
         queue=queue,
         event=stop_event,
         placement_group=pg,
