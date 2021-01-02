@@ -34,7 +34,6 @@ from ray.services import get_node_ip_address
 from ray.tune.session import get_trial_id
 from ray.tune.integration.docker import DockerSyncer
 
-
 from benchmark_cpu_gpu import train_ray
 from xgboost_ray import RayParams
 from xgboost_ray.session import put_queue
@@ -47,6 +46,7 @@ if "OMP_NUM_THREADS" in os.environ:
 
 class PlacementCallback(TrainingCallback):
     """This callback collects the Ray Tune trial ID and node IP"""
+
     def before_training(self, model):
         ip_address = get_node_ip_address()
         put_queue(ip_address)
@@ -60,15 +60,14 @@ class PlacementCallback(TrainingCallback):
 
 
 def tune_test(path,
-         num_trials,
-         num_workers,
-         num_boost_rounds,
-         num_files=0,
-         regression=False,
-         use_gpu=False,
-         fake_data=False,
-         smoke_test=False):
-
+              num_trials,
+              num_workers,
+              num_boost_rounds,
+              num_files=0,
+              regression=False,
+              use_gpu=False,
+              fake_data=False,
+              smoke_test=False):
     def local_train(config):
         temp_dir = None
         if fake_data or smoke_test:
@@ -104,7 +103,7 @@ def tune_test(path,
 
         xgboost_params.update(config)
 
-        ray_params=RayParams(
+        ray_params = RayParams(
             elastic_training=False,
             max_actor_restarts=0,
             num_actors=num_workers,
@@ -129,8 +128,8 @@ def tune_test(path,
             xgboost_params=xgboost_params,
             # kwargs
             additional_results=additional_results,
-            callbacks=[PlacementCallback(), TuneReportCallback()]
-        )
+            callbacks=[PlacementCallback(),
+                       TuneReportCallback()])
 
         bst.save_model("tuned.xgb")
 
@@ -140,14 +139,14 @@ def tune_test(path,
                 trial_ips.append(ip)
 
         tune_trial = get_trial_id()
-        with tune.checkpoint_dir(num_boost_rounds+1) as checkpoint_dir:
-            with open(os.path.join(
-                    checkpoint_dir, "callback_returns.json"), "wt") as f:
+        with tune.checkpoint_dir(num_boost_rounds + 1) as checkpoint_dir:
+            with open(
+                    os.path.join(checkpoint_dir, "callback_returns.json"),
+                    "wt") as f:
                 json.dump({tune_trial: trial_ips}, f)
 
         if temp_dir:
             shutil.rmtree(temp_dir)
-
 
     search_space = {
         "eta": tune.loguniform(1e-4, 1e-1),
@@ -170,8 +169,9 @@ def tune_test(path,
     ip_to_trials = defaultdict(list)
     for trial in analysis.trials:
         trial = trial
-        with open(os.path.join(
-                trial.checkpoint.value, "callback_returns.json"), "rt") as f:
+        with open(
+                os.path.join(trial.checkpoint.value, "callback_returns.json"),
+                "rt") as f:
             trial_to_ips = json.load(f)
         for tune_trial, ips in trial_to_ips.items():
             for node_ip in ips:
@@ -190,10 +190,11 @@ def tune_test(path,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test Ray Tune placement "
-                                                 "strategy")
+                                     "strategy")
 
     parser.add_argument("num_trials", type=int, help="num trials")
-    parser.add_argument("num_workers", type=int, help="num workers (per trial)")
+    parser.add_argument(
+        "num_workers", type=int, help="num workers (per trial)")
     parser.add_argument("num_rounds", type=int, help="num boost rounds")
     parser.add_argument("num_files", type=int, help="num files (per trial)")
 

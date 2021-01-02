@@ -9,7 +9,6 @@ from xgboost_ray.main import RayParams, _TrainingState, \
     ELASTIC_RESTART_RESOURCE_CHECK_S, ELASTIC_RESTART_GRACE_PERIOD_S
 
 from xgboost_ray.matrix import RayDMatrix
-from xgboost_ray.util import _num_possible_actors
 
 
 def _maybe_schedule_new_actors(
@@ -42,32 +41,14 @@ def _maybe_schedule_new_actors(
 
     training_state.last_resource_check_at = now
 
-    open_actor_slots = _num_possible_actors(
-        num_cpus_per_actor=num_cpus_per_actor,
-        num_gpus_per_actor=num_gpus_per_actor,
-        resources_per_actor=resources_per_actor,
-        max_needed=len(missing_actor_ranks))
-
-    # No resources available
-    if open_actor_slots == 0:
-        logger.debug(
-            "No new resources available to re-schedule failed actors.")
-        return False
-
     new_pending_actors: Dict[int, Tuple[ActorHandle, _PrepareActorTask]] = {}
     for rank in missing_actor_ranks:
-        # If we used up all available resources, stop scheduling new actors.
-        if len(new_pending_actors) >= open_actor_slots:
-            logger.debug(
-                "No more resources available to re-schedule failed actors.")
-            break
-
         # Actor rank should not be already pending
         if rank in training_state.pending_actors \
                 or rank in new_pending_actors:
             continue
 
-        # We have resources available, so let's try to schedule this actor
+        # Try to schedule this actor
         actor = _create_actor(
             rank=rank,
             num_actors=ray_params.num_actors,
@@ -86,11 +67,13 @@ def _maybe_schedule_new_actors(
 
         new_pending_actors[rank] = (actor, task)
         logger.debug(f"Re-scheduled actor with rank {rank}. Waiting for "
-                     f"data loading before promoting it to training.")
-    training_state.pending_actors.update(new_pending_actors)
-    logger.info(f"Re-scheduled {len(new_pending_actors)} actors for training. "
-                f"Once data loading finished, they will be integrated into "
-                f"training again.")
+                     f"placement and data loading before promoting it "
+                     f"to training.")
+    if new_pending_actors:
+        training_state.pending_actors.update(new_pending_actors)
+        logger.info(f"Re-scheduled {len(new_pending_actors)} actors for "
+                    f"training. Once data loading finished, they will be "
+                    f"integrated into training again.")
     return bool(new_pending_actors)
 
 

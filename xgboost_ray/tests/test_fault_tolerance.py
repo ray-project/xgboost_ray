@@ -361,93 +361,6 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         print("Callback returns:", res_error["callback_returns"][0])
         self.assertEqual(len(res_error["callback_returns"][0]), 10 + 2)
 
-    def testAvailableResources(self):
-        """Check the number of possible actors given cluster resources.
-
-        For a varying number of nodes with various resources, this test checks
-        if the number of actors that could be started on these nodes is
-        correct.
-        """
-        from xgboost_ray.util import _num_possible_actors
-
-        node1 = {"node1": {"CPU": 8.0, "GPU": 2.0, "custom": 20.0}}
-        node2 = {"node2": {"CPU": 15.0, "GPU": 0.0, "custom": 2.0}}
-        node3 = {"node3": {"CPU": 3.0, "GPU": 1.0, "custom": 3.0}}
-
-        patch_target = "ray.ray.state.state.available_resources_per_node"
-        if not hasattr(ray.ray.state.state, "available_resources_per_node"):
-            patch_target = "ray.ray.state.state._available_resources_per_node"
-
-        with patch(patch_target) as mocked:
-            mocked.return_value = dict(**node1)
-            # Bounded by 8 CPUs with 2 CPUs per actor
-            self.assertEqual(
-                _num_possible_actors(
-                    num_cpus_per_actor=2,
-                    num_gpus_per_actor=0,
-                    resources_per_actor={},
-                    max_needed=-1), 4)
-
-            # Bounded by 8 CPUs with 2 CPUs per actor
-            # and by 20 `custom` with 5 `custom` per actor
-            self.assertEqual(
-                _num_possible_actors(
-                    num_cpus_per_actor=2,
-                    num_gpus_per_actor=0,
-                    resources_per_actor={"custom": 5.0},
-                    max_needed=-1), 4)
-
-            # Bounded by 2 GPUs with 1 GPUs per actor
-            self.assertEqual(
-                _num_possible_actors(
-                    num_cpus_per_actor=2,
-                    num_gpus_per_actor=1,
-                    resources_per_actor={"custom": 5.0},
-                    max_needed=-1), 2)
-
-            # Bounded by 20 `custom` with 11 `custom` per actor
-            self.assertEqual(
-                _num_possible_actors(
-                    num_cpus_per_actor=2,
-                    num_gpus_per_actor=1,
-                    resources_per_actor={"custom": 11.0},
-                    max_needed=-1), 1)
-
-        with patch(patch_target) as mocked:
-            mocked.return_value = dict(**node1, **node2, **node3)
-
-            # Per node: 4 + 7 + 1 = 12
-            self.assertEqual(
-                _num_possible_actors(
-                    num_cpus_per_actor=2,
-                    num_gpus_per_actor=0,
-                    resources_per_actor={},
-                    max_needed=-1), 12)
-
-            # Per node: 2 + 0 + 1
-            self.assertEqual(
-                _num_possible_actors(
-                    num_cpus_per_actor=2,
-                    num_gpus_per_actor=1,
-                    resources_per_actor={},
-                    max_needed=-1), 3)
-
-            # Per node: 2 + 0 + 0
-            self.assertEqual(
-                _num_possible_actors(
-                    num_cpus_per_actor=4,
-                    num_gpus_per_actor=1,
-                    resources_per_actor={},
-                    max_needed=-1), 2)
-
-            # Maximum needed achieved after first node
-            self.assertEqual(
-                _num_possible_actors(
-                    num_cpus_per_actor=1,
-                    num_gpus_per_actor=0,
-                    resources_per_actor={},
-                    max_needed=3), 8)
-
     @patch("xgboost_ray.main._PrepareActorTask", _FakeTask)
     @patch("xgboost_ray.elastic._PrepareActorTask", _FakeTask)
     @patch("xgboost_ray.main.RayXGBoostActor", MagicMock)
@@ -487,25 +400,13 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             failed_actor_ranks=set(),
         )
 
-        # Node resources. We just require 8 CPUs per actor, so 2
-        # actors could be scheduled (one on node1, one on node2).
-        node1 = {"node1": {"CPU": 8.0, "GPU": 2.0, "custom": 20.0}}
-        node2 = {"node2": {"CPU": 15.0, "GPU": 0.0, "custom": 2.0}}
-        node3 = {"node3": {"CPU": 3.0, "GPU": 1.0, "custom": 3.0}}
-
         created_actors = []
 
         def fake_create_actor(rank, *args, **kwargs):
             created_actors.append(rank)
             return MagicMock()
 
-        patch_target = "ray.ray.state.state.available_resources_per_node"
-        if not hasattr(ray.ray.state.state, "available_resources_per_node"):
-            patch_target = "ray.ray.state.state._available_resources_per_node"
-
-        with patch(patch_target) as nodes, \
-                patch("xgboost_ray.elastic._create_actor") as create_actor:
-            nodes.return_value = dict(**node1, **node2, **node3)
+        with patch("xgboost_ray.elastic._create_actor") as create_actor:
             create_actor.side_effect = fake_create_actor
 
             _maybe_schedule_new_actors(
@@ -520,19 +421,12 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     max_failed_actors=1,
                     max_actor_restarts=2))
 
-            # 2 new actors should have been created
-            self.assertEqual(len(created_actors), 2)
-            self.assertEqual(len(state.pending_actors), 2)
-
-            # We have to adjust the available resources in this test
-            node1["node1"]["CPU"] -= 8.0
-            node1["node1"]["custom"] -= 1.0
-            node2["node2"]["CPU"] -= 8.0
-            node2["node2"]["custom"] -= 1.0
+            # 3 new actors should have been created
+            self.assertEqual(len(created_actors), 3)
+            self.assertEqual(len(state.pending_actors), 3)
 
             # The number of created actors shouldn't change even
-            # if we run this function again. This is because we
-            # don't have enough resources available for another actor.
+            # if we run this function again.
             _maybe_schedule_new_actors(
                 training_state=state,
                 num_cpus_per_actor=8,
@@ -545,8 +439,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     max_failed_actors=1,
                     max_actor_restarts=2))
 
-            self.assertEqual(len(created_actors), 2)
-            self.assertEqual(len(state.pending_actors), 2)
+            self.assertEqual(len(created_actors), 3)
+            self.assertEqual(len(state.pending_actors), 3)
 
             # The actors have not yet been promoted because the
             # loading task has not finished.
@@ -593,7 +487,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             # All restarted actors should have been promoted to full actors
             self.assertTrue(actors[1])
             self.assertTrue(actors[4])
-            self.assertFalse(actors[6])
+            self.assertTrue(actors[6])
 
 
 if __name__ == "__main__":

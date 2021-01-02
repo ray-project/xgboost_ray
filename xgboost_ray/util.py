@@ -1,4 +1,3 @@
-import math
 from typing import Dict, Optional, List
 
 import asyncio
@@ -143,56 +142,3 @@ class MultiActorTask:
                     self._ready_futures.append(obj)
 
         return not bool(self._pending_futures)
-
-
-def _num_possible_actors(num_cpus_per_actor: int,
-                         num_gpus_per_actor: int,
-                         resources_per_actor: Optional[Dict] = None,
-                         max_needed: int = -1) -> int:
-    """Returns number of actors that could be scheduled on this cluster."""
-    if max_needed < 0:
-        max_needed = float("inf")
-
-    resources_per_actor = resources_per_actor or {}
-
-    def _check_resources(resource_dict: Dict):
-        # Check how many actors could be scheduled given available
-        # resources in `resource_dict`
-        available_cpus = resource_dict.get("CPU", 0.)
-        available_gpus = resource_dict.get("GPU", 0.)
-        available_custom = {
-            k: resource_dict.get(k, 0.)
-            for k in resources_per_actor
-        }
-
-        actors_cpu = actors_gpu = actors_custom = float("inf")
-
-        if num_cpus_per_actor > 0:
-            actors_cpu = math.floor(available_cpus / num_cpus_per_actor)
-        if num_gpus_per_actor > 0:
-            actors_gpu = math.floor(available_gpus / num_gpus_per_actor)
-        if resources_per_actor:
-            actors_custom = min(
-                math.floor(available_custom[k] / resources_per_actor[k])
-                if available_custom[k] > 0. else float("inf")
-                for k in resources_per_actor)
-
-        return min(actors_cpu, actors_gpu, actors_custom)
-
-    num_possible_actors = 0
-    if hasattr(ray.state.state, "available_resources_per_node"):
-        resources_per_node = ray.state.state.available_resources_per_node(
-        ).values()
-    else:
-        # Backwards compatibility
-        ray.state.state._check_connected()  # Initialize global state
-        resources_per_node = ray.state.state._available_resources_per_node(
-        ).values()
-
-    for resources in resources_per_node:
-        # Loop through all nodes and count how many actors
-        # could be scheduled on each
-        num_possible_actors += _check_resources(resources)
-        if num_possible_actors >= max_needed:
-            return num_possible_actors
-    return num_possible_actors
