@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 import time
-from typing import Tuple, Union, List, Dict
+from typing import Tuple, Union, List, Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -23,8 +23,14 @@ def create_data(num_rows: int, num_cols: int, dtype: np.dtype = np.float32):
 
 def create_labels(num_rows: int,
                   num_classes: int = 2,
-                  dtype: np.dtype = np.int32):
+                  dtype: Optional[np.dtype] = None):
+    if num_classes == 0:
+        # Create regression label
+        dtype = dtype or np.float32
+        return pd.Series(
+            np.random.uniform(0, 1, size=num_rows), dtype=dtype, name="label")
 
+    dtype = dtype or np.int32
     return pd.Series(
         np.random.randint(0, num_classes, size=num_rows),
         dtype=dtype,
@@ -118,6 +124,7 @@ def _kill_callback(die_lock_file: str,
                     fp.write("")
 
                 time.sleep(2)
+                print(f"Testing: Rank {get_actor_rank()} will now die.")
                 os.kill(pid, 9)
 
     return _KillCallback()
@@ -150,6 +157,7 @@ def _fail_callback(die_lock_file: str,
                     fp.write("")
                 time.sleep(2)
                 import sys
+                print(f"Testing: Rank {get_actor_rank()} will now fail.")
                 sys.exit(1)
 
     return _FailCallback()
@@ -176,3 +184,25 @@ def _checkpoint_callback(frequency: int = 1, before_iteration_=False):
                 self.after_iteration(model, epoch, evals_log)
 
     return _CheckpointCallback()
+
+
+def _sleep_callback(sleep_iteration: int = 6, sleep_seconds: int = 5):
+    """Returns a callback to sleep after an iteration.
+
+    This artificially inflates training time.
+
+    Args:
+        sleep_iteration (int): The iteration after which the actor should
+            sleep.
+        sleep_seconds (int): Time in seconds the actor should sleep.
+
+    """
+
+    class _SleepCallback(TrainingCallback):
+        def after_iteration(self, model, epoch, evals_log):
+            if epoch == sleep_iteration:
+                print(f"Testing: Rank {get_actor_rank()} will now sleep "
+                      f"for {sleep_seconds} seconds.")
+                time.sleep(sleep_seconds)
+
+    return _SleepCallback()

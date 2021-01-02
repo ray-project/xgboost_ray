@@ -24,7 +24,7 @@ jobs:
 
   test_linux_ray_master:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     steps:
     - uses: actions/checkout@v2
@@ -62,7 +62,7 @@ jobs:
 
   test_linux_ray_release:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     steps:
     - uses: actions/checkout@v2
@@ -102,7 +102,7 @@ jobs:
     # Test compatibility when some optional libraries are missing
     # Test runs on latest ray release
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     steps:
     - uses: actions/checkout@v2

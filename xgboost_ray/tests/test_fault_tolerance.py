@@ -1,7 +1,9 @@
+import logging
 import os
 import shutil
 import tempfile
-from unittest.mock import patch, DEFAULT
+import time
+from unittest.mock import patch, DEFAULT, MagicMock
 
 import numpy as np
 import unittest
@@ -10,8 +12,16 @@ import xgboost as xgb
 import ray
 
 from xgboost_ray import train, RayDMatrix, RayParams
+from xgboost_ray.main import RayXGBoostActorAvailable
 from xgboost_ray.tests.utils import flatten_obj, _checkpoint_callback, \
-    _fail_callback, tree_obj, _kill_callback
+    _fail_callback, tree_obj, _kill_callback, _sleep_callback
+
+
+class _FakeTask(MagicMock):
+    ready = False
+
+    def is_ready(self):
+        return self.ready
 
 
 class XGBoostRayFaultToleranceTest(unittest.TestCase):
@@ -44,12 +54,22 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         if os.path.exists(self.die_lock_file):
             os.remove(self.die_lock_file)
 
+        self.die_lock_file_2 = "/tmp/died_worker_2.lock"
+        if os.path.exists(self.die_lock_file_2):
+            os.remove(self.die_lock_file_2)
+
         ray.init(num_cpus=2, num_gpus=0, log_to_driver=True)
 
     def tearDown(self) -> None:
         if os.path.exists(self.tmpdir):
             shutil.rmtree(self.tmpdir)
         ray.shutdown()
+
+        if os.path.exists(self.die_lock_file):
+            os.remove(self.die_lock_file)
+
+        if os.path.exists(self.die_lock_file_2):
+            os.remove(self.die_lock_file_2)
 
     def testTrainingContinuationKilled(self):
         """This should continue after one actor died."""
@@ -83,8 +103,11 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         # Two workers finished, so N=32
         self.assertEqual(additional_results["total_n"], 32)
 
+    @patch("xgboost_ray.main.ELASTIC_RESTART_DISABLED", True)
     def testTrainingContinuationElasticKilled(self):
         """This should continue after one actor died."""
+        logging.getLogger().setLevel(10)
+
         additional_results = {}
         keep_actors = {}
 
@@ -119,8 +142,54 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         # Only one worker finished, so n=16
         self.assertEqual(additional_results["total_n"], 16)
 
+    @patch("xgboost_ray.main.ELASTIC_RESTART_DISABLED", False)
+    def testTrainingContinuationElasticKilledRestarted(self):
+        """This should continue after one actor died and restart it."""
+        logging.getLogger().setLevel(10)
+
+        additional_results = {}
+        keep_actors = {}
+
+        def keep(actors, *args, **kwargs):
+            keep_actors["actors"] = actors.copy()
+            return DEFAULT
+
+        with patch("xgboost_ray.main._shutdown") as mocked:
+            mocked.side_effect = keep
+            bst = train(
+                self.params,
+                RayDMatrix(self.x, self.y),
+                callbacks=[
+                    _kill_callback(self.die_lock_file, fail_iteration=6),
+                    _sleep_callback(sleep_iteration=7, sleep_seconds=15),
+                    _sleep_callback(sleep_iteration=9, sleep_seconds=5)
+                ],
+                num_boost_round=20,
+                ray_params=RayParams(
+                    max_actor_restarts=1,
+                    num_actors=2,
+                    elastic_training=True,
+                    max_failed_actors=1),
+                additional_results=additional_results)
+
+        x_mat = xgb.DMatrix(self.x)
+        pred_y = bst.predict(x_mat)
+        self.assertSequenceEqual(list(self.y), list(pred_y))
+        print(f"Got correct predictions: {pred_y}")
+
+        actors = keep_actors["actors"]
+
+        # First actor gets recreated
+        self.assertTrue(actors[0])
+        self.assertTrue(actors[1])
+
+        # Both workers finished, so n=32
+        self.assertEqual(additional_results["total_n"], 32)
+
+    @patch("xgboost_ray.main.ELASTIC_RESTART_DISABLED", True)
     def testTrainingContinuationElasticFailed(self):
         """This should continue after one actor failed training."""
+
         additional_results = {}
         keep_actors = {}
 
@@ -173,11 +242,16 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             train(
                 self.params,
                 RayDMatrix(self.x, self.y),
-                callbacks=[_kill_callback(self.die_lock_file)],
+                callbacks=[
+                    _kill_callback(
+                        self.die_lock_file, actor_rank=0, fail_iteration=3),
+                    _kill_callback(
+                        self.die_lock_file_2, actor_rank=1, fail_iteration=6)
+                ],
                 num_boost_round=20,
                 ray_params=RayParams(
                     elastic_training=True,
-                    max_failed_actors=0,
+                    max_failed_actors=1,
                     max_actor_restarts=1,
                     num_actors=2))
 
@@ -286,6 +360,134 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         # Thus we have two additional returns here.
         print("Callback returns:", res_error["callback_returns"][0])
         self.assertEqual(len(res_error["callback_returns"][0]), 10 + 2)
+
+    @patch("xgboost_ray.main._PrepareActorTask", _FakeTask)
+    @patch("xgboost_ray.elastic._PrepareActorTask", _FakeTask)
+    @patch("xgboost_ray.main.RayXGBoostActor", MagicMock)
+    @patch("xgboost_ray.main.ELASTIC_RESTART_GRACE_PERIOD_S", 30)
+    @patch("xgboost_ray.elastic.ELASTIC_RESTART_GRACE_PERIOD_S", 30)
+    def testMaybeScheduleNewActors(self):
+        """Test scheduling of new actors if resources become available.
+
+        Context: We are training with num_actors=8, of which 3 actors are
+        dead. The cluster has resources to restart 2 of these actors.
+
+        In this test, we walk through the `_maybe_schedule_new_actors` and
+        `_update_scheduled_actor_states` methods, checking their state
+        after each call.
+
+        """
+        from xgboost_ray.main import _TrainingState
+        from xgboost_ray.elastic import _update_scheduled_actor_states
+        from xgboost_ray.elastic import _maybe_schedule_new_actors
+
+        # Three actors are dead
+        actors = [
+            MagicMock(), None,
+            MagicMock(),
+            MagicMock(), None,
+            MagicMock(), None,
+            MagicMock()
+        ]
+
+        # Mock training state
+        state = _TrainingState(
+            actors=actors,
+            queue=MagicMock(),
+            stop_event=MagicMock(),
+            checkpoint=MagicMock(),
+            additional_results={},
+            failed_actor_ranks=set(),
+        )
+
+        created_actors = []
+
+        def fake_create_actor(rank, *args, **kwargs):
+            created_actors.append(rank)
+            return MagicMock()
+
+        with patch("xgboost_ray.elastic._create_actor") as create_actor:
+            create_actor.side_effect = fake_create_actor
+
+            _maybe_schedule_new_actors(
+                training_state=state,
+                num_cpus_per_actor=8,
+                num_gpus_per_actor=0,
+                resources_per_actor={"custom": 1.0},
+                load_data=[],
+                ray_params=RayParams(
+                    num_actors=8,
+                    elastic_training=True,
+                    max_failed_actors=1,
+                    max_actor_restarts=2))
+
+            # 3 new actors should have been created
+            self.assertEqual(len(created_actors), 3)
+            self.assertEqual(len(state.pending_actors), 3)
+
+            # The number of created actors shouldn't change even
+            # if we run this function again.
+            _maybe_schedule_new_actors(
+                training_state=state,
+                num_cpus_per_actor=8,
+                num_gpus_per_actor=0,
+                resources_per_actor={"custom": 1.0},
+                load_data=[],
+                ray_params=RayParams(
+                    num_actors=8,
+                    elastic_training=True,
+                    max_failed_actors=1,
+                    max_actor_restarts=2))
+
+            self.assertEqual(len(created_actors), 3)
+            self.assertEqual(len(state.pending_actors), 3)
+
+            # The actors have not yet been promoted because the
+            # loading task has not finished.
+            self.assertFalse(actors[1])
+            self.assertFalse(actors[4])
+            self.assertFalse(actors[6])
+
+            # Update status, nothing should change
+            _update_scheduled_actor_states(training_state=state)
+
+            self.assertFalse(actors[1])
+            self.assertFalse(actors[4])
+            self.assertFalse(actors[6])
+
+            # Set loading task status to finished, but only for first actor
+            for _, (_, task) in state.pending_actors.items():
+                task.ready = True
+                break
+
+            # Update status. This shouldn't raise RayXGBoostActorAvailable
+            # because we still have a grace period to wait for the second
+            # actor.
+            _update_scheduled_actor_states(training_state=state)
+
+            # Grace period is set through ELASTIC_RESTART_GRACE_PERIOD_S
+            # Allow for some slack in test execution
+            self.assertGreaterEqual(state.restart_training_at,
+                                    time.time() + 22)
+
+            # The first actor should have been promoted to full actor
+            self.assertTrue(actors[1])
+            self.assertFalse(actors[4])
+            self.assertFalse(actors[6])
+
+            # Set loading task status to finished for all actors
+            for _, (_, task) in state.pending_actors.items():
+                task.ready = True
+
+            # Update status. This should now raise RayXGBoostActorAvailable
+            # immediately as there are no pending actors left to wait for.
+            with self.assertRaises(RayXGBoostActorAvailable):
+                _update_scheduled_actor_states(training_state=state)
+
+            # All restarted actors should have been promoted to full actors
+            self.assertTrue(actors[1])
+            self.assertTrue(actors[4])
+            self.assertTrue(actors[6])
 
 
 if __name__ == "__main__":
