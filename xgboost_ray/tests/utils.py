@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 import time
-from typing import Tuple, Union, List, Dict
+from typing import Tuple, Union, List, Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -23,8 +23,14 @@ def create_data(num_rows: int, num_cols: int, dtype: np.dtype = np.float32):
 
 def create_labels(num_rows: int,
                   num_classes: int = 2,
-                  dtype: np.dtype = np.int32):
+                  dtype: Optional[np.dtype] = None):
+    if num_classes == 0:
+        # Create regression label
+        dtype = dtype or np.float32
+        return pd.Series(
+            np.random.uniform(0, 1, size=num_rows), dtype=dtype, name="label")
 
+    dtype = dtype or np.int32
     return pd.Series(
         np.random.randint(0, num_classes, size=num_rows),
         dtype=dtype,

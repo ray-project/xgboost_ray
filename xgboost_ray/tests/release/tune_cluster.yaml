@@ -1,0 +1,53 @@
+cluster_name: xgboost_ray_release_tests_tune
+min_workers: 4
+max_workers: 4
+initial_workers: 4
+autoscaling_mode: default
+docker:
+    image: "rayproject/ray:latest"
+    container_name: ray_container
+    pull_before_run: false
+    run_options:
+        - --privileged
+target_utilization_fraction: 0.8
+idle_timeout_minutes: 5
+provider:
+    type: aws
+    region: us-west-2
+    availability_zone: us-west-2a
+    cache_stopped_nodes: true
+auth:
+    ssh_user: ubuntu
+head_node:
+    InstanceType: m5.xlarge
+    ImageId: ami-05ac7a76b4c679a79
+worker_nodes:
+    InstanceType: m5.xlarge
+    ImageId: ami-05ac7a76b4c679a79
+    InstanceMarketOptions:
+        MarketType: spot
+
+file_mounts: {
+  "/release_tests": "./"
+}
+cluster_synced_files: []
+file_mounts_sync_continuously: true
+initialization_commands: []
+setup_commands:
+    - pip install -U ray
+    - pip install -U git+https://github.com/ray-project/xgboost_ray#xgboost-ray
+    - pip install -U git+https://github.com/amogkam/xgboost_ray.git@colocation#xgboost-ray
+    - mkdir -p /data
+    - rm -rf /data/tune_test.parquet || true
+    - python /release_tests/create_test_data.py /data/tune_test.parquet --seed 1234 --num-rows 2000 --num-cols 4 --num-partitions 40 --num-classes 2
+head_setup_commands: []
+worker_setup_commands: []
+head_start_ray_commands:
+    - ray stop
+    - "ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --resources='{\"actor_cpus\": 0}'"
+worker_start_ray_commands:
+    - ray stop
+    - "ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 --resources='{\"actor_cpus\": 4}'"
+metadata:
+    anyscale:
+        working_dir: "/release_tests"
