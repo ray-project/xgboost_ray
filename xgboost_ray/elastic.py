@@ -110,7 +110,7 @@ def _update_scheduled_actor_states(training_state: _TrainingState):
         grace_period = ELASTIC_RESTART_GRACE_PERIOD_S
         if training_state.restart_training_at is None:
             logger.debug(
-                f"An RayXGBoostActor became ready for training. Waiting "
+                f"A RayXGBoostActor became ready for training. Waiting "
                 f"{grace_period} seconds before triggering training restart.")
             training_state.restart_training_at = now + grace_period
 

@@ -674,6 +674,9 @@ def _train(params: Dict,
     from xgboost_ray.elastic import _maybe_schedule_new_actors, \
         _update_scheduled_actor_states, _get_actor_alive_status
 
+    # Un-schedule possible scheduled restarts
+    _training_state.restart_training_at = None
+
     if "nthread" in params:
         if params["nthread"] > cpus_per_actor:
             raise ValueError(
