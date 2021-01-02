@@ -10,6 +10,8 @@ import time
 import numpy as np
 
 import xgboost as xgb
+from ray.util import placement_group
+from ray.util.placement_group import PlacementGroup, remove_placement_group
 from xgboost.core import XGBoostError
 
 try:
@@ -38,6 +40,12 @@ from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
 from xgboost_ray.session import init_session, put_queue, \
     set_session_queue
+
+# Whether to use SPREAD placement group strategy for training.
+_USE_SPREAD_STRATEGY = int(os.getenv("USE_SPREAD_STRATEGY", 1))
+
+# How long to wait for placement group creation before failing.
+PLACEMENT_GROUP_TIMEOUT_S = int(os.getenv("PLACEMENT_GROUP_TIMEOUT_S", 100))
 
 
 class RayXGBoostTrainingError(RuntimeError):
@@ -128,8 +136,8 @@ def _ray_get_cluster_cpus():
     return ray.cluster_resources().get("CPU", None)
 
 
-def _get_max_node_cpus():
-    max_node_cpus = max(
+def _get_min_node_cpus():
+    max_node_cpus = min(
         node.get("Resources", {}).get("CPU", 0.0) for node in ray.nodes())
     return max_node_cpus if max_node_cpus > 0.0 else _ray_get_cluster_cpus()
 
@@ -406,18 +414,42 @@ class RayXGBoostActor:
         return predictions
 
 
+def _autodetect_resources(ray_params: Union[None, RayParams, Dict] = None,
+                          use_tree_method: bool = False) -> Tuple[int, int]:
+    gpus_per_actor = ray_params.gpus_per_actor
+    cpus_per_actor = ray_params.cpus_per_actor
+
+    # Automatically set gpus_per_actor if left at the default value
+    if gpus_per_actor == -1:
+        gpus_per_actor = 0
+        if use_tree_method:
+            gpus_per_actor = 1
+
+    # Automatically set cpus_per_actor if left at the default value
+    # Will be set to the number of cluster CPUs divided by the number of
+    # actors, bounded by the minimum number of CPUs across actors nodes.
+    if cpus_per_actor <= 0:
+        cluster_cpus = _ray_get_cluster_cpus() or 1
+        cpus_per_actor = min(
+            int(_get_min_node_cpus() or 1),
+            int(cluster_cpus // ray_params.num_actors))
+    return cpus_per_actor, gpus_per_actor
+
+
 def _create_actor(rank: int,
                   num_actors: int,
                   num_cpus_per_actor: int,
                   num_gpus_per_actor: int,
                   resources_per_actor: Optional[Dict] = None,
+                  placement_group: Optional[PlacementGroup] = None,
                   queue: Optional[Queue] = None,
                   checkpoint_frequency: int = 5) -> ActorHandle:
 
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
-        resources=resources_per_actor).remote(
+        resources=resources_per_actor,
+        placement_group=placement_group).remote(
             rank=rank,
             num_actors=num_actors,
             queue=queue,
@@ -495,23 +527,54 @@ def _get_actor_alive_status(actors: List[ActorHandle],
 def _shutdown(actors: List[ActorHandle],
               queue: Optional[Queue] = None,
               event: Optional[Event] = None,
+              placement_group: Optional[PlacementGroup] = None,
               force: bool = False):
-    for i in range(len(actors)):
-        actor = actors[i]
-        if actor is None:
-            continue
-        if force:
+    alive_actors = [a for a in actors if a is not None]
+    if force:
+        for actor in alive_actors:
             ray.kill(actor)
-        else:
-            try:
-                ray.get(actor.__ray_terminate__.remote())
-            except RayActorError:
+    else:
+        done_refs = [a.__ray_terminate__.remote() for a in alive_actors]
+        # Wait 5 seconds for actors to die gracefully.
+        done, not_done = ray.wait(done_refs, timeout=5)
+        if not_done:
+            # If all actors are not able to die gracefully, then kill them.
+            for actor in alive_actors:
                 ray.kill(actor)
+    for i in range(len(actors)):
         actors[i] = None
     if queue:
         queue.shutdown()
     if event:
         event.shutdown()
+    if placement_group:
+        remove_placement_group(placement_group)
+
+
+def _create_placement_group(cpus_per_actor, gpus_per_actor,
+                            resources_per_actor, num_actors, strategy):
+    resources_per_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
+    extra_resources_per_bundle = {} if resources_per_actor is None else \
+        resources_per_actor
+    # Create placement group for training worker colocation.
+    bundles = [{
+        **resources_per_bundle,
+        **extra_resources_per_bundle
+    } for _ in range(num_actors)]
+    pg = placement_group(bundles, strategy=strategy)
+    # Wait for placement group to get created.
+    logger.debug("Waiting for placement group to start.")
+    ready, _ = ray.wait([pg.ready()], timeout=PLACEMENT_GROUP_TIMEOUT_S)
+    if ready is not None:
+        logger.debug("Placement group has started.")
+    else:
+        raise TimeoutError("Placement group creation timed out. Make sure "
+                           "your cluster either has enough resources or use "
+                           "an autoscaling cluster. Current resources "
+                           "available: {}, resources requested by the "
+                           "placement group: {}".format(
+                               ray.available_resources(), pg.bundle_specs))
+    return pg
 
 
 def _create_communication_processes():
@@ -524,17 +587,28 @@ def _create_communication_processes():
     return queue, stop_event
 
 
+@dataclass
+class _TrainingState:
+    actors: List
+    queue: Queue
+    stop_event: Event
+
+    checkpoint: _Checkpoint
+    additional_results: Dict
+
+    placement_group: PlacementGroup
+
+    failed_actor_ranks: set
+
+
 def _train(params: Dict,
            dtrain: RayDMatrix,
            *args,
            evals=(),
            ray_params: RayParams,
-           _checkpoint: _Checkpoint,
-           _additional_results: Dict,
-           _actors: List,
-           _queue: Queue,
-           _stop_event: Event,
-           _failed_actor_ranks: set,
+           cpus_per_actor: int,
+           gpus_per_actor: int,
+           _training_state: _TrainingState,
            **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
     """This is the local train function wrapped by :func:`train() <train>`.
 
@@ -548,29 +622,6 @@ def _train(params: Dict,
     errors occur. It is called more than once if errors occurred (e.g. an
     actor died) and failure handling is enabled.
     """
-    _assert_ray_support()
-
-    if not ray.is_initialized():
-        ray.init()
-
-    gpus_per_actor = ray_params.gpus_per_actor
-    cpus_per_actor = ray_params.cpus_per_actor
-
-    # Automatically set gpus_per_actor if left at the default value
-    if gpus_per_actor == -1:
-        gpus_per_actor = 0
-        if "tree_method" in params and params["tree_method"].startswith("gpu"):
-            gpus_per_actor = 1
-
-    # Automatically set cpus_per_actor if left at the default value
-    # Will be set to the number of cluster CPUs divided by the number of
-    # actors, bounded by the maximum number of CPUs across actors nodes.
-    if cpus_per_actor <= 0:
-        cluster_cpus = _ray_get_cluster_cpus() or 1
-        cpus_per_actor = min(
-            int(_get_max_node_cpus() or 1),
-            int(cluster_cpus // ray_params.num_actors))
-
     if "nthread" in params:
         if params["nthread"] > cpus_per_actor:
             raise ValueError(
@@ -585,16 +636,16 @@ def _train(params: Dict,
     # failed actors (which we might want to restart later), and set its
     # entry in the actor list to None.
     def handle_actor_failure(actor_id):
-        rank = _actors.index(actor_id)
-        _failed_actor_ranks.add(rank)
-        _actors[rank] = None
+        rank = _training_state.actors.index(actor_id)
+        _training_state.failed_actor_ranks.add(rank)
+        _training_state.actors[rank] = None
 
     # Here we create new actors. In the first invocation of _train(), this
     # will be all actors. In future invocations, this may be less than
     # the num_actors setting, depending on the failure mode.
     newly_created = 0
-    for i in list(_failed_actor_ranks):
-        if _actors[i] is not None:
+    for i in list(_training_state.failed_actor_ranks):
+        if _training_state.actors[i] is not None:
             raise RuntimeError(
                 f"Trying to create actor with rank {i}, but it already "
                 f"exists.")
@@ -604,35 +655,36 @@ def _train(params: Dict,
             num_cpus_per_actor=cpus_per_actor,
             num_gpus_per_actor=gpus_per_actor,
             resources_per_actor=ray_params.resources_per_actor,
-            queue=_queue,
+            placement_group=_training_state.placement_group,
+            queue=_training_state.queue,
             checkpoint_frequency=ray_params.checkpoint_frequency)
         # Set actor entry in our list
-        _actors[i] = actor
+        _training_state.actors[i] = actor
         # Remove from this set so it is not created again
-        _failed_actor_ranks.remove(i)
+        _training_state.failed_actor_ranks.remove(i)
         newly_created += 1
 
     # Maybe we got a new Queue actor, so send it to all actors.
     wait_queue = [
-        actor.set_queue.remote(_queue) for actor in _actors
-        if actor is not None
+        actor.set_queue.remote(_training_state.queue)
+        for actor in _training_state.actors if actor is not None
     ]
     ray.get(wait_queue)
 
     # Maybe we got a new Event actor, so send it to all actors.
     wait_event = [
-        actor.set_stop_event.remote(_stop_event) for actor in _actors
-        if actor is not None
+        actor.set_stop_event.remote(_training_state.stop_event)
+        for actor in _training_state.actors if actor is not None
     ]
     ray.get(wait_event)
 
-    alive_actors = sum(1 for a in _actors if a is not None)
+    alive_actors = sum(1 for a in _training_state.actors if a is not None)
     logger.info(f"[RayXGBoost] Created {newly_created} new actors "
                 f"({alive_actors} total actors).")
 
     # Split data across workers
     wait_load = []
-    for actor in _actors:
+    for actor in _training_state.actors:
         if actor is None:
             continue
         # If data is already on the node, will not load again
@@ -641,8 +693,8 @@ def _train(params: Dict,
     try:
         ray.get(wait_load)
     except Exception as exc:
-        _stop_event.set()
-        _get_actor_alive_status(_actors, handle_actor_failure)
+        _training_state.stop_event.set()
+        _get_actor_alive_status(_training_state.actors, handle_actor_failure)
         raise RayActorError from exc
 
     logger.info("[RayXGBoost] Starting XGBoost training.")
@@ -653,31 +705,33 @@ def _train(params: Dict,
 
     # Load checkpoint if we have one. In that case we need to adjust the
     # number of training rounds.
-    if _checkpoint.value:
-        kwargs["xgb_model"] = pickle.loads(_checkpoint.value)
-        if _checkpoint.iteration == -1:
+    if _training_state.checkpoint.value:
+        kwargs["xgb_model"] = pickle.loads(_training_state.checkpoint.value)
+        if _training_state.checkpoint.iteration == -1:
             # -1 means training already finished.
             logger.error(
                 f"Trying to load continue from checkpoint, but the checkpoint"
                 f"indicates training already finished. Returning last"
                 f"checkpointed model instead.")
-            return kwargs["xgb_model"], {}, _additional_results
+            return kwargs["xgb_model"], {}, _training_state.additional_results
 
         kwargs["num_boost_round"] = kwargs.get("num_boost_round", 10) - \
-            _checkpoint.iteration - 1
+            _training_state.checkpoint.iteration - 1
 
     # The callback_returns dict contains actor-rank indexed lists of
     # results obtained through the `put_queue` function, usually
     # sent via callbacks.
-    callback_returns = _additional_results.get("callback_returns")
+    callback_returns = _training_state.additional_results.get(
+        "callback_returns")
     if callback_returns is None:
-        callback_returns = [list() for _ in range(len(_actors))]
-        _additional_results["callback_returns"] = callback_returns
+        callback_returns = [list() for _ in range(len(_training_state.actors))]
+        _training_state.additional_results[
+            "callback_returns"] = callback_returns
 
     # Trigger the train function
     training_futures = [
         actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
-        for actor in _actors if actor is not None
+        for actor in _training_state.actors if actor is not None
     ]
 
     # Failure handling loop. Here we wait until all training tasks finished.
@@ -687,10 +741,10 @@ def _train(params: Dict,
     try:
         not_ready = training_futures
         while not_ready:
-            if _queue:
+            if _training_state.queue:
                 _handle_queue(
-                    queue=_queue,
-                    checkpoint=_checkpoint,
+                    queue=_training_state.queue,
+                    checkpoint=_training_state.checkpoint,
                     callback_returns=callback_returns)
             ready, not_ready = ray.wait(not_ready, timeout=0)
             logger.debug("[RayXGBoost] Waiting for results...")
@@ -699,19 +753,19 @@ def _train(params: Dict,
         ray.get(training_futures)
 
         # Get items from queue one last time
-        if _queue:
+        if _training_state.queue:
             _handle_queue(
-                queue=_queue,
-                checkpoint=_checkpoint,
+                queue=_training_state.queue,
+                checkpoint=_training_state.checkpoint,
                 callback_returns=callback_returns)
 
     # The inner loop should catch all exceptions
     except Exception as exc:
         # Stop all other actors from training
-        _stop_event.set()
+        _training_state.stop_event.set()
 
         # Check which actors are still alive
-        _get_actor_alive_status(_actors, handle_actor_failure)
+        _get_actor_alive_status(_training_state.actors, handle_actor_failure)
 
         # Todo: Try to fetch newer checkpoint, store in `_checkpoint`
         # Shut down rabit
@@ -732,16 +786,17 @@ def _train(params: Dict,
     evals_result = all_results[0]["evals_result"]
 
     if callback_returns:
-        _additional_results["callback_returns"] = callback_returns
+        _training_state.additional_results[
+            "callback_returns"] = callback_returns
 
     total_n = sum(res["train_n"] or 0 for res in all_results)
 
-    _additional_results["total_n"] = total_n
+    _training_state.additional_results["total_n"] = total_n
 
     logger.info(f"[RayXGBoost] Finished XGBoost training on training data "
                 f"with total N={total_n:,}.")
 
-    return bst, evals_result, _additional_results
+    return bst, evals_result, _training_state.additional_results
 
 
 def train(params: Dict,
@@ -810,7 +865,24 @@ def train(params: Dict,
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(
                 type(dtrain)))
 
-    _try_add_tune_callback(kwargs)
+    if not ray.is_initialized():
+        ray.init()
+
+    cpus_per_actor, gpus_per_actor = _autodetect_resources(
+        ray_params=ray_params,
+        use_tree_method="tree_method" in params
+        and params["tree_method"].startswith("gpu"))
+
+    if gpus_per_actor == 0 and cpus_per_actor == 0:
+        raise ValueError("cpus_per_actor and gpus_per_actor both cannot be "
+                         "0. Are you sure your cluster has CPUs available?")
+
+    added_tune_callback = _try_add_tune_callback(kwargs)
+    # Tune currently does not support elastic training.
+    if added_tune_callback and ray_params.elastic_training:
+        raise ValueError("Elastic Training cannot be used with Ray Tune. "
+                         "Please disable elastic_training in RayParams in "
+                         "order to use xgboost_ray with Tune.")
 
     if not dtrain.loaded and not dtrain.distributed:
         dtrain.load_data(ray_params.num_actors)
@@ -826,9 +898,36 @@ def train(params: Dict,
     checkpoint = _Checkpoint()  # Keep track of latest checkpoint
     current_results = {}  # Keep track of additional results
     actors = [None] * ray_params.num_actors  # All active actors
+
+    # Create the Queue and Event actors.
     queue, stop_event = _create_communication_processes()
+
+    placement_strategy = None
+    if not ray_params.elastic_training:
+        if added_tune_callback:
+            placement_strategy = "PACK"
+        elif bool(_USE_SPREAD_STRATEGY):
+            placement_strategy = "SPREAD"
+
+    if placement_strategy is not None:
+        pg = _create_placement_group(cpus_per_actor, gpus_per_actor,
+                                     ray_params.resources_per_actor,
+                                     ray_params.num_actors, placement_strategy)
+    else:
+        pg = None
+
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
+
     while tries <= max_actor_restarts:
+        training_state = _TrainingState(
+            actors=actors,
+            queue=queue,
+            stop_event=stop_event,
+            checkpoint=checkpoint,
+            additional_results=current_results,
+            placement_group=pg,
+            failed_actor_ranks=start_actor_ranks)
+
         try:
             bst, train_evals_result, train_additional_results = _train(
                 params,
@@ -836,12 +935,9 @@ def train(params: Dict,
                 *args,
                 evals=evals,
                 ray_params=ray_params,
-                _checkpoint=checkpoint,
-                _additional_results=current_results,
-                _actors=actors,
-                _queue=queue,
-                _stop_event=stop_event,
-                _failed_actor_ranks=start_actor_ranks,
+                cpus_per_actor=cpus_per_actor,
+                gpus_per_actor=gpus_per_actor,
+                _training_state=training_state,
                 **kwargs)
             break
         except (RayActorError, RayTaskError) as exc:
@@ -864,7 +960,7 @@ def train(params: Dict,
                     f"Sleeping for 10 seconds for cleanup.")
                 start_again = True
 
-            if tries + 1 <= max_actor_restarts:
+            elif tries + 1 <= max_actor_restarts:
                 logger.warning(
                     f"A Ray actor died during training. Trying to restart "
                     f"and continue training from last checkpoint "
@@ -887,7 +983,12 @@ def train(params: Dict,
                 ) from exc
             tries += 1
 
-    _shutdown(actors=actors, queue=queue, event=stop_event, force=False)
+    _shutdown(
+        actors=actors,
+        queue=queue,
+        event=stop_event,
+        placement_group=pg,
+        force=False)
 
     if isinstance(evals_result, dict):
         evals_result.update(train_evals_result)
