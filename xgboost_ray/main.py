@@ -104,6 +104,7 @@ class _RabitTracker(xgb.RabitTracker):
         # But spawn doesn't work because `run` is not pickleable.
         # For now we force the start method to use fork.
         multiprocessing.set_start_method("fork", force=True)
+
         def run():
             self.accept_slaves(nslave)
 
