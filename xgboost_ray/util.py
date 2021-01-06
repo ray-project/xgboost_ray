@@ -111,7 +111,7 @@ class Queue(RayQueue):
 
     def shutdown(self):
         if getattr(RayQueue, "shutdown", None) is not None:
-            super(RayQueue, self).shutdown()
+            super(Queue, self).shutdown()
         else:
             if self.actor:
                 ray.kill(self.actor)
