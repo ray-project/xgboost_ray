@@ -29,9 +29,9 @@ jobs:
         python-version: [3.7, 3.8]
         include:
           - python-version: 3.7
-            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.1.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl
+            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.2.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl
           - python-version: 3.8
-            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.1.0.dev0-cp38-cp38-manylinux2014_x86_64.whl
+            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.2.0.dev0-cp38-cp38-manylinux2014_x86_64.whl
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
@@ -50,12 +50,12 @@ jobs:
     - name: Test with pytest
       run: |
         pushd xgboost_ray/tests
+        python -m pytest -vv -s --log-cli-level=DEBUG --durations=0 -x test_colocation.py
         python -m pytest -v --durations=0 -x test_matrix.py
         python -m pytest -v --durations=0 -x test_xgboost_api.py
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
         python -m pytest -v --durations=0 -x test_tune.py
-        python -m pytest -v --durations=0 -x test_colocation.py
         echo "running smoke test on benchmark_cpu_gpu.py" && python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
         popd
         pushd examples/
@@ -90,12 +90,12 @@ jobs:
     - name: Test with pytest
       run: |
         pushd xgboost_ray/tests
+        python -m pytest -vv -s --log-cli-level=DEBUG --durations=0 -x test_colocation.py
         python -m pytest -v --durations=0 -x test_matrix.py
         python -m pytest -v --durations=0 -x test_xgboost_api.py
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
         python -m pytest -v --durations=0 -x test_tune.py
-        python -m pytest -v --durations=0 -x test_colocation.py
         echo "running smoke test on benchmark_cpu_gpu.py" && python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
         popd
         pushd examples/
@@ -137,11 +137,11 @@ jobs:
     - name: Test with pytest
       run: |
         pushd xgboost_ray/tests
+        python -m pytest -vv -s --log-cli-level=DEBUG --durations=0 -x test_colocation.py
         python -m pytest -v --durations=0 -x test_matrix.py
         python -m pytest -v --durations=0 -x test_xgboost_api.py
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
-        python -m pytest -v --durations=0 -x test_colocation.py
         echo "running smoke test on benchmark_cpu_gpu.py" && python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
         popd
         pushd examples/
