@@ -16,6 +16,7 @@ class _MockQueueActor(_QueueActor):
     def get_node_id(self):
         return ray.state.current_node_id()
 
+
 class _MockEventActor(_EventActor):
     def get_node_id(self):
         return ray.state.current_node_id()
