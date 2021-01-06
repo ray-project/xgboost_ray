@@ -90,6 +90,7 @@ def _assert_ray_support():
             "Ray needs to be installed in order to use this module. "
             "Try: `pip install ray`")
 
+
 class _RabitTracker(xgb.RabitTracker):
     """
     This method overwrites the xgboost-provided RabitTracker to switch
