@@ -31,7 +31,7 @@ jobs:
           - python-version: 3.7
             ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.1.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl
           - python-version: 3.8
-            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.1.0.dev0-cp38-cp38m-manylinux2014_x86_64.whl
+            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.1.0.dev0-cp38-cp38-manylinux2014_x86_64.whl
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
