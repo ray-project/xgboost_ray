@@ -99,6 +99,7 @@ else:
                             f"{self.qsize()}.")
             return [self.queue.get_nowait() for _ in range(num_items)]
 
+# Remove after Ray 1.2 release.
 class Queue(RayQueue):
     def __init__(self,
                  maxsize: int = 0,
@@ -109,9 +110,12 @@ class Queue(RayQueue):
             **actor_options).remote(self.maxsize)
 
     def shutdown(self):
-        if self.actor:
-            ray.kill(self.actor)
-        self.actor = None
+        if getattr(RayQueue, "shutdown", None) is not None:
+            super(RayQueue, self).shutdown()
+        else:
+            if self.actor:
+                ray.kill(self.actor)
+            self.actor = None
 
 
 class MultiActorTask:

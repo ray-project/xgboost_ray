@@ -102,7 +102,7 @@ jobs:
     # Test compatibility when some optional libraries are missing
     # Test runs on latest ray release
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 12
 
     steps:
     - uses: actions/checkout@v2
