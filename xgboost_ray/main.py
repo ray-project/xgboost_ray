@@ -90,7 +90,6 @@ def _assert_ray_support():
             "Ray needs to be installed in order to use this module. "
             "Try: `pip install ray`")
 
-
 class _RabitTracker(xgb.RabitTracker):
     """
     This method overwrites the xgboost-provided RabitTracker to switch
@@ -99,6 +98,12 @@ class _RabitTracker(xgb.RabitTracker):
     """
 
     def start(self, nslave):
+        # TODO: refactor RabitTracker to support spawn process creation.
+        # In python 3.8, spawn is used as default process creation on macOS.
+        # But spawn doesn't work because `run` is not pickleable.
+        # For now we force the start method to use fork.
+        multiprocessing.set_start_method("fork")
+
         def run():
             self.accept_slaves(nslave)
 
