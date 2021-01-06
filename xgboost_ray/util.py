@@ -49,7 +49,6 @@ class Event:
 
 # Remove after Ray 1.2 release.
 if getattr(RayQueue, "shutdown", None) is not None:
-    Queue = RayQueue
     from ray.util.queue import _QueueActor
 else:
     # Have to copy the class here so that we can subclass this for mocking.
@@ -100,19 +99,19 @@ else:
                             f"{self.qsize()}.")
             return [self.queue.get_nowait() for _ in range(num_items)]
 
-    class Queue(RayQueue):
-        def __init__(self,
-                     maxsize: int = 0,
-                     actor_options: Optional[Dict] = None) -> None:
-            actor_options = {} if not actor_options else actor_options
-            self.maxsize = maxsize
-            self.actor = ray.remote(_QueueActor).options(
-                **actor_options).remote(self.maxsize)
+class Queue(RayQueue):
+    def __init__(self,
+                 maxsize: int = 0,
+                 actor_options: Optional[Dict] = None) -> None:
+        actor_options = {} if not actor_options else actor_options
+        self.maxsize = maxsize
+        self.actor = ray.remote(_QueueActor).options(
+            **actor_options).remote(self.maxsize)
 
-        def shutdown(self):
-            if self.actor:
-                ray.kill(self.actor)
-            self.actor = None
+    def shutdown(self):
+        if self.actor:
+            ray.kill(self.actor)
+        self.actor = None
 
 
 class MultiActorTask:
