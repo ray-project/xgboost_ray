@@ -12,13 +12,18 @@ implementation has all features for first real world use cases.
 
 Installation
 ------------
-You can install `xgboost_ray` like this:
+You can install the latest `xgboost_ray` release like this:
 
+```bash
+pip install xgboost_ray
 ```
-git clone https://github.com/ray-project/xgboost_ray.git
-cd xgboost_ray
-pip install -e .
+
+If you'd like to install the latest master, use this command instead:
+
+```bash
+pip install git+https://github.com/ray-project/xgboost_ray.git#xgboost_ray
 ```
+
 
 Usage
 -----
