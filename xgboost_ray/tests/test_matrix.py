@@ -110,6 +110,39 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         in_df["label"] = self.y
         self._testMatrixCreation(in_df, "label")
 
+    def testFromPetastormParquetString(self):
+        try:
+            import petastorm  # noqa: F401
+        except ImportError:
+            self.skipTest("Petastorm not installed.")
+            return
+
+        with tempfile.TemporaryDirectory() as dir:
+            data_file = os.path.join(dir, "data.parquet")
+
+            data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
+            data_df["label"] = pd.Series(self.y)
+            data_df.to_parquet(data_file)
+
+            self._testMatrixCreation(f"file://{data_file}", "label")
+
+    def testFromPetastormMultiParquetString(self):
+        with tempfile.TemporaryDirectory() as dir:
+            data_file_1 = os.path.join(dir, "data_1.parquet")
+            data_file_2 = os.path.join(dir, "data_2.parquet")
+
+            data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
+            data_df["label"] = pd.Series(self.y)
+
+            df_1 = data_df[0:len(data_df) // 2]
+            df_2 = data_df[len(data_df) // 2:]
+
+            df_1.to_parquet(data_file_1)
+            df_2.to_parquet(data_file_2)
+
+            self._testMatrixCreation(
+                [f"file://{data_file_1}", f"file://{data_file_2}"], "label")
+
     def testFromCSVString(self):
         with tempfile.TemporaryDirectory() as dir:
             data_file = os.path.join(dir, "data.csv")
