@@ -458,7 +458,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
 
         invalid_data = False
         if isinstance(self.data, str):
-            if self.filetype is RayFileType.PETASTORM:
+            if self.filetype == RayFileType.PETASTORM:
                 self.data = [self.data]
             elif os.path.isdir(self.data):
                 if self.filetype == RayFileType.PARQUET:
