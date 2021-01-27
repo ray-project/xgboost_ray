@@ -10,6 +10,11 @@ try:
 except ImportError:
     cp = None
 
+try:
+    import petastorm
+except ImportError:
+    petastorm = None
+
 import numpy as np
 import pandas as pd
 
@@ -55,10 +60,26 @@ def _is_modin_series(df):
     return isinstance(df, ModinSeries)
 
 
+def _is_petastorm_compatible(data: Union[str, List[str]]):
+    if petastorm is None:
+        return False
+
+    if not isinstance(data, List):
+        data = [data]
+
+    def _is_compatible(url: str):
+        return url.endswith(".parquet") and (url.startswith("s3://")
+                                             or url.startswith("hdfs://")
+                                             or url.startswith("file://"))
+
+    return all(_is_compatible(url) for url in data)
+
+
 class RayFileType(Enum):
     """Enum for different file types (used for overrides)."""
     CSV = 1
     PARQUET = 2
+    PETASTORM = 3
 
 
 class RayShardingMode(Enum):
@@ -174,7 +195,9 @@ class _RayDMatrixLoader:
         if check is not None:
             if not self.filetype:
                 # Try to guess filetype from file ending
-                if check.endswith(".csv") or check.endswith("csv.gz"):
+                if _is_petastorm_compatible(data):
+                    self.filetype = RayFileType.PETASTORM
+                elif check.endswith(".csv") or check.endswith("csv.gz"):
                     self.filetype = RayFileType.CSV
                 elif check.endswith(".parquet"):
                     self.filetype = RayFileType.PARQUET
@@ -318,6 +341,15 @@ class _RayDMatrixLoader:
         x, y, w, b, ll, lu = self._split_dataframe(local_df)
         return x, y, w, b, ll, lu
 
+    def _load_data_petastorm(self, data: Sequence[str]):
+        with petastorm.make_batch_reader(data) as reader:
+            shards = [pd.DataFrame(batch._asdict()) for batch in reader]
+
+        local_df = pd.concat(shards, copy=False)
+
+        x, y, w, b, ll, lu = self._split_dataframe(local_df)
+        return x, y, w, b, ll, lu
+
     def load_data(self,
                   num_actors: int,
                   sharding: RayShardingMode,
@@ -424,7 +456,9 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
 
         invalid_data = False
         if isinstance(self.data, str):
-            if os.path.isdir(self.data):
+            if self.filetype is RayFileType.PETASTORM:
+                self.data = [self.data]
+            elif os.path.isdir(self.data):
                 if self.filetype == RayFileType.PARQUET:
                     self.data = sorted(glob.glob(f"{self.data}/**/*.parquet"))
                 elif self.filetype == RayFileType.CSV:
@@ -441,7 +475,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             raise ValueError(
                 f"Distributed data loading only works with already "
                 f"distributed datasets. These should be specified through a "
-                f"list of locations (or single string). "
+                f"list of locations (or a single string). "
                 f"Got: {type(self.data)}."
                 f"\nFIX THIS by passing a list of files (e.g. on S3) to the "
                 f"RayDMatrix.")
@@ -468,6 +502,8 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
 
         if isinstance(self.data, MLDataset):
             x, y, w, b, ll, lu = self._load_data_ml_dataset(self.data, indices)
+        elif self.filetype == RayFileType.PETASTORM:
+            x, y, w, b, ll, lu = self._load_data_petastorm(local_input_sources)
         elif self.filetype == RayFileType.CSV:
             x, y, w, b, ll, lu = self._load_data_csv(local_input_sources)
         elif self.filetype == RayFileType.PARQUET:
