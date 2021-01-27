@@ -8,7 +8,6 @@ import numpy as np
 import ray
 from xgboost_ray import train, RayDMatrix, RayParams
 from xgboost_ray.main import _train
-from xgboost_ray.tests.utils import _kill_callback
 from xgboost_ray.util import _EventActor, _QueueActor
 
 
@@ -82,9 +81,6 @@ class TestColocation:
             train(
                 self.params,
                 RayDMatrix(self.x, self.y),
-                callbacks=[
-                    _kill_callback(self.die_lock_file, fail_iteration=1)
-                ],
                 num_boost_round=2,
                 ray_params=RayParams(max_actor_restarts=1, num_actors=6))
 
@@ -120,9 +116,6 @@ class TestColocation:
             train(
                 self.params,
                 RayDMatrix(self.x, self.y),
-                callbacks=[
-                    _kill_callback(self.die_lock_file, fail_iteration=2)
-                ],
                 num_boost_round=4,
                 ray_params=ray_params)
 
@@ -165,10 +158,6 @@ class TestColocation:
                     train(
                         params,
                         RayDMatrix(x, y),
-                        callbacks=[
-                            _kill_callback(
-                                self.die_lock_file, fail_iteration=2)
-                        ],
                         num_boost_round=4,
                         ray_params=ray_params)
 
