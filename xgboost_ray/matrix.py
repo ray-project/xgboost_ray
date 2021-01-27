@@ -395,6 +395,8 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
         elif isinstance(self.data, MLDataset):
             x, y, w, b, ll, lu = self._load_data_ml_dataset(
                 self.data, indices=list(range(0, self.data.num_shards())))
+        elif self.filetype == RayFileType.PETASTORM:
+            x, y, w, b, ll, lu = self._load_data_petastorm(self.data)
         elif self.filetype == RayFileType.CSV:
             x, y, w, b, ll, lu = self._load_data_csv(self.data)
         elif self.filetype == RayFileType.PARQUET:
