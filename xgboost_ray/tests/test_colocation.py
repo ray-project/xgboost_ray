@@ -1,14 +1,15 @@
 import os
-import pytest
 import shutil
 import tempfile
+import unittest
 from unittest.mock import patch
+import pytest
+
 import numpy as np
 
 import ray
 from xgboost_ray import train, RayDMatrix, RayParams
 from xgboost_ray.main import _train
-from xgboost_ray.tests.utils import _kill_callback
 from xgboost_ray.util import _EventActor, _QueueActor
 
 
@@ -22,8 +23,9 @@ class _MockEventActor(_EventActor):
         return ray.state.current_node_id()
 
 
-class TestColocation:
-    def setup_method(self):
+@pytest.mark.usefixtures("ray_start_cluster")
+class TestColocation(unittest.TestCase):
+    def setUp(self) -> None:
         repeat = 8  # Repeat data a couple of times for stability
         self.x = np.array([
             [1, 0, 0, 0],  # Feature 0 -> Label 0
@@ -50,16 +52,16 @@ class TestColocation:
         if os.path.exists(self.die_lock_file):
             os.remove(self.die_lock_file)
 
-    def teardown_method(self):
+    def tearDown(self) -> None:
         if os.path.exists(self.tmpdir):
             shutil.rmtree(self.tmpdir)
         ray.shutdown()
 
     @patch("xgboost_ray.util._QueueActor", _MockQueueActor)
     @patch("xgboost_ray.util._EventActor", _MockEventActor)
-    def test_communication_colocation(self, ray_start_cluster):
+    def test_communication_colocation(self):
         """Checks that Queue and Event actors are colocated with the driver."""
-        cluster = ray_start_cluster
+        cluster = self.ray_start_cluster
         cluster.add_node(num_cpus=3)
         cluster.add_node(num_cpus=3)
         ray.init(address=cluster.address)
@@ -82,15 +84,12 @@ class TestColocation:
             train(
                 self.params,
                 RayDMatrix(self.x, self.y),
-                callbacks=[
-                    _kill_callback(self.die_lock_file, fail_iteration=1)
-                ],
                 num_boost_round=2,
                 ray_params=RayParams(max_actor_restarts=1, num_actors=6))
 
-    def test_no_tune_spread(self, ray_start_cluster):
+    def test_no_tune_spread(self):
         """Tests whether workers are spread when not using Tune."""
-        cluster = ray_start_cluster
+        cluster = self.ray_start_cluster
         cluster.add_node(num_cpus=2)
         cluster.add_node(num_cpus=2)
         ray.init(address=cluster.address)
@@ -120,20 +119,17 @@ class TestColocation:
             train(
                 self.params,
                 RayDMatrix(self.x, self.y),
-                callbacks=[
-                    _kill_callback(self.die_lock_file, fail_iteration=2)
-                ],
                 num_boost_round=4,
                 ray_params=ray_params)
 
-    def test_tune_pack(self, ray_start_cluster):
+    def test_tune_pack(self):
         """Tests whether workers are packed when using Tune."""
         try:
             from ray import tune
         except ImportError:
-            pytest.skip("Tune is not installed.")
+            self.skipTest("Tune is not installed.")
             return
-        cluster = ray_start_cluster
+        cluster = self.ray_start_cluster
         cluster.add_node(num_cpus=2)
         cluster.add_node(num_cpus=2)
         ray.init(address=cluster.address)
@@ -165,10 +161,6 @@ class TestColocation:
                     train(
                         params,
                         RayDMatrix(x, y),
-                        callbacks=[
-                            _kill_callback(
-                                self.die_lock_file, fail_iteration=2)
-                        ],
                         num_boost_round=4,
                         ray_params=ray_params)
 
