@@ -28,6 +28,8 @@ jobs:
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
         include:
+          - python-version: 3.6
+            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp36-cp36m-manylinux2014_x86_64.whl
           - python-version: 3.7
             ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.2.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl
           - python-version: 3.8
