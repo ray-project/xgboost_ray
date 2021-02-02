@@ -1,6 +1,10 @@
 # Tune imports.
 import os
-from typing import Dict, Union, List, OrderedDict
+from typing import Dict, Union, List
+try:
+    from typing import OrderedDict
+except ImportError:
+    from collections import OrderedDict
 
 import logging
 
