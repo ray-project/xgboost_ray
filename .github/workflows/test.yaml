@@ -26,14 +26,14 @@ jobs:
     timeout-minutes: 12
     strategy:
       matrix:
-        python-version: [3.6.9, 3.7]
+        python-version: [3.6.9, 3.7, 3.8]
         include:
           - python-version: 3.6.9
             ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp36-cp36m-manylinux2014_x86_64.whl
           - python-version: 3.7
-            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.2.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl
+            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl
           - python-version: 3.8
-            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-1.2.0.dev0-cp38-cp38-manylinux2014_x86_64.whl
+            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp38-cp38-manylinux2014_x86_64.whl
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
@@ -73,7 +73,7 @@ jobs:
     timeout-minutes: 12
     strategy:
       matrix:
-        python-version: [3.6.9, 3.7]
+        python-version: [3.6.9, 3.7, 3.8]
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
@@ -115,7 +115,7 @@ jobs:
     timeout-minutes: 12
     strategy:
       matrix:
-        python-version: [3.6.9, 3.7]
+        python-version: [3.6.9, 3.7, 3.8]
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
