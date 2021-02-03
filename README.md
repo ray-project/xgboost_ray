@@ -1,14 +1,17 @@
 Distributed XGBoost on Ray
 ==========================
+![Build Status](https://github.com/ray-project/xgboost_ray/workflows/pytest%20on%20push/badge.svg)
 
 This library adds a new backend for XGBoost utilizing the
 [distributed computing framework Ray](https://ray.io).
 
-Please note that this is an early version and both the API and
-the behavior can change without prior notice.
+XGBoost on Ray enables multi node and multi GPU 
+training with an interface compatible with the usual
+XGBoost API. It also integrates with [Ray Tune](#hyperparameter-tuning)
+and offers advanced fault tolerance configuration.
 
-We'll switch to a release-based development process once the
-implementation has all features for first real world use cases.
+All releases are tested on large clusters and workloads.
+
 
 Installation
 ------------
