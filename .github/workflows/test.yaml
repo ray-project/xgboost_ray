@@ -17,6 +17,9 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install codecov
         python -m pip install -U yapf==0.23.0 flake8==3.7.7 flake8-comprehensions flake8-quotes==2.0.0
+    - name: Print environment info
+      run: |
+        ./xgboost_ray/tests/env_info.sh
     - name: Run format script
       run: |
         ./format.sh --all
@@ -47,6 +50,9 @@ jobs:
     - name: Install package
       run: |
         python -m pip install -e .
+    - name: Print environment info
+      run: |
+        ./xgboost_ray/tests/env_info.sh
     - name: Test with pytest
       run: |
         pushd xgboost_ray/tests
@@ -87,6 +93,9 @@ jobs:
     - name: Install package
       run: |
         python -m pip install -e .
+    - name: Print environment info
+      run: |
+        ./xgboost_ray/tests/env_info.sh
     - name: Test with pytest
       run: |
         pushd xgboost_ray/tests
@@ -134,6 +143,9 @@ jobs:
     - name: Install package
       run: |
         python -m pip install -e .
+    - name: Print environment info
+      run: |
+        ./xgboost_ray/tests/env_info.sh
     - name: Test with pytest
       run: |
         pushd xgboost_ray/tests
