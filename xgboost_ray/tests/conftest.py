@@ -57,7 +57,7 @@ def _ray_start_cluster(**kwargs):
 
 
 # This fixture will start a cluster with empty nodes.
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="function")
 def ray_start_cluster(request):
     param = getattr(request, "param", {})
     with _ray_start_cluster(**param) as res:
