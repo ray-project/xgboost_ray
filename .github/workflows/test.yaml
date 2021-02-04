@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     strategy:
+      max-parallel: 2
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
         include:
@@ -78,6 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     strategy:
+      max-parallel: 2
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
     steps:
@@ -123,6 +125,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     strategy:
+      max-parallel: 3
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
     steps:
