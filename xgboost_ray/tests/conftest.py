@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from functools import partial
 
 import pytest
 import ray
@@ -60,6 +61,4 @@ def _ray_start_cluster(**kwargs):
 @pytest.fixture(scope="function")
 def ray_start_cluster(request):
     param = getattr(request, "param", {})
-    with _ray_start_cluster(**param) as res:
-        request.cls.ray_start_cluster = res
-        yield res
+    request.cls.ray_start_cluster = partial(_ray_start_cluster, **param)
