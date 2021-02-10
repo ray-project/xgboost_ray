@@ -63,7 +63,8 @@ class TestColocation(unittest.TestCase):
     @patch("xgboost_ray.util._EventActor", _MockEventActor)
     def test_communication_colocation(self):
         """Checks that Queue and Event actors are colocated with the driver."""
-        logging.basicConfig(format="%(asctime)s\t%(levelname)s %(filename)s:%(lineno)s -- %(message)s")
+        logging.basicConfig(format="%(asctime)s\t%(levelname)s %(filename)s:"
+                            "%(lineno)s -- %(message)s")
         print("Start test_communication_colocation")
         with self.ray_start_cluster() as cluster:
             cluster.add_node(num_cpus=3)
