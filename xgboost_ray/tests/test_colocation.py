@@ -168,10 +168,7 @@ class TestColocation(unittest.TestCase):
 
         tune.run(
             train_func(self.params, self.x, self.y, ray_params),
-            resources_per_trial={
-                "cpu": 0,
-                "extra_cpu": 2
-            },
+            resources_per_trial=ray_params.get_tune_resources(),
             num_samples=1,
         )
 

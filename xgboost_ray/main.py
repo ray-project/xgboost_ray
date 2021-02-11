@@ -35,7 +35,7 @@ except ImportError:
     ray = get_node_ip_address = Queue = Event = ActorHandle = logger = None
     RAY_INSTALLED = False
 
-from xgboost_ray.tune import _try_add_tune_callback
+from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
@@ -267,6 +267,14 @@ class RayParams:
     max_actor_restarts: int = 0
     checkpoint_frequency: int = 5
 
+    def get_tune_resources(self):
+        """Return the resources to use for xgboost_ray training with Tune."""
+        return _get_tune_resources(num_actors=self.num_actors,
+                                   cpus_per_actor=self.cpus_per_actor,
+                                   gpus_per_actor=self.gpus_per_actor,
+                                   resources_per_actor=
+                                   self.resources_per_actor)
+
 
 @dataclass
 class _Checkpoint:
@@ -353,7 +361,7 @@ class RayXGBoostActor:
         class _SaveInternalCheckpointCallback(TrainingCallback):
             def after_iteration(self, model, epoch, evals_log):
                 if this.rank == 0 and \
-                   epoch % this.checkpoint_frequency == 0:
+                        epoch % this.checkpoint_frequency == 0:
                     put_queue(_Checkpoint(epoch, pickle.dumps(model)))
 
             def after_training(self, model):
@@ -525,16 +533,15 @@ def _create_actor(rank: int,
                   placement_group: Optional[PlacementGroup] = None,
                   queue: Optional[Queue] = None,
                   checkpoint_frequency: int = 5) -> ActorHandle:
-
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
         resources=resources_per_actor,
         placement_group=placement_group).remote(
-            rank=rank,
-            num_actors=num_actors,
-            queue=queue,
-            checkpoint_frequency=checkpoint_frequency)
+        rank=rank,
+        num_actors=num_actors,
+        queue=queue,
+        checkpoint_frequency=checkpoint_frequency)
 
 
 def _trigger_data_load(actor, dtrain, evals):
@@ -622,7 +629,7 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
                            "an autoscaling cluster. Current resources "
                            "available: {}, resources requested by the "
                            "placement group: {}".format(
-                               ray.available_resources(), pg.bundle_specs))
+            ray.available_resources(), pg.bundle_specs))
     return pg
 
 
@@ -782,7 +789,7 @@ def _train(params: Dict,
             return kwargs["xgb_model"], {}, _training_state.additional_results
 
         kwargs["num_boost_round"] = kwargs.get("num_boost_round", 10) - \
-            _training_state.checkpoint.iteration - 1
+                                    _training_state.checkpoint.iteration - 1
 
     # The callback_returns dict contains actor-rank indexed lists of
     # results obtained through the `put_queue` function, usually
@@ -963,7 +970,7 @@ def train(params: Dict,
     cpus_per_actor, gpus_per_actor = _autodetect_resources(
         ray_params=ray_params,
         use_tree_method="tree_method" in params
-        and params["tree_method"].startswith("gpu"))
+                        and params["tree_method"].startswith("gpu"))
 
     if gpus_per_actor == 0 and cpus_per_actor == 0:
         raise ValueError("cpus_per_actor and gpus_per_actor both cannot be "
@@ -1053,7 +1060,7 @@ def train(params: Dict,
             start_again = False
             if ray_params.elastic_training:
                 if alive_actors < ray_params.num_actors - \
-                   ray_params.max_failed_actors:
+                        ray_params.max_failed_actors:
                     raise RuntimeError(
                         "A Ray actor died during training and the maximum "
                         "number of dead actors in elastic training was "
