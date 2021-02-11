@@ -643,6 +643,9 @@ def _create_communication_processes(added_tune_callback: bool = False):
     # Have to explicitly set num_cpus to 0.
     placement_option = {"num_cpus": 0}
     if added_tune_callback and TUNE_USING_PG:
+        # If Tune is using placement groups, then we force Queue and
+        # StopEvent onto same bundle as the Trainable.
+        # This forces all 3 to be on the same node.
         current_pg = get_current_placement_group()
         if current_pg is None:
             raise RuntimeError(
