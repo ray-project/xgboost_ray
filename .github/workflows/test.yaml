@@ -26,7 +26,7 @@ jobs:
 
   test_linux_ray_master:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 16
     strategy:
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
@@ -76,7 +76,7 @@ jobs:
 
   test_linux_ray_release:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 16
     strategy:
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
@@ -121,7 +121,7 @@ jobs:
     # Test compatibility when some optional libraries are missing
     # Test runs on latest ray release
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 16
     strategy:
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
