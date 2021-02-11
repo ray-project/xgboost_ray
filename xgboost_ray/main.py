@@ -26,8 +26,8 @@ try:
     from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
     from ray.util import placement_group
-    from ray.util.placement_group import PlacementGroup, remove_placement_group, \
-    get_current_placement_group
+    from ray.util.placement_group import PlacementGroup, \
+        remove_placement_group, get_current_placement_group
 
     from xgboost_ray.util import Event, Queue, MultiActorTask
 
