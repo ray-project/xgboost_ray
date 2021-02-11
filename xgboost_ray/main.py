@@ -791,8 +791,8 @@ def _train(params: Dict,
                 f"checkpointed model instead.")
             return kwargs["xgb_model"], {}, _training_state.additional_results
 
-        kwargs["num_boost_round"] = kwargs.get("num_boost_round", 10) - \
-                            _training_state.checkpoint.iteration - 1
+        kwargs["num_boost_round"] = kwargs.get(
+            "num_boost_round", 10) - _training_state.checkpoint.iteration - 1
 
     # The callback_returns dict contains actor-rank indexed lists of
     # results obtained through the `put_queue` function, usually
@@ -1021,9 +1021,8 @@ def train(params: Dict,
 
     placement_strategy = None
     if not ray_params.elastic_training:
-        if added_tune_callback:
-            if TUNE_1_2:
-                placement_strategy = "PACK"
+        if added_tune_callback and TUNE_1_2:
+            placement_strategy = "PACK"
         elif bool(_USE_SPREAD_STRATEGY):
             placement_strategy = "SPREAD"
 
