@@ -37,7 +37,7 @@ except ImportError:
     RAY_INSTALLED = False
 
 from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources, \
-    TUNE_1_2
+    TUNE_USING_PG
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
@@ -642,7 +642,7 @@ def _create_communication_processes(added_tune_callback: bool = False):
     node_ip = ray.services.get_node_ip_address()
     # Have to explicitly set num_cpus to 0.
     placement_option = {"num_cpus": 0}
-    if added_tune_callback and not TUNE_1_2:
+    if added_tune_callback and TUNE_USING_PG:
         current_pg = get_current_placement_group()
         if current_pg is None:
             raise RuntimeError(
@@ -1037,7 +1037,9 @@ def train(params: Dict,
 
     placement_strategy = None
     if not ray_params.elastic_training:
-        if added_tune_callback and TUNE_1_2:
+        if added_tune_callback and not TUNE_USING_PG:
+            # If Tune is using placement groups, then strategy has already
+            # been set.
             placement_strategy = "PACK"
         elif bool(_USE_SPREAD_STRATEGY):
             placement_strategy = "SPREAD"

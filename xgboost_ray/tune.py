@@ -40,20 +40,20 @@ except ImportError:
 # Todo(krfricke): Remove after next ray core release
 if not hasattr(OrigTuneReportCallback, "_get_report_dict") or not issubclass(
         OrigTuneReportCallback, TrainingCallback):
-    TUNE_1_1 = True
+    TUNE_LEGACY = True
 else:
-    TUNE_1_1 = False
+    TUNE_LEGACY = False
 
 # Todo(amogkam): Remove after Ray 1.3 release.
 try:
     from ray.tune.resources import PlacementGroupFactory
 
-    TUNE_1_2 = False
+    TUNE_USING_PG = True
 except ImportError:
-    TUNE_1_2 = True
+    TUNE_USING_PG = False
     PlacementGroupFactory = Unavailable
 
-if TUNE_1_1 and TUNE_INSTALLED:
+if TUNE_LEGACY and TUNE_INSTALLED:
     # Until the next release, keep compatible callbacks here.
     class TuneReportCallback(OrigTuneReportCallback, TrainingCallback):
         def _get_report_dict(self, evals_log):
@@ -163,7 +163,7 @@ def _try_add_tune_callback(kwargs: Dict):
                         target="xgboost_ray.tune.TuneReportCallback"))
                 has_tune_callback = True
             elif isinstance(cb, OrigTuneReportCheckpointCallback):
-                if TUNE_1_1:
+                if TUNE_LEGACY:
                     replace_cb = TuneReportCheckpointCallback(
                         metrics=cb._report._metrics,
                         filename=cb._checkpoint._filename)
@@ -198,17 +198,18 @@ def _get_tune_resources(num_actors: int, cpus_per_actor: int,
                         resources_per_actor: Optional[Dict]):
     """Returns object to use for ``resources_per_trial`` with Ray Tune."""
     if TUNE_INSTALLED:
-        if TUNE_1_2:
-            if resources_per_actor is not None:
-                raise RuntimeError("Using xgboost_ray with custom actor "
-                                   "resources with Ray Tune version 1.2 or "
-                                   "prior is not supported. Please install "
-                                   "the nightly Ray wheels to upgrade your "
-                                   "Tune version.")
+        if not TUNE_USING_PG:
+            resources_per_actor = {} if not resources_per_actor else resources_per_actor
+            extra_custom_resources = {
+                k: v * num_actors
+                for k, v in resources_per_actor
+            }
             return dict(
                 cpu=1,
                 extra_cpu=cpus_per_actor * num_actors,
-                extra_gpu=gpus_per_actor * num_actors)
+                extra_gpu=gpus_per_actor * num_actors,
+                extra_custom_resources=extra_custom_resources,
+            )
         else:
             from ray.util import placement_group
 
