@@ -63,24 +63,18 @@ class XGBoostRayTuneTest(unittest.TestCase):
         ray.shutdown()
         shutil.rmtree(self.experiment_dir)
 
-    def numItersCheck(self, num_actors):
-        ray_params = RayParams(cpus_per_actor=1, num_actors=num_actors)
+    # noinspection PyTypeChecker
+    def testNumIters(self):
+        ray_params = RayParams(cpus_per_actor=1, num_actors=2)
         analysis = tune.run(
             self.train_func(ray_params),
             config=self.params,
             resources_per_trial=ray_params.get_tune_resources(),
             num_samples=2)
 
-        self.assertTrue(
-            all(analysis.results_df["training_iteration"] ==
-                analysis.results_df["config.num_boost_round"]))
-
-    # noinspection PyTypeChecker
-    def testNumItersSingleActor(self):
-        self.numItersCheck(num_actors=1)
-
-    def testNumItersMultipleActor(self):
-        self.numItersCheck(num_actors=2)
+        self.assertSequenceEqual(
+            list(analysis.results_df["training_iteration"]),
+            list(analysis.results_df["config.num_boost_round"]))
 
     def testElasticFails(self):
         """Test if error is thrown when using Tune with elastic training."""

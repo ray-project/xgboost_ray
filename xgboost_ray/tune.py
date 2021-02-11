@@ -11,8 +11,7 @@ import logging
 
 from xgboost.callback import TrainingCallback
 
-from xgboost_ray.session import put_queue
-from xgboost_ray.session import get_actor_rank
+from xgboost_ray.session import put_queue, get_actor_rank
 from xgboost_ray.util import Unavailable
 
 try:
@@ -79,7 +78,6 @@ if TUNE_1_1 and TUNE_INSTALLED:
             return report_dict
 
         def after_iteration(self, model, epoch: int, evals_log: Dict):
-            # Only the rank 0 actor should report to Tune.
             if get_actor_rank() == 0:
                 report_dict = self._get_report_dict(evals_log)
                 put_queue(lambda: tune.report(**report_dict))
@@ -118,8 +116,9 @@ if TUNE_1_1 and TUNE_INSTALLED:
             self._report = self._report_callbacks_cls(metrics)
 
         def after_iteration(self, model, epoch: int, evals_log: Dict):
-            self._checkpoint.after_iteration(model, epoch, evals_log)
-            self._report.after_iteration(model, epoch, evals_log)
+            if get_actor_rank() == 0:
+                self._checkpoint.after_iteration(model, epoch, evals_log)
+                self._report.after_iteration(model, epoch, evals_log)
 
 elif TUNE_INSTALLED:
     # New style callbacks.
