@@ -35,7 +35,8 @@ except ImportError:
     ray = get_node_ip_address = Queue = Event = ActorHandle = logger = None
     RAY_INSTALLED = False
 
-from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources
+from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources, \
+    TUNE_1_2
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
@@ -272,7 +273,7 @@ class RayParams:
         return _get_tune_resources(
             num_actors=self.num_actors,
             cpus_per_actor=self.cpus_per_actor,
-            gpus_per_actor=self.gpus_per_actor,
+            gpus_per_actor=max(0, self.gpus_per_actor),
             resources_per_actor=self.resources_per_actor)
 
 
@@ -611,6 +612,7 @@ def _shutdown(actors: List[ActorHandle],
 
 def _create_placement_group(cpus_per_actor, gpus_per_actor,
                             resources_per_actor, num_actors, strategy):
+    assert False
     resources_per_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
     extra_resources_per_bundle = {} if resources_per_actor is None else \
         resources_per_actor
@@ -791,7 +793,7 @@ def _train(params: Dict,
             return kwargs["xgb_model"], {}, _training_state.additional_results
 
         kwargs["num_boost_round"] = kwargs.get("num_boost_round", 10) - \
-                                _training_state.checkpoint.iteration - 1
+                            _training_state.checkpoint.iteration - 1
 
     # The callback_returns dict contains actor-rank indexed lists of
     # results obtained through the `put_queue` function, usually
@@ -1021,7 +1023,8 @@ def train(params: Dict,
     placement_strategy = None
     if not ray_params.elastic_training:
         if added_tune_callback:
-            placement_strategy = "PACK"
+            if TUNE_1_2:
+                placement_strategy = "PACK"
         elif bool(_USE_SPREAD_STRATEGY):
             placement_strategy = "SPREAD"
 
