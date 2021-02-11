@@ -538,10 +538,10 @@ def _create_actor(rank: int,
         num_gpus=num_gpus_per_actor,
         resources=resources_per_actor,
         placement_group=placement_group).remote(
-            rank=rank,
-            num_actors=num_actors,
-            queue=queue,
-            checkpoint_frequency=checkpoint_frequency)
+        rank=rank,
+        num_actors=num_actors,
+        queue=queue,
+        checkpoint_frequency=checkpoint_frequency)
 
 
 def _trigger_data_load(actor, dtrain, evals):
@@ -629,7 +629,7 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
                            "an autoscaling cluster. Current resources "
                            "available: {}, resources requested by the "
                            "placement group: {}".format(
-                               ray.available_resources(), pg.bundle_specs))
+            ray.available_resources(), pg.bundle_specs))
     return pg
 
 
@@ -789,7 +789,7 @@ def _train(params: Dict,
             return kwargs["xgb_model"], {}, _training_state.additional_results
 
         kwargs["num_boost_round"] = kwargs.get("num_boost_round", 10) - \
-                                    _training_state.checkpoint.iteration - 1
+                                _training_state.checkpoint.iteration - 1
 
     # The callback_returns dict contains actor-rank indexed lists of
     # results obtained through the `put_queue` function, usually
@@ -970,7 +970,7 @@ def train(params: Dict,
     cpus_per_actor, gpus_per_actor = _autodetect_resources(
         ray_params=ray_params,
         use_tree_method="tree_method" in params
-        and params["tree_method"].startswith("gpu"))
+                        and params["tree_method"].startswith("gpu"))
 
     if gpus_per_actor == 0 and cpus_per_actor == 0:
         raise ValueError("cpus_per_actor and gpus_per_actor both cannot be "
