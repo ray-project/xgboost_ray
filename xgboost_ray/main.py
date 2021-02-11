@@ -26,7 +26,8 @@ try:
     from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
     from ray.util import placement_group
-    from ray.util.placement_group import PlacementGroup, remove_placement_group
+    from ray.util.placement_group import PlacementGroup, remove_placement_group, \
+    get_current_placement_group
 
     from xgboost_ray.util import Event, Queue, MultiActorTask
 
@@ -636,11 +637,26 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
     return pg
 
 
-def _create_communication_processes():
+def _create_communication_processes(added_tune_callback: bool = False):
     # Create Queue and Event actors and make sure to colocate with driver node.
     node_ip = ray.services.get_node_ip_address()
     # Have to explicitly set num_cpus to 0.
-    placement_option = {"num_cpus": 0, "resources": {f"node:{node_ip}": 0.01}}
+    placement_option = {"num_cpus": 0}
+    if added_tune_callback and not TUNE_1_2:
+        current_pg = get_current_placement_group()
+        if current_pg is None:
+            raise RuntimeError(
+                "Trying to use the parent placement group "
+                "when it doesn't exist. This is probably a bug, "
+                "please raise an issue at "
+                "https://github.com/ray-project/xgboost_ray")
+
+        placement_option.update({
+            "placement_group": current_pg,
+            "placement_group_bundle_index": 0
+        })
+    else:
+        placement_option.update({"resources": {f"node:{node_ip}": 0.01}})
     queue = Queue(actor_options=placement_option)  # Queue actor
     stop_event = Event(actor_options=placement_option)  # Stop event actor
     return queue, stop_event
@@ -1017,7 +1033,7 @@ def train(params: Dict,
     pending_actors = {}
 
     # Create the Queue and Event actors.
-    queue, stop_event = _create_communication_processes()
+    queue, stop_event = _create_communication_processes(added_tune_callback)
 
     placement_strategy = None
     if not ray_params.elastic_training:

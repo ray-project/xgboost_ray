@@ -133,12 +133,13 @@ class TestColocation(unittest.TestCase):
             self.skipTest("Tune is not installed.")
             return
         with self.ray_start_cluster() as cluster:
+            num_actors = 2
             cluster.add_node(num_cpus=3)
             cluster.add_node(num_cpus=3)
             ray.init(address=cluster.address)
 
             ray_params = RayParams(
-                max_actor_restarts=1, num_actors=2, cpus_per_actor=1)
+                max_actor_restarts=1, num_actors=num_actors, cpus_per_actor=1)
 
             def _mock_train(*args, _training_state, **kwargs):
                 try:
@@ -148,7 +149,7 @@ class TestColocation(unittest.TestCase):
                 except Exception:
                     raise
                 finally:
-                    assert len(_training_state.actors) == 2
+                    assert len(_training_state.actors) == num_actors
                     if not any(a is None for a in _training_state.actors):
                         actor_infos = ray.actors()
                         actor_nodes = []
