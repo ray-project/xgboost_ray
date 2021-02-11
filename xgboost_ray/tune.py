@@ -223,7 +223,7 @@ def _get_tune_resources(num_actors: int, cpus_per_actor: int,
                 } for _ in range(num_actors)]
                 bundles = [head_bundle] + child_bundles
                 return placement_group(bundles, strategy="PACK")
-            
+
             return placement_group_factory
     else:
         raise RuntimeError("Tune is not installed, so `get_tune_resources` is "
