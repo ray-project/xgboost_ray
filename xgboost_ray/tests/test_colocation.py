@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, DEFAULT
 import pytest
 
 import numpy as np
@@ -85,9 +85,10 @@ class TestColocation(unittest.TestCase):
                     ray.state.current_node_id()
                 print(f"Calling _train at {datetime.datetime.now()}")
                 logging.info(f"Calling _train at {datetime.datetime.now()}")
-                return _train(*args, _training_state=_training_state, **kwargs)
+                return DEFAULT, DEFAULT, DEFAULT
 
-            with patch("xgboost_ray.main._train", _mock_train):
+            with patch("xgboost_ray.main._train") as mocked:
+                mocked.side_effect = _mock_train
                 print(f"Calling train at {datetime.datetime.now()}")
                 logging.info(f"Calling train at {datetime.datetime.now()}")
                 train(
