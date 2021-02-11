@@ -612,7 +612,6 @@ def _shutdown(actors: List[ActorHandle],
 
 def _create_placement_group(cpus_per_actor, gpus_per_actor,
                             resources_per_actor, num_actors, strategy):
-    assert False
     resources_per_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
     extra_resources_per_bundle = {} if resources_per_actor is None else \
         resources_per_actor
