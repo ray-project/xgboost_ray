@@ -49,13 +49,14 @@ def main(cpus_per_actor, num_actors, num_samples):
         "max_depth": tune.randint(1, 9)
     }
 
-    ray_params = RayParams(max_actor_restarts=1, gpus_per_actor=0,
-                           cpus_per_actor=cpus_per_actor,num_actors=num_actors)
+    ray_params = RayParams(
+        max_actor_restarts=1,
+        gpus_per_actor=0,
+        cpus_per_actor=cpus_per_actor,
+        num_actors=num_actors)
 
     analysis = tune.run(
-        tune.with_parameters(
-            train_breast_cancer,
-            ray_params=ray_params),
+        tune.with_parameters(train_breast_cancer, ray_params=ray_params),
         # Use the `get_tune_resources` helper function to set the resources.
         resources_per_trial=ray_params.get_tune_resources(),
         config=config,

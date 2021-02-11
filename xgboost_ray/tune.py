@@ -32,10 +32,8 @@ except ImportError:
     OrigTuneReportCallback = _OrigTuneCheckpointCallback = \
         OrigTuneReportCheckpointCallback = object
 
-
     def is_session_enabled():
         return False
-
 
     flatten_dict = is_session_enabled
     TUNE_INSTALLED = False
@@ -86,7 +84,6 @@ if TUNE_1_1 and TUNE_INSTALLED:
                 report_dict = self._get_report_dict(evals_log)
                 put_queue(lambda: tune.report(**report_dict))
 
-
     class _TuneCheckpointCallback(_OrigTuneCheckpointCallback,
                                   TrainingCallback):
         def __init__(self, filename: str, frequency: int):
@@ -105,7 +102,6 @@ if TUNE_1_1 and TUNE_INSTALLED:
             if get_actor_rank() == 0:
                 put_queue(lambda: self._create_checkpoint(
                     model, epoch, self._filename, self._frequency))
-
 
     class TuneReportCheckpointCallback(OrigTuneReportCheckpointCallback,
                                        TrainingCallback):
@@ -133,13 +129,11 @@ elif TUNE_INSTALLED:
                 report_dict = self._get_report_dict(evals_log)
                 put_queue(lambda: tune.report(**report_dict))
 
-
     class _TuneCheckpointCallback(_OrigTuneCheckpointCallback):
         def after_iteration(self, model, epoch: int, evals_log: Dict):
             if get_actor_rank() == 0:
                 put_queue(lambda: self._create_checkpoint(
                     model, epoch, self._filename, self._frequency))
-
 
     class TuneReportCheckpointCallback(OrigTuneReportCheckpointCallback):
         _checkpoint_callback_cls = _TuneCheckpointCallback
@@ -183,7 +177,7 @@ def _try_add_tune_callback(kwargs: Dict):
                 logging.warning(
                     REPLACE_MSG.format(
                         orig="ray.tune.integration.xgboost."
-                             "TuneReportCheckpointCallback",
+                        "TuneReportCheckpointCallback",
                         target="xgboost_ray.tune.TuneReportCheckpointCallback")
                 )
                 has_tune_callback = True
@@ -200,10 +194,9 @@ def _try_add_tune_callback(kwargs: Dict):
         return False
 
 
-def _get_tune_resources(num_actors: int,
-                       cpus_per_actor: int,
-                       gpus_per_actor: int,
-                       resources_per_actor: Optional[Dict]):
+def _get_tune_resources(num_actors: int, cpus_per_actor: int,
+                        gpus_per_actor: int,
+                        resources_per_actor: Optional[Dict]):
     """Returns object to use for ``resources_per_trial`` with Ray Tune."""
     if TUNE_INSTALLED:
         if TUNE_1_2:
@@ -213,16 +206,20 @@ def _get_tune_resources(num_actors: int,
                                    "prior is not supported. Please install "
                                    "the nightly Ray wheels to upgrade your "
                                    "Tune version.")
-            return dict(cpu=1, extra_cpu=cpus_per_actor * num_actors,
-                        extra_gpu=gpus_per_actor * num_actors)
+            return dict(
+                cpu=1,
+                extra_cpu=cpus_per_actor * num_actors,
+                extra_gpu=gpus_per_actor * num_actors)
         else:
             from ray.util import placement_group
             head_bundle = {"CPU": 1}
             child_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
             child_bundle_extra = {} if resources_per_actor is None else \
                 resources_per_actor
-            child_bundles = [{**child_bundle, **child_bundle_extra} for _ in
-                             range(num_actors)]
+            child_bundles = [{
+                **child_bundle,
+                **child_bundle_extra
+            } for _ in range(num_actors)]
             return placement_group([head_bundle] + child_bundles)
     else:
         raise RuntimeError("Tune is not installed, so `get_tune_resources` is "
