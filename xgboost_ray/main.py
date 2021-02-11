@@ -1040,10 +1040,13 @@ def train(params: Dict,
 
     placement_strategy = None
     if not ray_params.elastic_training:
-        if added_tune_callback and not TUNE_USING_PG:
-            # If Tune is using placement groups, then strategy has already
-            # been set.
-            placement_strategy = "PACK"
+        if added_tune_callback:
+            if TUNE_USING_PG:
+                # If Tune is using placement groups, then strategy has already
+                # been set. Don't create an additional placement_group here.
+                placement_strategy = None
+            else:
+                placement_strategy = "PACK"
         elif bool(_USE_SPREAD_STRATEGY):
             placement_strategy = "SPREAD"
 
