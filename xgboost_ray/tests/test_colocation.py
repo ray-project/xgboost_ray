@@ -133,8 +133,8 @@ class TestColocation(unittest.TestCase):
             self.skipTest("Tune is not installed.")
             return
         with self.ray_start_cluster() as cluster:
-            cluster.add_node(num_cpus=2)
-            cluster.add_node(num_cpus=2)
+            cluster.add_node(num_cpus=3)
+            cluster.add_node(num_cpus=3)
             ray.init(address=cluster.address)
 
             ray_params = RayParams(
