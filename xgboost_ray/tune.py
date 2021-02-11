@@ -199,7 +199,8 @@ def _get_tune_resources(num_actors: int, cpus_per_actor: int,
     """Returns object to use for ``resources_per_trial`` with Ray Tune."""
     if TUNE_INSTALLED:
         if not TUNE_USING_PG:
-            resources_per_actor = {} if not resources_per_actor else resources_per_actor
+            resources_per_actor = {} if not resources_per_actor \
+                else resources_per_actor
             extra_custom_resources = {
                 k: v * num_actors
                 for k, v in resources_per_actor
