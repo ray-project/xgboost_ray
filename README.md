@@ -115,6 +115,10 @@ from xgboost_ray import RayDMatrix, RayParams, train
 num_actors = 4
 num_cpus_per_actor = 4
 
+ray_params = RayParams(
+                num_actors=num_actors, 
+                cpus_per_actor=num_cpus_per_actor)
+
 def train_model(config):
     train_x, train_y = None, None  # Load data here
     train_set = RayDMatrix(train_x, train_y)
@@ -126,9 +130,7 @@ def train_model(config):
         evals_result=evals_result,
         evals=[(train_set, "train")],
         verbose_eval=False,
-        ray_params=RayParams(
-            num_actors=num_actors,
-            cpus_per_actor=num_cpus_per_actor))
+        ray_params=ray_params)
     bst.save_model("model.xgb")
 
 from ray import tune
@@ -143,13 +145,13 @@ config = {
     "max_depth": tune.randint(1, 9)
 }
 
-# Make sure to specify how many actors each training run will create via the "extra_cpu" field.
+# Make sure to use the `get_tune_resources` method to set the `resources_per_trial`
 analysis = tune.run(
     train_model, 
     config=config,
     metric="eval-error", 
     mode="min", 
-    resources_per_trial={"cpu": 1, "extra_cpu": num_actors * num_cpus_per_actor})
+    resources_per_trial=ray_params.get_tune_resources())
 print("Best hyperparameters", analysis.best_config)
 ```
 
