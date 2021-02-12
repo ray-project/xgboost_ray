@@ -2,7 +2,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, DEFAULT
 import pytest
 
 import numpy as np
@@ -61,10 +61,10 @@ class TestColocation(unittest.TestCase):
     @patch("xgboost_ray.util._EventActor", _MockEventActor)
     def test_communication_colocation(self):
         """Checks that Queue and Event actors are colocated with the driver."""
-        print("Start test_communication_colocation")
         with self.ray_start_cluster() as cluster:
             cluster.add_node(num_cpus=3)
             cluster.add_node(num_cpus=3)
+            cluster.wait_for_nodes()
             ray.init(address=cluster.address)
 
             local_node = ray.state.current_node_id()
@@ -79,9 +79,10 @@ class TestColocation(unittest.TestCase):
                 assert ray.get(
                     _training_state.stop_event.actor.get_node_id.remote()) == \
                     ray.state.current_node_id()
-                return _train(*args, _training_state=_training_state, **kwargs)
+                return DEFAULT, DEFAULT, DEFAULT
 
-            with patch("xgboost_ray.main._train", _mock_train):
+            with patch("xgboost_ray.main._train") as mocked:
+                mocked.side_effect = _mock_train
                 train(
                     self.params,
                     RayDMatrix(self.x, self.y),
@@ -90,10 +91,10 @@ class TestColocation(unittest.TestCase):
 
     def test_no_tune_spread(self):
         """Tests whether workers are spread when not using Tune."""
-        print("Start test_no_tune_spread")
         with self.ray_start_cluster() as cluster:
             cluster.add_node(num_cpus=2)
             cluster.add_node(num_cpus=2)
+            cluster.wait_for_nodes()
             ray.init(address=cluster.address)
 
             ray_params = RayParams(
@@ -125,7 +126,6 @@ class TestColocation(unittest.TestCase):
                     ray_params=ray_params)
 
     def test_tune_pack(self):
-        print("Start test_tune_pack")
         """Tests whether workers are packed when using Tune."""
         try:
             from ray import tune
