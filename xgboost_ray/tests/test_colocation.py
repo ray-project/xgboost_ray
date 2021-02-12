@@ -1,5 +1,3 @@
-import datetime
-import logging
 import os
 import shutil
 import tempfile
@@ -63,9 +61,6 @@ class TestColocation(unittest.TestCase):
     @patch("xgboost_ray.util._EventActor", _MockEventActor)
     def test_communication_colocation(self):
         """Checks that Queue and Event actors are colocated with the driver."""
-        logging.basicConfig(format="%(asctime)s\t%(levelname)s %(filename)s:"
-                            "%(lineno)s -- %(message)s")
-        print("Start test_communication_colocation")
         with self.ray_start_cluster() as cluster:
             cluster.add_node(num_cpus=3)
             cluster.add_node(num_cpus=3)
@@ -84,25 +79,18 @@ class TestColocation(unittest.TestCase):
                 assert ray.get(
                     _training_state.stop_event.actor.get_node_id.remote()) == \
                     ray.state.current_node_id()
-                print(f"Calling _train at {datetime.datetime.now()}")
-                logging.info(f"Calling _train at {datetime.datetime.now()}")
                 return DEFAULT, DEFAULT, DEFAULT
 
             with patch("xgboost_ray.main._train") as mocked:
                 mocked.side_effect = _mock_train
-                print(f"Calling train at {datetime.datetime.now()}")
-                logging.info(f"Calling train at {datetime.datetime.now()}")
                 train(
                     self.params,
                     RayDMatrix(self.x, self.y),
                     num_boost_round=2,
                     ray_params=RayParams(max_actor_restarts=1, num_actors=6))
-        logging.info(f"Passed train at {datetime.datetime.now()}")
-        print(f"Passed train at {datetime.datetime.now()}")
 
     def test_no_tune_spread(self):
         """Tests whether workers are spread when not using Tune."""
-        print("Start test_no_tune_spread")
         with self.ray_start_cluster() as cluster:
             cluster.add_node(num_cpus=2)
             cluster.add_node(num_cpus=2)
@@ -138,7 +126,6 @@ class TestColocation(unittest.TestCase):
                     ray_params=ray_params)
 
     def test_tune_pack(self):
-        print("Start test_tune_pack")
         """Tests whether workers are packed when using Tune."""
         try:
             from ray import tune
