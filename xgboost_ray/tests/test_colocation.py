@@ -69,6 +69,7 @@ class TestColocation(unittest.TestCase):
         with self.ray_start_cluster() as cluster:
             cluster.add_node(num_cpus=3)
             cluster.add_node(num_cpus=3)
+            cluster.wait_for_nodes()
             ray.init(address=cluster.address)
 
             local_node = ray.state.current_node_id()
@@ -105,6 +106,7 @@ class TestColocation(unittest.TestCase):
         with self.ray_start_cluster() as cluster:
             cluster.add_node(num_cpus=2)
             cluster.add_node(num_cpus=2)
+            cluster.wait_for_nodes()
             ray.init(address=cluster.address)
 
             ray_params = RayParams(
