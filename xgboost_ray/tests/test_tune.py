@@ -65,7 +65,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
     # noinspection PyTypeChecker
     def testNumIters(self):
-        ray_params = RayParams(cpus_per_actor=1, num_actors=1)
+        ray_params = RayParams(cpus_per_actor=1, num_actors=2)
         analysis = tune.run(
             self.train_func(ray_params),
             config=self.params,
