@@ -69,10 +69,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
         analysis = tune.run(
             self.train_func(ray_params),
             config=self.params,
-            resources_per_trial={
-                "cpu": 1,
-                "extra_cpu": 1
-            },
+            resources_per_trial=ray_params.get_tune_resources(),
             num_samples=2)
 
         self.assertSequenceEqual(
@@ -87,10 +84,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
             tune.run(
                 self.train_func(ray_params),
                 config=self.params,
-                resources_per_trial={
-                    "cpu": 1,
-                    "extra_cpu": 1
-                },
+                resources_per_trial=ray_params.get_tune_resources(),
                 num_samples=1)
 
     def testReplaceTuneCheckpoints(self):
@@ -129,10 +123,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
                 ray_params,
                 callbacks=[TuneReportCheckpointCallback(frequency=1)]),
             config=self.params,
-            resources_per_trial={
-                "cpu": 1,
-                "extra_cpu": 1
-            },
+            resources_per_trial=ray_params.get_tune_resources(),
             num_samples=1,
             metric="train-mlogloss",
             mode="min",
@@ -147,10 +138,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
             self.train_func(
                 ray_params, callbacks=[OrigTuneReportCheckpointCallback()]),
             config=self.params,
-            resources_per_trial={
-                "cpu": 1,
-                "extra_cpu": 1
-            },
+            resources_per_trial=ray_params.get_tune_resources(),
             num_samples=1,
             metric="train-mlogloss",
             mode="min",

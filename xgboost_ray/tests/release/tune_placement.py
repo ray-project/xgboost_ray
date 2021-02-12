@@ -68,6 +68,17 @@ def tune_test(path,
               use_gpu=False,
               fake_data=False,
               smoke_test=False):
+    ray_params = RayParams(
+        elastic_training=False,
+        max_actor_restarts=0,
+        num_actors=num_workers,
+        cpus_per_actor=1,
+        gpus_per_actor=0 if not use_gpu else 1,
+        resources_per_actor={
+            "actor_cpus": 1 if not smoke_test else 0,
+            "actor_gpus": 0 if not use_gpu else 1
+        })
+
     def local_train(config):
         temp_dir = None
         if fake_data or smoke_test:
@@ -102,17 +113,6 @@ def tune_test(path,
         })
 
         xgboost_params.update(config)
-
-        ray_params = RayParams(
-            elastic_training=False,
-            max_actor_restarts=0,
-            num_actors=num_workers,
-            cpus_per_actor=1,
-            gpus_per_actor=0 if not use_gpu else 1,
-            resources_per_actor={
-                "actor_cpus": 1 if not smoke_test else 0,
-                "actor_gpus": 0 if not use_gpu else 1
-            })
 
         additional_results = {}
 
@@ -159,10 +159,7 @@ def tune_test(path,
         config=search_space,
         num_samples=num_trials,
         sync_config=tune.SyncConfig(sync_to_driver=DockerSyncer),
-        resources_per_trial={
-            "cpu": 1,
-            "extra_cpu": num_workers
-        })
+        resources_per_trial=ray_params.get_tune_resources())
 
     # In our PACK scheduling, we expect that each IP hosts only workers
     # for one Ray Tune trial.
