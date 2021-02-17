@@ -26,7 +26,8 @@ try:
     from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
     from ray.util import placement_group
-    from ray.util.placement_group import PlacementGroup, remove_placement_group
+    from ray.util.placement_group import PlacementGroup, \
+        remove_placement_group, get_current_placement_group
 
     from xgboost_ray.util import Event, Queue, MultiActorTask
 
@@ -35,7 +36,8 @@ except ImportError:
     ray = get_node_ip_address = Queue = Event = ActorHandle = logger = None
     RAY_INSTALLED = False
 
-from xgboost_ray.tune import _try_add_tune_callback
+from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources, \
+    TUNE_USING_PG
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
@@ -267,6 +269,14 @@ class RayParams:
     max_actor_restarts: int = 0
     checkpoint_frequency: int = 5
 
+    def get_tune_resources(self):
+        """Return the resources to use for xgboost_ray training with Tune."""
+        return _get_tune_resources(
+            num_actors=self.num_actors,
+            cpus_per_actor=self.cpus_per_actor,
+            gpus_per_actor=max(0, self.gpus_per_actor),
+            resources_per_actor=self.resources_per_actor)
+
 
 @dataclass
 class _Checkpoint:
@@ -353,7 +363,7 @@ class RayXGBoostActor:
         class _SaveInternalCheckpointCallback(TrainingCallback):
             def after_iteration(self, model, epoch, evals_log):
                 if this.rank == 0 and \
-                   epoch % this.checkpoint_frequency == 0:
+                        epoch % this.checkpoint_frequency == 0:
                     put_queue(_Checkpoint(epoch, pickle.dumps(model)))
 
             def after_training(self, model):
@@ -511,9 +521,11 @@ def _autodetect_resources(ray_params: RayParams,
     # actors, bounded by the minimum number of CPUs across actors nodes.
     if cpus_per_actor <= 0:
         cluster_cpus = _ray_get_cluster_cpus() or 1
-        cpus_per_actor = min(
-            int(_get_min_node_cpus() or 1),
-            int(cluster_cpus // ray_params.num_actors))
+        cpus_per_actor = max(
+            1,
+            min(
+                int(_get_min_node_cpus() or 1),
+                int(cluster_cpus // ray_params.num_actors)))
     return cpus_per_actor, gpus_per_actor
 
 
@@ -525,7 +537,6 @@ def _create_actor(rank: int,
                   placement_group: Optional[PlacementGroup] = None,
                   queue: Optional[Queue] = None,
                   checkpoint_frequency: int = 5) -> ActorHandle:
-
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
@@ -626,11 +637,29 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
     return pg
 
 
-def _create_communication_processes():
+def _create_communication_processes(added_tune_callback: bool = False):
     # Create Queue and Event actors and make sure to colocate with driver node.
     node_ip = ray.services.get_node_ip_address()
     # Have to explicitly set num_cpus to 0.
-    placement_option = {"num_cpus": 0, "resources": {f"node:{node_ip}": 0.01}}
+    placement_option = {"num_cpus": 0}
+    if added_tune_callback and TUNE_USING_PG:
+        # If Tune is using placement groups, then we force Queue and
+        # StopEvent onto same bundle as the Trainable.
+        # This forces all 3 to be on the same node.
+        current_pg = get_current_placement_group()
+        if current_pg is None:
+            raise RuntimeError(
+                "Trying to use the parent placement group "
+                "when it doesn't exist. This is probably a bug, "
+                "please raise an issue at "
+                "https://github.com/ray-project/xgboost_ray")
+
+        placement_option.update({
+            "placement_group": current_pg,
+            "placement_group_bundle_index": 0
+        })
+    else:
+        placement_option.update({"resources": {f"node:{node_ip}": 0.01}})
     queue = Queue(actor_options=placement_option)  # Queue actor
     stop_event = Event(actor_options=placement_option)  # Stop event actor
     return queue, stop_event
@@ -781,8 +810,8 @@ def _train(params: Dict,
                 f"checkpointed model instead.")
             return kwargs["xgb_model"], {}, _training_state.additional_results
 
-        kwargs["num_boost_round"] = kwargs.get("num_boost_round", 10) - \
-            _training_state.checkpoint.iteration - 1
+        kwargs["num_boost_round"] = kwargs.get(
+            "num_boost_round", 10) - _training_state.checkpoint.iteration - 1
 
     # The callback_returns dict contains actor-rank indexed lists of
     # results obtained through the `put_queue` function, usually
@@ -1007,12 +1036,17 @@ def train(params: Dict,
     pending_actors = {}
 
     # Create the Queue and Event actors.
-    queue, stop_event = _create_communication_processes()
+    queue, stop_event = _create_communication_processes(added_tune_callback)
 
     placement_strategy = None
     if not ray_params.elastic_training:
         if added_tune_callback:
-            placement_strategy = "PACK"
+            if TUNE_USING_PG:
+                # If Tune is using placement groups, then strategy has already
+                # been set. Don't create an additional placement_group here.
+                placement_strategy = None
+            else:
+                placement_strategy = "PACK"
         elif bool(_USE_SPREAD_STRATEGY):
             placement_strategy = "SPREAD"
 
@@ -1053,7 +1087,7 @@ def train(params: Dict,
             start_again = False
             if ray_params.elastic_training:
                 if alive_actors < ray_params.num_actors - \
-                   ray_params.max_failed_actors:
+                        ray_params.max_failed_actors:
                     raise RuntimeError(
                         "A Ray actor died during training and the maximum "
                         "number of dead actors in elastic training was "
