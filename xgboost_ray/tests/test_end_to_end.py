@@ -4,7 +4,7 @@ import xgboost as xgb
 
 import ray
 
-from xgboost_ray import RayParams, train, RayDMatrix
+from xgboost_ray import RayParams, train, RayDMatrix, predict
 
 
 class XGBoostRayEndToEndTest(unittest.TestCase):
@@ -98,6 +98,43 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
+
+    def testTrainPredict(self, init=True, remote=None):
+        """Train with evaluation and predict"""
+        if init:
+            ray.init(num_cpus=2, num_gpus=0)
+
+        dtrain = RayDMatrix(self.x, self.y)
+
+        evals_result = {}
+        bst = train(
+            self.params,
+            dtrain,
+            ray_params=RayParams(num_actors=2),
+            evals=[(dtrain, "dtrain")],
+            evals_result=evals_result,
+            _remote=remote)
+
+        self.assertTrue("dtrain" in evals_result)
+
+        x_mat = RayDMatrix(self.x)
+        pred_y = predict(bst, x_mat, _remote=remote)
+        self.assertSequenceEqual(list(self.y), list(pred_y))
+
+    def testTrainPredictRemote(self):
+        """Train with evaluation and predict in a remote call"""
+        self.testTrainPredict(init=True, remote=True)
+
+    def testTrainPredictClient(self):
+        """Train with evaluation and predict in a client session"""
+        from ray.util.client.ray_client_helpers import ray_start_client_server
+
+        ray.init(num_cpus=2, num_gpus=0)
+        self.assertFalse(ray.util.client.ray.is_connected())
+        with ray_start_client_server():
+            self.assertTrue(ray.util.client.ray.is_connected())
+
+            self.testTrainPredict(init=False, remote=None)
 
 
 if __name__ == "__main__":
