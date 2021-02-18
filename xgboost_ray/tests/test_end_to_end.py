@@ -40,6 +40,10 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             "num_class": 4
         }
 
+    def tearDown(self):
+        if ray.is_initialized:
+            ray.shutdown()
+
     def testSingleTraining(self):
         """Test that XGBoost learns to predict full matrix"""
         dtrain = xgb.DMatrix(self.x, self.y)
