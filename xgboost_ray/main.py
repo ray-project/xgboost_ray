@@ -985,7 +985,7 @@ def train(params: Dict,
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
     if _remote is None:
-        _remote = _is_client_connected and \
+        _remote = _is_client_connected() and \
                   not is_session_enabled()
 
     if not ray.is_initialized():
@@ -1282,7 +1282,7 @@ def predict(model: xgb.Booster,
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
     if _remote is None:
-        _remote = _is_client_connected and \
+        _remote = _is_client_connected() and \
                   not is_session_enabled()
 
     if not ray.is_initialized():
