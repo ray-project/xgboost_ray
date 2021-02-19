@@ -131,6 +131,8 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
     def testTrainPredictClient(self):
         """Train with evaluation and predict in a client session"""
+        if ray.__version__ <= "1.2.0":
+            self.skipTest("Ray client mocks do not work in Ray <= 1.2.0")
         from ray.util.client.ray_client_helpers import ray_start_client_server
 
         ray.init(num_cpus=2, num_gpus=0)

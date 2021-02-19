@@ -93,6 +93,13 @@ def _assert_ray_support():
             "Try: `pip install ray`")
 
 
+def _is_client_connected() -> bool:
+    try:
+        return ray.util.client.ray.is_connected()
+    except Exception:
+        return False
+
+
 class _RabitTracker(xgb.RabitTracker):
     """
     This method overwrites the xgboost-provided RabitTracker to switch
@@ -978,8 +985,8 @@ def train(params: Dict,
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
     if _remote is None:
-        _remote = ray.util.client.ray.is_connected() and \
-            not is_session_enabled()
+        _remote = _is_client_connected and \
+                  not is_session_enabled()
 
     if _remote:
         # Run this function as a remote function to support Ray client mode
@@ -1275,8 +1282,8 @@ def predict(model: xgb.Booster,
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
     if _remote is None:
-        _remote = ray.util.client.ray.is_connected() and \
-            not is_session_enabled()
+        _remote = _is_client_connected and \
+                  not is_session_enabled()
 
     if _remote:
         return ray.get(

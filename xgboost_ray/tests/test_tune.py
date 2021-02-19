@@ -79,6 +79,9 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
     def testNumItersClient(self):
         """Test ray client mode"""
+        if ray.__version__ <= "1.2.0":
+            self.skipTest("Ray client mocks do not work in Ray <= 1.2.0")
+
         from ray.util.client.ray_client_helpers import ray_start_client_server
 
         self.assertFalse(ray.util.client.ray.is_connected())
