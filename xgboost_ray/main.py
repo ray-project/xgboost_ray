@@ -681,6 +681,8 @@ class _TrainingState:
     checkpoint: _Checkpoint
     additional_results: Dict
 
+    training_started_at: float = 0.
+
     placement_group: Optional[PlacementGroup] = None
 
     failed_actor_ranks: set = field(default_factory=set)
@@ -830,6 +832,8 @@ def _train(params: Dict,
         _training_state.additional_results[
             "callback_returns"] = callback_returns
 
+    _training_state.training_started_at = time.time()
+
     # Trigger the train function
     training_futures = [
         actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
@@ -918,9 +922,6 @@ def _train(params: Dict,
     total_n = sum(res["train_n"] or 0 for res in all_results)
 
     _training_state.additional_results["total_n"] = total_n
-
-    logger.info(f"[RayXGBoost] Finished XGBoost training on training data "
-                f"with total N={total_n:,}.")
 
     return bst, evals_result, _training_state.additional_results
 
@@ -1020,6 +1021,8 @@ def train(params: Dict,
             additional_results.update(train_additional_results)
         return bst
 
+    start_time = time.time()
+
     ray_params = _validate_ray_params(ray_params)
 
     max_actor_restarts = ray_params.max_actor_restarts \
@@ -1104,6 +1107,7 @@ def train(params: Dict,
 
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
 
+    total_training_time = 0.
     while tries <= max_actor_restarts:
         training_state = _TrainingState(
             actors=actors,
@@ -1111,6 +1115,7 @@ def train(params: Dict,
             stop_event=stop_event,
             checkpoint=checkpoint,
             additional_results=current_results,
+            training_started_at=0.,
             placement_group=pg,
             failed_actor_ranks=start_actor_ranks,
             pending_actors=pending_actors)
@@ -1126,8 +1131,14 @@ def train(params: Dict,
                 gpus_per_actor=gpus_per_actor,
                 _training_state=training_state,
                 **kwargs)
+            if training_state.training_started_at > 0.:
+                total_training_time += time.time(
+                ) - training_state.training_started_at
             break
         except (RayActorError, RayTaskError) as exc:
+            if training_state.training_started_at > 0.:
+                total_training_time += time.time(
+                ) - training_state.training_started_at
             alive_actors = sum(1 for a in actors if a is not None)
             start_again = False
             if ray_params.elastic_training:
@@ -1185,6 +1196,16 @@ def train(params: Dict,
                     f"of retries ({max_actor_restarts}) is exhausted."
                 ) from exc
             tries += 1
+
+    total_time = time.time() - start_time
+
+    train_additional_results["training_time_s"] = total_training_time
+    train_additional_results["total_time_s"] = total_time
+
+    logger.info("[RayXGBoost] Finished XGBoost training on training data "
+                "with total N={total_n:,} in {total_time_s:.2f} seconds "
+                "({training_time_s:.2f} pure XGBoost training time).".format(
+                    **train_additional_results))
 
     _shutdown(
         actors=actors,
