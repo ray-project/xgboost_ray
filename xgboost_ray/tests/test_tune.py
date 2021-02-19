@@ -65,6 +65,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
     # noinspection PyTypeChecker
     def testNumIters(self):
+        """Test that the number of reported tune results is correct"""
         ray_params = RayParams(cpus_per_actor=1, num_actors=2)
         analysis = tune.run(
             self.train_func(ray_params),
@@ -75,6 +76,18 @@ class XGBoostRayTuneTest(unittest.TestCase):
         self.assertSequenceEqual(
             list(analysis.results_df["training_iteration"]),
             list(analysis.results_df["config.num_boost_round"]))
+
+    def testNumItersClient(self):
+        """Test ray client mode"""
+        if ray.__version__ <= "1.2.0":
+            self.skipTest("Ray client mocks do not work in Ray <= 1.2.0")
+
+        from ray.util.client.ray_client_helpers import ray_start_client_server
+
+        self.assertFalse(ray.util.client.ray.is_connected())
+        with ray_start_client_server():
+            self.assertTrue(ray.util.client.ray.is_connected())
+            self.testNumIters()
 
     def testElasticFails(self):
         """Test if error is thrown when using Tune with elastic training."""
