@@ -984,12 +984,12 @@ def train(params: Dict,
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
-    if not ray.is_initialized():
-        ray.init()
-
     if _remote is None:
         _remote = _is_client_connected and \
                   not is_session_enabled()
+
+    if not ray.is_initialized():
+        ray.init()
 
     if _remote:
         # Run this function as a remote function to support Ray client mode
@@ -1281,12 +1281,12 @@ def predict(model: xgb.Booster,
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
-    if not ray.is_initialized():
-        ray.init()
-
     if _remote is None:
         _remote = _is_client_connected and \
                   not is_session_enabled()
+
+    if not ray.is_initialized():
+        ray.init()
 
     if _remote:
         return ray.get(
