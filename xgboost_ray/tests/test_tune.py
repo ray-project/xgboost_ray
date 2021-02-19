@@ -160,6 +160,25 @@ class XGBoostRayTuneTest(unittest.TestCase):
         self.assertTrue(os.path.exists(analysis.best_checkpoint))
 
 
+    def testAutoDetectRsources(self):
+        ray_params = RayParams(num_actors=2)
+        analysis = tune.run(
+            self.train_func(
+                ray_params),
+            config=self.params,
+            resources_per_trial={
+                "cpu": 1,
+                "extra_cpu": 1
+            },
+            num_samples=1,
+            metric="train-mlogloss",
+            mode="min",
+            log_to_file=True,
+            local_dir=self.experiment_dir)
+
+        self.assertTrue(os.path.exists(analysis.best_checkpoint))
+
+
 if __name__ == "__main__":
     import pytest
     import sys
