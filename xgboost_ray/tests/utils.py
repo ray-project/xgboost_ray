@@ -13,6 +13,12 @@ from xgboost.callback import TrainingCallback
 from xgboost_ray.session import get_actor_rank, put_queue
 
 
+def get_num_trees(bst: xgb.Booster):
+    import json
+    data = [json.loads(d) for d in bst.get_dump(dump_format="json")]
+    return len(data) // 4
+
+
 def create_data(num_rows: int, num_cols: int, dtype: np.dtype = np.float32):
 
     return pd.DataFrame(

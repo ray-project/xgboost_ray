@@ -817,9 +817,6 @@ def _train(params: Dict,
                 f"checkpointed model instead.")
             return kwargs["xgb_model"], {}, _training_state.additional_results
 
-        kwargs["num_boost_round"] = kwargs.get(
-            "num_boost_round", 10) - _training_state.checkpoint.iteration - 1
-
     # The callback_returns dict contains actor-rank indexed lists of
     # results obtained through the `put_queue` function, usually
     # sent via callbacks.
@@ -927,13 +924,14 @@ def _train(params: Dict,
 
 def train(params: Dict,
           dtrain: RayDMatrix,
+          num_boost_round: int = 10,
           *args,
           evals=(),
           evals_result: Optional[Dict] = None,
           additional_results: Optional[Dict] = None,
           ray_params: Union[None, RayParams, Dict] = None,
           _remote: Optional[bool] = None,
-          **kwargs):
+          **kwargs) -> xgb.Booster:
     """Distributed XGBoost training via Ray.
 
     This function will connect to a Ray cluster, create ``num_actors``
@@ -1104,7 +1102,19 @@ def train(params: Dict,
 
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
 
+    boost_rounds_left = num_boost_round
+    last_checkpoint_value = checkpoint.value
     while tries <= max_actor_restarts:
+        # Only update number of iterations if the checkpoint changed
+        # If it didn't change, we already subtracted the iterations.
+        if checkpoint.iteration >= 0 and \
+                checkpoint.value != last_checkpoint_value:
+            boost_rounds_left -= checkpoint.iteration + 1
+
+        last_checkpoint_value = checkpoint.value
+
+        logger.debug(f"Boost rounds left: {boost_rounds_left}")
+
         training_state = _TrainingState(
             actors=actors,
             queue=queue,
@@ -1119,6 +1129,7 @@ def train(params: Dict,
             bst, train_evals_result, train_additional_results = _train(
                 params,
                 dtrain,
+                boost_rounds_left,
                 *args,
                 evals=evals,
                 ray_params=ray_params,
