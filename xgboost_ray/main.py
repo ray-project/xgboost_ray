@@ -997,6 +997,7 @@ def train(params: Dict,
             _additional_results = {}
             bst = train(
                 *args,
+                num_boost_round=num_boost_round,
                 evals_result=_evals_result,
                 additional_results=_additional_results,
                 **kwargs)
