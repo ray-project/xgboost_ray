@@ -652,7 +652,6 @@ class RayDMatrix:
         self.feature_types = feature_types
         self.missing = missing
 
-        self.memory_node_ip = ray.services.get_node_ip_address()
         self.num_actors = num_actors
         self.sharding = sharding
 

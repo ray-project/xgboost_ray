@@ -26,7 +26,8 @@ try:
     from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
     from ray.util import placement_group
-    from ray.util.placement_group import PlacementGroup, remove_placement_group
+    from ray.util.placement_group import PlacementGroup, \
+        remove_placement_group, get_current_placement_group
 
     from xgboost_ray.util import Event, Queue, MultiActorTask
 
@@ -35,7 +36,8 @@ except ImportError:
     ray = get_node_ip_address = Queue = Event = ActorHandle = logger = None
     RAY_INSTALLED = False
 
-from xgboost_ray.tune import _try_add_tune_callback
+from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources, \
+    TUNE_USING_PG, is_session_enabled
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
@@ -89,6 +91,13 @@ def _assert_ray_support():
         raise ImportError(
             "Ray needs to be installed in order to use this module. "
             "Try: `pip install ray`")
+
+
+def _is_client_connected() -> bool:
+    try:
+        return ray.util.client.ray.is_connected()
+    except Exception:
+        return False
 
 
 class _RabitTracker(xgb.RabitTracker):
@@ -267,6 +276,14 @@ class RayParams:
     max_actor_restarts: int = 0
     checkpoint_frequency: int = 5
 
+    def get_tune_resources(self):
+        """Return the resources to use for xgboost_ray training with Tune."""
+        return _get_tune_resources(
+            num_actors=self.num_actors,
+            cpus_per_actor=self.cpus_per_actor,
+            gpus_per_actor=max(0, self.gpus_per_actor),
+            resources_per_actor=self.resources_per_actor)
+
 
 @dataclass
 class _Checkpoint:
@@ -353,7 +370,7 @@ class RayXGBoostActor:
         class _SaveInternalCheckpointCallback(TrainingCallback):
             def after_iteration(self, model, epoch, evals_log):
                 if this.rank == 0 and \
-                   epoch % this.checkpoint_frequency == 0:
+                        epoch % this.checkpoint_frequency == 0:
                     put_queue(_Checkpoint(epoch, pickle.dumps(model)))
 
             def after_training(self, model):
@@ -511,9 +528,11 @@ def _autodetect_resources(ray_params: RayParams,
     # actors, bounded by the minimum number of CPUs across actors nodes.
     if cpus_per_actor <= 0:
         cluster_cpus = _ray_get_cluster_cpus() or 1
-        cpus_per_actor = min(
-            int(_get_min_node_cpus() or 1),
-            int(cluster_cpus // ray_params.num_actors))
+        cpus_per_actor = max(
+            1,
+            min(
+                int(_get_min_node_cpus() or 1),
+                int(cluster_cpus // ray_params.num_actors)))
     return cpus_per_actor, gpus_per_actor
 
 
@@ -525,7 +544,6 @@ def _create_actor(rank: int,
                   placement_group: Optional[PlacementGroup] = None,
                   queue: Optional[Queue] = None,
                   checkpoint_frequency: int = 5) -> ActorHandle:
-
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
@@ -626,11 +644,29 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
     return pg
 
 
-def _create_communication_processes():
+def _create_communication_processes(added_tune_callback: bool = False):
     # Create Queue and Event actors and make sure to colocate with driver node.
-    node_ip = ray.services.get_node_ip_address()
+    node_ip = get_node_ip_address()
     # Have to explicitly set num_cpus to 0.
-    placement_option = {"num_cpus": 0, "resources": {f"node:{node_ip}": 0.01}}
+    placement_option = {"num_cpus": 0}
+    if added_tune_callback and TUNE_USING_PG:
+        # If Tune is using placement groups, then we force Queue and
+        # StopEvent onto same bundle as the Trainable.
+        # This forces all 3 to be on the same node.
+        current_pg = get_current_placement_group()
+        if current_pg is None:
+            raise RuntimeError(
+                "Trying to use the parent placement group "
+                "when it doesn't exist. This is probably a bug, "
+                "please raise an issue at "
+                "https://github.com/ray-project/xgboost_ray")
+
+        placement_option.update({
+            "placement_group": current_pg,
+            "placement_group_bundle_index": 0
+        })
+    else:
+        placement_option.update({"resources": {f"node:{node_ip}": 0.01}})
     queue = Queue(actor_options=placement_option)  # Queue actor
     stop_event = Event(actor_options=placement_option)  # Stop event actor
     return queue, stop_event
@@ -781,8 +817,8 @@ def _train(params: Dict,
                 f"checkpointed model instead.")
             return kwargs["xgb_model"], {}, _training_state.additional_results
 
-        kwargs["num_boost_round"] = kwargs.get("num_boost_round", 10) - \
-            _training_state.checkpoint.iteration - 1
+        kwargs["num_boost_round"] = kwargs.get(
+            "num_boost_round", 10) - _training_state.checkpoint.iteration - 1
 
     # The callback_returns dict contains actor-rank indexed lists of
     # results obtained through the `put_queue` function, usually
@@ -896,6 +932,7 @@ def train(params: Dict,
           evals_result: Optional[Dict] = None,
           additional_results: Optional[Dict] = None,
           ray_params: Union[None, RayParams, Dict] = None,
+          _remote: Optional[bool] = None,
           **kwargs):
     """Distributed XGBoost training via Ray.
 
@@ -938,11 +975,51 @@ def train(params: Dict,
         ray_params (Union[None, RayParams, Dict]): Parameters to configure
             Ray-specific behavior. See :class:`RayParams` for a list of valid
             configuration parameters.
+        _remote (bool): Whether to run the driver process in a remote
+            function. This is enabled by default in Ray client mode.
         **kwargs: Keyword arguments will be passed to the local
             `xgb.train()` calls.
 
     Returns: An ``xgboost.Booster`` object.
     """
+    os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
+
+    if _remote is None:
+        _remote = _is_client_connected() and \
+                  not is_session_enabled()
+
+    if not ray.is_initialized():
+        ray.init()
+
+    if _remote:
+        # Run this function as a remote function to support Ray client mode
+        @ray.remote(num_cpus=0)
+        def _wrapped(*args, **kwargs):
+            _evals_result = {}
+            _additional_results = {}
+            bst = train(
+                *args,
+                evals_result=_evals_result,
+                additional_results=_additional_results,
+                **kwargs)
+            return bst, _evals_result, _additional_results
+
+        bst, train_evals_result, train_additional_results = ray.get(
+            _wrapped.remote(
+                params,
+                dtrain,
+                *args,
+                evals=evals,
+                ray_params=ray_params,
+                _remote=False,
+                **kwargs,
+            ))
+        if isinstance(evals_result, dict):
+            evals_result.update(train_evals_result)
+        if isinstance(additional_results, dict):
+            additional_results.update(train_additional_results)
+        return bst
+
     ray_params = _validate_ray_params(ray_params)
 
     max_actor_restarts = ray_params.max_actor_restarts \
@@ -956,9 +1033,6 @@ def train(params: Dict,
             "\nFIX THIS by instantiating a RayDMatrix first: "
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(
                 type(dtrain)))
-
-    if not ray.is_initialized():
-        ray.init()
 
     cpus_per_actor, gpus_per_actor = _autodetect_resources(
         ray_params=ray_params,
@@ -1007,12 +1081,17 @@ def train(params: Dict,
     pending_actors = {}
 
     # Create the Queue and Event actors.
-    queue, stop_event = _create_communication_processes()
+    queue, stop_event = _create_communication_processes(added_tune_callback)
 
     placement_strategy = None
     if not ray_params.elastic_training:
         if added_tune_callback:
-            placement_strategy = "PACK"
+            if TUNE_USING_PG:
+                # If Tune is using placement groups, then strategy has already
+                # been set. Don't create an additional placement_group here.
+                placement_strategy = None
+            else:
+                placement_strategy = "PACK"
         elif bool(_USE_SPREAD_STRATEGY):
             placement_strategy = "SPREAD"
 
@@ -1053,7 +1132,7 @@ def train(params: Dict,
             start_again = False
             if ray_params.elastic_training:
                 if alive_actors < ray_params.num_actors - \
-                   ray_params.max_failed_actors:
+                        ray_params.max_failed_actors:
                     raise RuntimeError(
                         "A Ray actor died during training and the maximum "
                         "number of dead actors in elastic training was "
@@ -1177,6 +1256,7 @@ def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
 def predict(model: xgb.Booster,
             data: RayDMatrix,
             ray_params: Union[None, RayParams, Dict] = None,
+            _remote: Optional[bool] = None,
             **kwargs) -> Optional[np.ndarray]:
     """Distributed XGBoost predict via Ray.
 
@@ -1191,12 +1271,28 @@ def predict(model: xgb.Booster,
         ray_params (Union[None, RayParams, Dict]): Parameters to configure
             Ray-specific behavior. See :class:`RayParams` for a list of valid
             configuration parameters.
+        _remote (bool): Whether to run the driver process in a remote
+            function. This is enabled by default in Ray client mode.
         **kwargs: Keyword arguments will be passed to the local
             `xgb.predict()` calls.
 
     Returns: ``np.ndarray`` containing the predicted labels.
 
     """
+    os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
+
+    if _remote is None:
+        _remote = _is_client_connected() and \
+                  not is_session_enabled()
+
+    if not ray.is_initialized():
+        ray.init()
+
+    if _remote:
+        return ray.get(
+            ray.remote(num_cpus=0)(predict).remote(
+                model, data, ray_params, _remote=False, **kwargs))
+
     ray_params = _validate_ray_params(ray_params)
 
     max_actor_restarts = ray_params.max_actor_restarts \

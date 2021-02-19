@@ -2,7 +2,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, DEFAULT
 import pytest
 
 import numpy as np
@@ -61,66 +61,69 @@ class TestColocation(unittest.TestCase):
     @patch("xgboost_ray.util._EventActor", _MockEventActor)
     def test_communication_colocation(self):
         """Checks that Queue and Event actors are colocated with the driver."""
-        cluster = self.ray_start_cluster
-        cluster.add_node(num_cpus=3)
-        cluster.add_node(num_cpus=3)
-        ray.init(address=cluster.address)
+        with self.ray_start_cluster() as cluster:
+            cluster.add_node(num_cpus=3)
+            cluster.add_node(num_cpus=3)
+            cluster.wait_for_nodes()
+            ray.init(address=cluster.address)
 
-        local_node = ray.state.current_node_id()
+            local_node = ray.state.current_node_id()
 
-        # Note that these will have the same IP in the test cluster
-        assert len(ray.state.node_ids()) == 2
-        assert local_node in ray.state.node_ids()
+            # Note that these will have the same IP in the test cluster
+            assert len(ray.state.node_ids()) == 2
+            assert local_node in ray.state.node_ids()
 
-        def _mock_train(*args, _training_state, **kwargs):
-            assert ray.get(_training_state.queue.actor.get_node_id.remote()
-                           ) == ray.state.current_node_id()
-            assert ray.get(
-                _training_state.stop_event.actor.get_node_id.remote()) == \
-                ray.state.current_node_id()
-            return _train(*args, _training_state=_training_state, **kwargs)
+            def _mock_train(*args, _training_state, **kwargs):
+                assert ray.get(_training_state.queue.actor.get_node_id.remote(
+                )) == ray.state.current_node_id()
+                assert ray.get(
+                    _training_state.stop_event.actor.get_node_id.remote()) == \
+                    ray.state.current_node_id()
+                return DEFAULT, DEFAULT, DEFAULT
 
-        with patch("xgboost_ray.main._train", _mock_train):
-            train(
-                self.params,
-                RayDMatrix(self.x, self.y),
-                num_boost_round=2,
-                ray_params=RayParams(max_actor_restarts=1, num_actors=6))
+            with patch("xgboost_ray.main._train") as mocked:
+                mocked.side_effect = _mock_train
+                train(
+                    self.params,
+                    RayDMatrix(self.x, self.y),
+                    num_boost_round=2,
+                    ray_params=RayParams(max_actor_restarts=1, num_actors=6))
 
     def test_no_tune_spread(self):
         """Tests whether workers are spread when not using Tune."""
-        cluster = self.ray_start_cluster
-        cluster.add_node(num_cpus=2)
-        cluster.add_node(num_cpus=2)
-        ray.init(address=cluster.address)
+        with self.ray_start_cluster() as cluster:
+            cluster.add_node(num_cpus=2)
+            cluster.add_node(num_cpus=2)
+            cluster.wait_for_nodes()
+            ray.init(address=cluster.address)
 
-        ray_params = RayParams(
-            max_actor_restarts=1, num_actors=2, cpus_per_actor=2)
+            ray_params = RayParams(
+                max_actor_restarts=1, num_actors=2, cpus_per_actor=2)
 
-        def _mock_train(*args, _training_state, **kwargs):
-            try:
-                results = _train(
-                    *args, _training_state=_training_state, **kwargs)
-                return results
-            except Exception:
-                raise
-            finally:
-                assert len(_training_state.actors) == 2
-                if not any(a is None for a in _training_state.actors):
-                    actor_infos = ray.actors()
-                    actor_nodes = []
-                    for a in _training_state.actors:
-                        actor_info = actor_infos.get(a._actor_id.hex())
-                        actor_node = actor_info["Address"]["NodeID"]
-                        actor_nodes.append(actor_node)
-                    assert actor_nodes[0] != actor_nodes[1]
+            def _mock_train(*args, _training_state, **kwargs):
+                try:
+                    results = _train(
+                        *args, _training_state=_training_state, **kwargs)
+                    return results
+                except Exception:
+                    raise
+                finally:
+                    assert len(_training_state.actors) == 2
+                    if not any(a is None for a in _training_state.actors):
+                        actor_infos = ray.actors()
+                        actor_nodes = []
+                        for a in _training_state.actors:
+                            actor_info = actor_infos.get(a._actor_id.hex())
+                            actor_node = actor_info["Address"]["NodeID"]
+                            actor_nodes.append(actor_node)
+                        assert actor_nodes[0] != actor_nodes[1]
 
-        with patch("xgboost_ray.main._train", _mock_train):
-            train(
-                self.params,
-                RayDMatrix(self.x, self.y),
-                num_boost_round=4,
-                ray_params=ray_params)
+            with patch("xgboost_ray.main._train", _mock_train):
+                train(
+                    self.params,
+                    RayDMatrix(self.x, self.y),
+                    num_boost_round=4,
+                    ray_params=ray_params)
 
     def test_tune_pack(self):
         """Tests whether workers are packed when using Tune."""
@@ -129,51 +132,49 @@ class TestColocation(unittest.TestCase):
         except ImportError:
             self.skipTest("Tune is not installed.")
             return
-        cluster = self.ray_start_cluster
-        cluster.add_node(num_cpus=2)
-        cluster.add_node(num_cpus=2)
-        ray.init(address=cluster.address)
+        with self.ray_start_cluster() as cluster:
+            num_actors = 2
+            cluster.add_node(num_cpus=3)
+            cluster.add_node(num_cpus=3)
+            ray.init(address=cluster.address)
 
-        ray_params = RayParams(
-            max_actor_restarts=1, num_actors=2, cpus_per_actor=1)
+            ray_params = RayParams(
+                max_actor_restarts=1, num_actors=num_actors, cpus_per_actor=1)
 
-        def _mock_train(*args, _training_state, **kwargs):
-            try:
-                results = _train(
-                    *args, _training_state=_training_state, **kwargs)
-                return results
-            except Exception:
-                raise
-            finally:
-                assert len(_training_state.actors) == 2
-                if not any(a is None for a in _training_state.actors):
-                    actor_infos = ray.actors()
-                    actor_nodes = []
-                    for a in _training_state.actors:
-                        actor_info = actor_infos.get(a._actor_id.hex())
-                        actor_node = actor_info["Address"]["NodeID"]
-                        actor_nodes.append(actor_node)
-                    assert actor_nodes[0] == actor_nodes[1]
+            def _mock_train(*args, _training_state, **kwargs):
+                try:
+                    results = _train(
+                        *args, _training_state=_training_state, **kwargs)
+                    return results
+                except Exception:
+                    raise
+                finally:
+                    assert len(_training_state.actors) == num_actors
+                    if not any(a is None for a in _training_state.actors):
+                        actor_infos = ray.actors()
+                        actor_nodes = []
+                        for a in _training_state.actors:
+                            actor_info = actor_infos.get(a._actor_id.hex())
+                            actor_node = actor_info["Address"]["NodeID"]
+                            actor_nodes.append(actor_node)
+                        assert actor_nodes[0] == actor_nodes[1]
 
-        def train_func(params, x, y, ray_params):
-            def inner_func(config):
-                with patch("xgboost_ray.main._train", _mock_train):
-                    train(
-                        params,
-                        RayDMatrix(x, y),
-                        num_boost_round=4,
-                        ray_params=ray_params)
+            def train_func(params, x, y, ray_params):
+                def inner_func(config):
+                    with patch("xgboost_ray.main._train", _mock_train):
+                        train(
+                            params,
+                            RayDMatrix(x, y),
+                            num_boost_round=4,
+                            ray_params=ray_params)
 
-            return inner_func
+                return inner_func
 
-        tune.run(
-            train_func(self.params, self.x, self.y, ray_params),
-            resources_per_trial={
-                "cpu": 0,
-                "extra_cpu": 2
-            },
-            num_samples=1,
-        )
+            tune.run(
+                train_func(self.params, self.x, self.y, ray_params),
+                resources_per_trial=ray_params.get_tune_resources(),
+                num_samples=1,
+            )
 
 
 if __name__ == "__main__":

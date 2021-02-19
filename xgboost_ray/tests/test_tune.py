@@ -65,19 +65,29 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
     # noinspection PyTypeChecker
     def testNumIters(self):
-        ray_params = RayParams(cpus_per_actor=1, num_actors=1)
+        """Test that the number of reported tune results is correct"""
+        ray_params = RayParams(cpus_per_actor=1, num_actors=2)
         analysis = tune.run(
             self.train_func(ray_params),
             config=self.params,
-            resources_per_trial={
-                "cpu": 1,
-                "extra_cpu": 1
-            },
+            resources_per_trial=ray_params.get_tune_resources(),
             num_samples=2)
 
-        self.assertTrue(
-            all(analysis.results_df["training_iteration"] ==
-                analysis.results_df["config.num_boost_round"]))
+        self.assertSequenceEqual(
+            list(analysis.results_df["training_iteration"]),
+            list(analysis.results_df["config.num_boost_round"]))
+
+    def testNumItersClient(self):
+        """Test ray client mode"""
+        if ray.__version__ <= "1.2.0":
+            self.skipTest("Ray client mocks do not work in Ray <= 1.2.0")
+
+        from ray.util.client.ray_client_helpers import ray_start_client_server
+
+        self.assertFalse(ray.util.client.ray.is_connected())
+        with ray_start_client_server():
+            self.assertTrue(ray.util.client.ray.is_connected())
+            self.testNumIters()
 
     def testElasticFails(self):
         """Test if error is thrown when using Tune with elastic training."""
@@ -87,10 +97,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
             tune.run(
                 self.train_func(ray_params),
                 config=self.params,
-                resources_per_trial={
-                    "cpu": 1,
-                    "extra_cpu": 1
-                },
+                resources_per_trial=ray_params.get_tune_resources(),
                 num_samples=1)
 
     def testReplaceTuneCheckpoints(self):
@@ -129,10 +136,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
                 ray_params,
                 callbacks=[TuneReportCheckpointCallback(frequency=1)]),
             config=self.params,
-            resources_per_trial={
-                "cpu": 1,
-                "extra_cpu": 1
-            },
+            resources_per_trial=ray_params.get_tune_resources(),
             num_samples=1,
             metric="train-mlogloss",
             mode="min",
@@ -147,10 +151,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
             self.train_func(
                 ray_params, callbacks=[OrigTuneReportCheckpointCallback()]),
             config=self.params,
-            resources_per_trial={
-                "cpu": 1,
-                "extra_cpu": 1
-            },
+            resources_per_trial=ray_params.get_tune_resources(),
             num_samples=1,
             metric="train-mlogloss",
             mode="min",

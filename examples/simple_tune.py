@@ -11,7 +11,7 @@ from ray import tune
 from xgboost_ray import train, RayDMatrix, RayParams
 
 
-def train_breast_cancer(config, cpus_per_actor=1, num_actors=1):
+def train_breast_cancer(config, ray_params):
     # Load dataset
     data, labels = datasets.load_breast_cancer(return_X_y=True)
     # Split into train and test set
@@ -28,11 +28,7 @@ def train_breast_cancer(config, cpus_per_actor=1, num_actors=1):
         dtrain=train_set,
         evals=[(test_set, "eval")],
         evals_result=evals_result,
-        ray_params=RayParams(
-            max_actor_restarts=1,
-            gpus_per_actor=0,
-            cpus_per_actor=cpus_per_actor,
-            num_actors=num_actors),
+        ray_params=ray_params,
         verbose_eval=False,
         num_boost_round=10)
 
@@ -53,17 +49,16 @@ def main(cpus_per_actor, num_actors, num_samples):
         "max_depth": tune.randint(1, 9)
     }
 
+    ray_params = RayParams(
+        max_actor_restarts=1,
+        gpus_per_actor=0,
+        cpus_per_actor=cpus_per_actor,
+        num_actors=num_actors)
+
     analysis = tune.run(
-        tune.with_parameters(
-            train_breast_cancer,
-            cpus_per_actor=cpus_per_actor,
-            num_actors=num_actors),
-        # extra_cpu is used if the trainable creates additional remote actors.
-        # https://docs.ray.io/en/master/tune/api_docs/trainable.html#advanced-resource-allocation
-        resources_per_trial={
-            "cpu": 1,
-            "extra_cpu": cpus_per_actor * num_actors
-        },
+        tune.with_parameters(train_breast_cancer, ray_params=ray_params),
+        # Use the `get_tune_resources` helper function to set the resources.
+        resources_per_trial=ray_params.get_tune_resources(),
         config=config,
         num_samples=num_samples,
         metric="eval-error",
