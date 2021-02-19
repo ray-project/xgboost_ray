@@ -984,6 +984,9 @@ def train(params: Dict,
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
+    if not ray.is_initialized():
+        ray.init()
+
     if _remote is None:
         _remote = _is_client_connected and \
                   not is_session_enabled()
@@ -1030,9 +1033,6 @@ def train(params: Dict,
             "\nFIX THIS by instantiating a RayDMatrix first: "
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(
                 type(dtrain)))
-
-    if not ray.is_initialized():
-        ray.init()
 
     cpus_per_actor, gpus_per_actor = _autodetect_resources(
         ray_params=ray_params,
@@ -1280,6 +1280,9 @@ def predict(model: xgb.Booster,
 
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
+
+    if not ray.is_initialized():
+        ray.init()
 
     if _remote is None:
         _remote = _is_client_connected and \
