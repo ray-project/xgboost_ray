@@ -2,7 +2,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch, DEFAULT
+from unittest.mock import patch
 import pytest
 
 import numpy as np
@@ -79,7 +79,7 @@ class TestColocation(unittest.TestCase):
                 assert ray.get(
                     _training_state.stop_event.actor.get_node_id.remote()) == \
                     ray.state.current_node_id()
-                return DEFAULT, DEFAULT, DEFAULT
+                return _train(*args, _training_state=_training_state, **kwargs)
 
             with patch("xgboost_ray.main._train") as mocked:
                 mocked.side_effect = _mock_train
