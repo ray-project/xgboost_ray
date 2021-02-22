@@ -278,6 +278,9 @@ class RayParams:
 
     def get_tune_resources(self):
         """Return the resources to use for xgboost_ray training with Tune."""
+        if self.cpus_per_actor <= 0 or self.num_actors <= 0:
+            raise ValueError("num_actors and cpus_per_actor both must be "
+                             "greater than 0.")
         return _get_tune_resources(
             num_actors=self.num_actors,
             cpus_per_actor=self.cpus_per_actor,
@@ -1036,21 +1039,26 @@ def train(params: Dict,
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(
                 type(dtrain)))
 
-    cpus_per_actor, gpus_per_actor = _autodetect_resources(
-        ray_params=ray_params,
-        use_tree_method="tree_method" in params
-        and params["tree_method"].startswith("gpu"))
-
-    if gpus_per_actor == 0 and cpus_per_actor == 0:
-        raise ValueError("cpus_per_actor and gpus_per_actor both cannot be "
-                         "0. Are you sure your cluster has CPUs available?")
-
     added_tune_callback = _try_add_tune_callback(kwargs)
     # Tune currently does not support elastic training.
     if added_tune_callback and ray_params.elastic_training:
         raise ValueError("Elastic Training cannot be used with Ray Tune. "
                          "Please disable elastic_training in RayParams in "
                          "order to use xgboost_ray with Tune.")
+
+    if added_tune_callback:
+        # Don't autodetect resources when used with Tune.
+        cpus_per_actor = ray_params.cpus_per_actor
+        gpus_per_actor = max(0, ray_params.gpus_per_actor)
+    else:
+        cpus_per_actor, gpus_per_actor = _autodetect_resources(
+            ray_params=ray_params,
+            use_tree_method="tree_method" in params
+            and params["tree_method"].startswith("gpu"))
+
+    if gpus_per_actor == 0 and cpus_per_actor == 0:
+        raise ValueError("cpus_per_actor and gpus_per_actor both cannot be "
+                         "0. Are you sure your cluster has CPUs available?")
 
     if ray_params.elastic_training and ray_params.max_failed_actors == 0:
         raise ValueError(
