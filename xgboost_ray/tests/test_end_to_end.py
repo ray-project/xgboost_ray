@@ -5,6 +5,7 @@ import xgboost as xgb
 import ray
 
 from xgboost_ray import RayParams, train, RayDMatrix, predict
+from xgboost_ray.tests.utils import get_num_trees
 
 
 class XGBoostRayEndToEndTest(unittest.TestCase):
@@ -114,10 +115,13 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         bst = train(
             self.params,
             dtrain,
+            num_boost_round=38,
             ray_params=RayParams(num_actors=2),
             evals=[(dtrain, "dtrain")],
             evals_result=evals_result,
             _remote=remote)
+
+        self.assertEqual(get_num_trees(bst), 38)
 
         self.assertTrue("dtrain" in evals_result)
 

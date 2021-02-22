@@ -14,7 +14,7 @@ import ray
 from xgboost_ray import train, RayDMatrix, RayParams
 from xgboost_ray.main import RayXGBoostActorAvailable
 from xgboost_ray.tests.utils import flatten_obj, _checkpoint_callback, \
-    _fail_callback, tree_obj, _kill_callback, _sleep_callback
+    _fail_callback, tree_obj, _kill_callback, _sleep_callback, get_num_trees
 
 
 class _FakeTask(MagicMock):
@@ -90,6 +90,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 ray_params=RayParams(max_actor_restarts=1, num_actors=2),
                 additional_results=additional_results)
 
+        self.assertEqual(20, get_num_trees(bst))
+
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
@@ -128,6 +130,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     elastic_training=True,
                     max_failed_actors=1),
                 additional_results=additional_results)
+
+        self.assertEqual(20, get_num_trees(bst))
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
@@ -172,6 +176,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     max_failed_actors=1),
                 additional_results=additional_results)
 
+        self.assertEqual(20, get_num_trees(bst))
+
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
@@ -185,6 +191,37 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
         # Both workers finished, so n=32
         self.assertEqual(additional_results["total_n"], 32)
+
+    @patch("xgboost_ray.main.ELASTIC_RESTART_DISABLED", True)
+    def testTrainingContinuationElasticMultiKilled(self):
+        """This should still show 20 boost rounds after two failures."""
+        logging.getLogger().setLevel(10)
+
+        additional_results = {}
+
+        bst = train(
+            self.params,
+            RayDMatrix(self.x, self.y),
+            callbacks=[
+                _kill_callback(
+                    self.die_lock_file, fail_iteration=6, actor_rank=0),
+                _kill_callback(
+                    self.die_lock_file_2, fail_iteration=14, actor_rank=1),
+            ],
+            num_boost_round=20,
+            ray_params=RayParams(
+                max_actor_restarts=2,
+                num_actors=2,
+                elastic_training=True,
+                max_failed_actors=2),
+            additional_results=additional_results)
+
+        self.assertEqual(20, get_num_trees(bst))
+
+        x_mat = xgb.DMatrix(self.x)
+        pred_y = bst.predict(x_mat)
+        self.assertSequenceEqual(list(self.y), list(pred_y))
+        print(f"Got correct predictions: {pred_y}")
 
     @patch("xgboost_ray.main.ELASTIC_RESTART_DISABLED", True)
     def testTrainingContinuationElasticFailed(self):
@@ -210,6 +247,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     elastic_training=True,
                     max_failed_actors=1),
                 additional_results=additional_results)
+
+        self.assertEqual(20, get_num_trees(bst))
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
