@@ -1114,8 +1114,6 @@ def train(params: Dict,
 
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
 
-    boost_rounds_left = num_boost_round
-    last_checkpoint_value = checkpoint.value
     total_training_time = 0.
     boost_rounds_left = num_boost_round
     last_checkpoint_value = checkpoint.value
