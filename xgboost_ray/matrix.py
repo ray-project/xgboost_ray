@@ -69,6 +69,7 @@ def _is_petastorm_compatible(data: Union[str, List[str]]):
 
     def _is_compatible(url: str):
         return url.endswith(".parquet") and (url.startswith("s3://")
+                                             or url.startswith("gs://")
                                              or url.startswith("hdfs://")
                                              or url.startswith("file://"))
 
