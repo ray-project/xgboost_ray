@@ -708,7 +708,7 @@ class RayDMatrix:
 
     @property
     def has_label(self):
-        return bool(self.loader.label)
+        return self.loader.label is not None
 
     def load_data(self,
                   num_actors: Optional[int] = None,
