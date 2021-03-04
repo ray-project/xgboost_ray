@@ -348,6 +348,9 @@ class _RayDMatrixLoader:
 
         local_df = pd.concat(shards, copy=False)
 
+        if self.ignore:
+            local_df = local_df[local_df.columns.difference(self.ignore)]
+
         x, y, w, b, ll, lu = self._split_dataframe(local_df)
         return x, y, w, b, ll, lu
 
