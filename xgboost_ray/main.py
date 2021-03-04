@@ -439,7 +439,7 @@ class RayXGBoostActor:
 
         local_dtrain = self._data[dtrain]
 
-        if not local_dtrain.get_label():
+        if not local_dtrain.get_label().size:
             raise RuntimeError(
                 "Training data has no label set. Please make sure to set "
                 "the `label` argument when initializing `RayDMatrix()` "
