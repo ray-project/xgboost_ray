@@ -348,6 +348,9 @@ class _RayDMatrixLoader:
 
         local_df = pd.concat(shards, copy=False)
 
+        if self.ignore:
+            local_df = local_df[local_df.columns.difference(self.ignore)]
+
         x, y, w, b, ll, lu = self._split_dataframe(local_df)
         return x, y, w, b, ll, lu
 
@@ -705,6 +708,10 @@ class RayDMatrix:
 
         if not distributed and num_actors is not None and not lazy:
             self.load_data(num_actors)
+
+    @property
+    def has_label(self):
+        return self.loader.label is not None
 
     def load_data(self,
                   num_actors: Optional[int] = None,
