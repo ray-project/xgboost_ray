@@ -706,6 +706,10 @@ class RayDMatrix:
         if not distributed and num_actors is not None and not lazy:
             self.load_data(num_actors)
 
+    @property
+    def has_label(self):
+        return bool(self.loader.label)
+
     def load_data(self,
                   num_actors: Optional[int] = None,
                   rank: Optional[int] = None):

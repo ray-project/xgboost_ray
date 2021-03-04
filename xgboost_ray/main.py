@@ -439,6 +439,12 @@ class RayXGBoostActor:
 
         local_dtrain = self._data[dtrain]
 
+        if not local_dtrain.get_label():
+            raise RuntimeError(
+                "Training data has no label set. Please make sure to set "
+                "the `label` argument when initializing `RayDMatrix()` "
+                "for data you would like to train on.")
+
         local_evals = []
         for deval, name in evals:
             if deval not in self._data:
@@ -926,16 +932,18 @@ def _train(params: Dict,
     return bst, evals_result, _training_state.additional_results
 
 
-def train(params: Dict,
-          dtrain: RayDMatrix,
-          num_boost_round: int = 10,
-          *args,
-          evals=(),
-          evals_result: Optional[Dict] = None,
-          additional_results: Optional[Dict] = None,
-          ray_params: Union[None, RayParams, Dict] = None,
-          _remote: Optional[bool] = None,
-          **kwargs) -> xgb.Booster:
+def train(
+        params: Dict,
+        dtrain: RayDMatrix,
+        num_boost_round: int = 10,
+        *args,
+        evals: Union[List[Tuple[RayDMatrix, str]], Tuple[RayDMatrix, str]] = (
+        ),
+        evals_result: Optional[Dict] = None,
+        additional_results: Optional[Dict] = None,
+        ray_params: Union[None, RayParams, Dict] = None,
+        _remote: Optional[bool] = None,
+        **kwargs) -> xgb.Booster:
     """Distributed XGBoost training via Ray.
 
     This function will connect to a Ray cluster, create ``num_actors``
@@ -970,8 +978,8 @@ def train(params: Dict,
     Args:
         params (Dict): parameter dict passed to ``xgboost.train()``
         dtrain (RayDMatrix): Data object containing the training data.
-        evals (Union[List[Tuple], Tuple]): ``evals`` tuple passed to
-            ``xgboost.train()``.
+        evals (Union[List[Tuple[RayDMatrix, str]], Tuple[RayDMatrix, str]]):
+            ``evals`` tuple passed to ``xgboost.train()``.
         evals_result (Optional[Dict]): Dict to store evaluation results in.
         additional_results (Optional[Dict]): Dict to store additional results.
         ray_params (Union[None, RayParams, Dict]): Parameters to configure
@@ -1074,9 +1082,21 @@ def train(params: Dict,
             "effectively disabled. Please set `RayParams.max_actor_restarts` "
             "to something larger than 0 to enable elastic training.")
 
+    if not dtrain.has_label:
+        raise ValueError(
+            "Training data has no label set. Please make sure to set "
+            "the `label` argument when initializing `RayDMatrix()` "
+            "for data you would like to train on.")
+
     if not dtrain.loaded and not dtrain.distributed:
         dtrain.load_data(ray_params.num_actors)
+
     for (deval, name) in evals:
+        if not deval.has_label:
+            raise ValueError(
+                "Evaluation data has no label set. Please make sure to set "
+                "the `label` argument when initializing `RayDMatrix()` "
+                "for data you would like to evaluate on.")
         if not deval.loaded and not deval.distributed:
             deval.load_data(ray_params.num_actors)
 
