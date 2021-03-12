@@ -31,9 +31,8 @@ Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series, MLDataset]
 
 
 def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
-    if any(df is None for df in dfs):
-        return None
-    return pd.concat(dfs, ignore_index=True, copy=False)
+    filtered = [df for df in dfs if df is not None]
+    return pd.concat(filtered, ignore_index=True, copy=False)
 
 
 class RayShardingMode(Enum):
@@ -259,7 +258,10 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                     "{} for the main data and {} for the label.".format(
                         type(self.data), type(self.label)))
 
-        local_df = data_source.load_data(self.data, ignore=self.ignore)
+        # We're doing central data loading here, so we don't pass any indices,
+        # yet. Instead, we'll be selecting the rows below.
+        local_df = data_source.load_data(
+            self.data, ignore=self.ignore, indices=None)
         x, y, w, b, ll, lu = self._split_dataframe(
             local_df, data_source=data_source)
 
@@ -270,6 +272,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
 
         refs = {}
         for i in range(num_actors):
+            # Here we actually want to split the data.
             indices = _get_sharding_indices(sharding, i, num_actors, n)
             actor_refs = {
                 "data": ray.put(x.iloc[indices]),
@@ -362,15 +365,19 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
         n = data_source.get_n(self.data)
         indices = _get_sharding_indices(sharding, rank, num_actors, n)
 
-        local_df = data_source.load_data(
-            self.data, ignore=self.ignore, indices=indices)
-        x, y, w, b, ll, lu = self._split_dataframe(
-            local_df, data_source=data_source)
-
-        if isinstance(x, list):
-            n = sum(len(a) for a in x)
+        if not indices:
+            x, y, w, b, ll, lu = None, None, None, None, None, None
+            n = 0
         else:
-            n = len(x)
+            local_df = data_source.load_data(
+                self.data, ignore=self.ignore, indices=indices)
+            x, y, w, b, ll, lu = self._split_dataframe(
+                local_df, data_source=data_source)
+
+            if isinstance(x, list):
+                n = sum(len(a) for a in x)
+            else:
+                n = len(x)
 
         refs = {
             rank: {
