@@ -36,9 +36,9 @@ class DataSource:
     def get_filetype(data: Any) -> Optional[RayFileType]:
         """Method to help infer the filetype.
 
-        Should return None if the supplied data type (usually a filename)
-        is not covered by this data source, otherwise the filetype should
-        be returned.
+        Returns None if the supplied data type (usually a filename)
+        is not covered by this data source, otherwise the filetype
+        is returned.
 
         Args:
             data (Any): Data set
