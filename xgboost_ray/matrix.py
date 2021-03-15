@@ -410,9 +410,11 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             return True
 
         data_source = self.get_data_source()
-        actor_shards = data_source.get_actor_shards(self.data, actors)
+        data, actor_shards = data_source.get_actor_shards(self.data, actors)
         if not actor_shards:
             return False
+
+        self.data = data
         self.actor_shards = actor_shards
         return True
 
@@ -436,15 +438,14 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
 
         data_source = self.get_data_source()
 
-        n = data_source.get_n(self.data)
-        indices = _get_sharding_indices(sharding, rank, num_actors, n)
-
-        if not indices:
-            x, y, w, b, ll, lu = None, None, None, None, None, None
-            n = 0
-        else:
+        if self.actor_shards:
+            if rank is None:
+                raise RuntimeError(
+                    "Distributed loading requires a rank to be passed, "
+                    "got None")
+            rank_shards = self.actor_shards[rank]
             local_df = data_source.load_data(
-                self.data, ignore=self.ignore, indices=indices)
+                self.data, indices=rank_shards, ignore=self.ignore)
             x, y, w, b, ll, lu = self._split_dataframe(
                 local_df, data_source=data_source)
 
@@ -452,6 +453,23 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 n = sum(len(a) for a in x)
             else:
                 n = len(x)
+        else:
+            n = data_source.get_n(self.data)
+            indices = _get_sharding_indices(sharding, rank, num_actors, n)
+
+            if not indices:
+                x, y, w, b, ll, lu = None, None, None, None, None, None
+                n = 0
+            else:
+                local_df = data_source.load_data(
+                    self.data, ignore=self.ignore, indices=indices)
+                x, y, w, b, ll, lu = self._split_dataframe(
+                    local_df, data_source=data_source)
+
+                if isinstance(x, list):
+                    n = sum(len(a) for a in x)
+                else:
+                    n = len(x)
 
         refs = {
             rank: {

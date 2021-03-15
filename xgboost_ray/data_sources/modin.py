@@ -1,4 +1,4 @@
-from typing import Any, Optional, Sequence, Dict, Union
+from typing import Any, Optional, Sequence, Dict, Union, Tuple
 
 from collections import defaultdict
 import itertools
@@ -93,7 +93,7 @@ class Modin(DataSource):
     def get_actor_shards(
             data: Any,  # modin.pandas.DataFrame
             actors: Sequence[ActorHandle]) -> \
-            Optional[Dict[int, Any]]:
+            Tuple[Any, Optional[Dict[int, Any]]]:
         _assert_modin_installed()
         no_obj = ray.put(None)
         actor_rank_ips = {
@@ -104,7 +104,9 @@ class Modin(DataSource):
                     for actor in actors
                 ]))
         }
-        return assign_partitions_to_actors(data, actor_rank_ips)
+        # Modin dataframes are not serializable, so pass None here
+        # as the first return value
+        return None, assign_partitions_to_actors(data, actor_rank_ips)
 
 
 def assign_partitions_to_actors(data: Any, actor_rank_ips: Dict[int, str]) \
