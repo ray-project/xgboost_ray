@@ -167,6 +167,8 @@ def assign_partitions_to_actors(data: Any, actor_rank_ips: Dict[int, str]) \
             if num_actor_parts < max_parts_per_actor:
                 actor_to_partitions[rank].append(rest_parts.pop(0))
                 partition_assigned = True
+            if len(rest_parts) <= 0:
+                break
 
     if len(rest_parts) != 0:
         raise RuntimeError(
