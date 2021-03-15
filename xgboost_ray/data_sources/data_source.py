@@ -34,7 +34,7 @@ class DataSource:
 
     @staticmethod
     def get_filetype(data: Any) -> Optional[RayFileType]:
-        """Method to help guessing the filetype.
+        """Method to help infer the filetype.
 
         Should return None if the supplied data type (usually a filename)
         is not covered by this data source, otherwise the filetype should
