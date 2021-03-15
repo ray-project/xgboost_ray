@@ -1,7 +1,10 @@
+from typing import Any, Optional, Sequence, Tuple, Dict
+
 from enum import Enum
-from typing import Any, Optional, Sequence, Tuple
 
 import pandas as pd
+
+from ray.actor import ActorHandle
 
 
 class RayFileType(Enum):
@@ -63,7 +66,7 @@ class DataSource:
     @staticmethod
     def load_data(data: Any,
                   ignore: Optional[Sequence[str]] = None,
-                  indices: Optional[Sequence[int]] = None,
+                  indices: Optional[Sequence[Any]] = None,
                   **kwargs) -> pd.DataFrame:
         """
         Load data into a pandas dataframe.
@@ -73,7 +76,7 @@ class DataSource:
         Args:
             data (Any): Input data
             ignore (Optional[Sequence[str]]): Column names to ignore
-            indices (Optional[Sequence[int]]): Indices to select. What an
+            indices (Optional[Sequence[Any]]): Indices to select. What an
                 index indicates depends on the data source.
 
         Returns:
@@ -109,3 +112,11 @@ class DataSource:
     def get_n(data: Any):
         """Get length of data source partitions for sharding."""
         return len(list(data))
+
+    @staticmethod
+    def get_actor_shards(
+            data: Any,
+            actors: Sequence[ActorHandle]) -> \
+            Optional[Dict[ActorHandle, Any]]:
+        """Get a dict mapping actors to shards."""
+        return None

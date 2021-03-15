@@ -5,6 +5,8 @@ from enum import Enum
 from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence, \
     Callable, Type
 
+from ray.actor import ActorHandle
+
 try:
     import cupy as cp
 except ImportError:
@@ -141,6 +143,7 @@ class _RayDMatrixLoader:
         self.feature_types = feature_types
 
         self.data_source = None
+        self.actor_shards = None
 
         self.filetype = filetype
         self.ignore = ignore
@@ -170,8 +173,17 @@ class _RayDMatrixLoader:
     def get_data_source(self) -> Type[DataSource]:
         raise NotImplementedError
 
+    def assign_shards_to_actors(self, actors: Sequence[ActorHandle]) -> bool:
+        """Assign data shards to actors.
+
+        Returns True if shards were assigned to actors. In that case, the
+        sharding mode should be adjusted to ``RayShardingMode.FIXED``.
+        Returns False otherwise.
+        """
+        return False
+
     def _split_dataframe(
-            self, local_data: pd.DataFrame, data_source: DataSource
+            self, local_data: pd.DataFrame, data_source: Type[DataSource]
     ) -> Tuple[pd.DataFrame, Optional[pd.Series], Optional[pd.Series],
                Optional[pd.Series], Optional[pd.Series], Optional[pd.Series]]:
         """
@@ -369,6 +381,23 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
 
         self.data_source = data_source
         return self.data_source
+
+    def assign_shards_to_actors(self, actors: Sequence[ActorHandle]) -> bool:
+        if not isinstance(self.label, str):
+            # Currently we only support fixed data sharding for datasets
+            # that contain both the label and the data.
+            return False
+
+        if self.actor_shards:
+            # Only assign once
+            return True
+
+        data_source = self.get_data_source()
+        actor_shards = data_source.get_actor_shards(self.data, actors)
+        if not actor_shards:
+            return False
+        self.actor_shards = actor_shards
+        return True
 
     def load_data(self,
                   num_actors: int,
@@ -592,9 +621,20 @@ class RayDMatrix:
     def has_label(self):
         return self.loader.label is not None
 
+    def assign_shards_to_actors(self, actors: Sequence[ActorHandle]) -> bool:
+        success = self.loader.assign_shards_to_actors(actors)
+        if success:
+            self.sharding = RayShardingMode.FIXED
+        return success
+
     def load_data(self,
                   num_actors: Optional[int] = None,
                   rank: Optional[int] = None):
+        """Load data, putting it into the Ray object store.
+
+        If a rank is given, only data for this rank is loaded (for
+        distributed data sources only).
+        """
         if not self.loaded:
             if num_actors is not None:
                 if self.num_actors is not None \
@@ -623,6 +663,12 @@ class RayDMatrix:
     def get_data(
             self, rank: int, num_actors: Optional[int] = None
     ) -> Dict[str, Union[None, pd.DataFrame, List[Optional[pd.DataFrame]]]]:
+        """Get data, i.e. return dataframe for a specific actor.
+
+        This method is called from an actor, given its rank and the
+        total number of actors. If the data is not yet loaded, loading
+        is triggered.
+        """
         self.load_data(num_actors=num_actors, rank=rank)
 
         refs = self.refs[rank]

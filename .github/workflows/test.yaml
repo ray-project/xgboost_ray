@@ -60,6 +60,7 @@ jobs:
         pushd xgboost_ray/tests
         python -m pytest -vv -s --log-cli-level=DEBUG --durations=0 -x test_colocation.py
         python -m pytest -v --durations=0 -x test_matrix.py
+        python -m pytest -v --durations=0 -x test_data_source.py
         python -m pytest -v --durations=0 -x test_xgboost_api.py
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
@@ -103,6 +104,7 @@ jobs:
         pushd xgboost_ray/tests
         python -m pytest -vv -s --log-cli-level=DEBUG --durations=0 -x test_colocation.py
         python -m pytest -v --durations=0 -x test_matrix.py
+        python -m pytest -v --durations=0 -x test_data_source.py
         python -m pytest -v --durations=0 -x test_xgboost_api.py
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
@@ -153,6 +155,7 @@ jobs:
         pushd xgboost_ray/tests
         python -m pytest -vv -s --log-cli-level=DEBUG --durations=0 -x test_colocation.py
         python -m pytest -v --durations=0 -x test_matrix.py
+        python -m pytest -v --durations=0 -x test_data_source.py
         python -m pytest -v --durations=0 -x test_xgboost_api.py
         python -m pytest -v --durations=0 -x test_fault_tolerance.py
         python -m pytest -v --durations=0 -x test_end_to_end.py
