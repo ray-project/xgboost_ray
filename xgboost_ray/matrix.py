@@ -240,7 +240,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 # If checking the data throws an exception, the data source
                 # is not available.
                 logger.warning(
-                    f"Checking data source {data_source.__name__} failed "
+                    f"Checking data source {source.__name__} failed "
                     f"with exception: {exc}")
                 continue
 
@@ -367,7 +367,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 # If checking the data throws an exception, the data source
                 # is not available.
                 logger.warning(
-                    f"Checking data source {data_source.__name__} failed "
+                    f"Checking data source {source.__name__} failed "
                     f"with exception: {exc}")
                 continue
 
