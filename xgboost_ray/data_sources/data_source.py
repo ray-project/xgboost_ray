@@ -117,6 +117,6 @@ class DataSource:
     def get_actor_shards(
             data: Any,
             actors: Sequence[ActorHandle]) -> \
-            Optional[Dict[ActorHandle, Any]]:
-        """Get a dict mapping actors to shards."""
-        return None
+            Tuple[Any, Optional[Dict[int, Any]]]:
+        """Get a dict mapping actor ranks to shards."""
+        return data, None
