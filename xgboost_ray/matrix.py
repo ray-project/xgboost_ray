@@ -18,6 +18,7 @@ import pandas as pd
 import os
 
 import ray
+from ray import logger
 
 from xgboost_ray.util import Unavailable
 from xgboost_ray.data_sources import DataSource, data_sources, RayFileType
@@ -244,9 +245,17 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
             if not source.supports_central_loading:
                 continue
 
-            if source.is_data_type(self.data, self.filetype):
-                data_source = source
-                break
+            try:
+                if source.is_data_type(self.data, self.filetype):
+                    data_source = source
+                    break
+            except Exception as exc:
+                # If checking the data throws an exception, the data source
+                # is not available.
+                logger.warning(
+                    f"Checking data source {source.__name__} failed "
+                    f"with exception: {exc}")
+                continue
 
         if not data_source:
             raise ValueError(
@@ -367,9 +376,17 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             if not source.supports_distributed_loading:
                 continue
 
-            if source.is_data_type(self.data, self.filetype):
-                data_source = source
-                break
+            try:
+                if source.is_data_type(self.data, self.filetype):
+                    data_source = source
+                    break
+            except Exception as exc:
+                # If checking the data throws an exception, the data source
+                # is not available.
+                logger.warning(
+                    f"Checking data source {source.__name__} failed "
+                    f"with exception: {exc}")
+                continue
 
         if not data_source:
             raise ValueError(

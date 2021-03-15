@@ -3,7 +3,12 @@ from functools import partial
 
 import pytest
 import ray
-from ray.cluster_utils import Cluster
+
+try:
+    # Ray 1.3+
+    from ray._private.cluster_utils import Cluster
+except ImportError:
+    from ray.cluster_utils import Cluster
 
 
 def get_default_fixure_system_config():
