@@ -7,6 +7,7 @@ from xgboost_ray.data_sources.pandas import Pandas
 
 
 class CSV(DataSource):
+    """Read one or many CSV files."""
     supports_central_loading = True
     supports_distributed_loading = True
 

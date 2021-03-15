@@ -6,6 +6,8 @@ from xgboost_ray.data_sources.data_source import DataSource, RayFileType
 
 
 class Pandas(DataSource):
+    """Read from pandas dataframes and series."""
+
     @staticmethod
     def is_data_type(data: Any,
                      filetype: Optional[RayFileType] = None) -> bool:

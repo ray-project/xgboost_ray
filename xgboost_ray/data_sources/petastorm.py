@@ -11,7 +11,27 @@ except ImportError:
     PETASTORM_INSTALLED = False
 
 
+def _assert_petastorm_installed():
+    if not PETASTORM_INSTALLED:
+        raise RuntimeError(
+            "Tried to use Petastorm as a data source, but petastorm is not "
+            "installed. This function shouldn't have been called. "
+            "\nFIX THIS by installing petastorm: `pip install petastorm`. "
+            "\nPlease also raise an issue on our GitHub: "
+            "https://github.com/ray-project/xgboost_ray as this part of "
+            "the code should not have been reached.")
+
+
 class Petastorm(DataSource):
+    """Read with Petastorm.
+
+    `Petastorm <https://github.com/uber/petastorm>`_ is a machine learning
+    training and evaluation library.
+
+    This class accesses Petastorm's dataset loading interface for efficient
+    loading of large datasets.
+    """
+
     supports_central_loading = True
     supports_distributed_loading = True
 
@@ -44,6 +64,7 @@ class Petastorm(DataSource):
                   ignore: Optional[Sequence[str]] = None,
                   indices: Optional[Sequence[int]] = None,
                   **kwargs) -> pd.DataFrame:
+        _assert_petastorm_installed()
         with petastorm.make_batch_reader(data) as reader:
             shards = [pd.DataFrame(batch._asdict()) for batch in reader]
 

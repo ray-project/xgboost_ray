@@ -16,7 +16,27 @@ except ImportError:
     MODIN_INSTALLED = False
 
 
+def _assert_modin_installed():
+    if not MODIN_INSTALLED:
+        raise RuntimeError(
+            "Tried to use Modin as a data source, but modin is not "
+            "installed. This function shouldn't have been called. "
+            "\nFIX THIS by installing modin: `pip install modin`. "
+            "\nPlease also raise an issue on our GitHub: "
+            "https://github.com/ray-project/xgboost_ray as this part of "
+            "the code should not have been reached.")
+
+
 class Modin(DataSource):
+    """Read from distributed Modin dataframe.
+
+    `Modin <https://github.com/modin-project/modin>`_ is a distributed
+    drop-in replacement for pandas supporting Ray as a backend.
+
+    Modin dataframes are stored on multiple actors, making them
+    suitable for distributed loading.
+    """
+
     @staticmethod
     def is_data_type(data: Any,
                      filetype: Optional[RayFileType] = None) -> bool:
@@ -33,6 +53,7 @@ class Modin(DataSource):
             ignore: Optional[Sequence[str]] = None,
             indices: Optional[Sequence[int]] = None,
             **kwargs) -> pd.DataFrame:
+        _assert_modin_installed()
         local_df = data
         if indices:
             local_df = local_df.iloc(indices)
@@ -46,6 +67,7 @@ class Modin(DataSource):
 
     @staticmethod
     def convert_to_series(data: Any) -> pd.Series:
+        _assert_modin_installed()
         from modin.pandas import DataFrame as ModinDataFrame, \
             Series as ModinSeries
 
