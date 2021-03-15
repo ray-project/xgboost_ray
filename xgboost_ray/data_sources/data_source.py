@@ -12,6 +12,17 @@ class RayFileType(Enum):
 
 
 class DataSource:
+    """Abstract class for data sources.
+
+    xgboost_ray supports reading from various sources, such as files
+    (e.g. CSV, Parquet) or distributed datasets (Ray MLDataset, Modin).
+
+    This abstract class defines an interface to read from these sources.
+    New data sources can be added by implementing this interface.
+
+    ``DataSource`` classes are not instantiated. Instead, static and
+    class methods are called directly.
+    """
     supports_central_loading = True
     supports_distributed_loading = False
 
@@ -23,8 +34,8 @@ class DataSource:
         Args:
             data (Any): Dataset.
             filetype (Optional[RayFileType]): RayFileType of the provided
-                dataset. Some DataSource implementations might require 
-                that this is explicitly set (e.g. if multiple sources can 
+                dataset. Some DataSource implementations might require
+                that this is explicitly set (e.g. if multiple sources can
                 read CSV files).
 
         Returns:

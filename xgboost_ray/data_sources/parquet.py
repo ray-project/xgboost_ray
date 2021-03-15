@@ -7,6 +7,7 @@ from xgboost_ray.data_sources.pandas import Pandas
 
 
 class Parquet(DataSource):
+    """Read one or many Parquet files."""
     supports_central_loading = True
     supports_distributed_loading = True
 

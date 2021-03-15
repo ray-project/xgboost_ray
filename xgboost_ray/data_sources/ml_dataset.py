@@ -6,6 +6,14 @@ from xgboost_ray.data_sources.data_source import DataSource, RayFileType
 
 
 class MLDataset(DataSource):
+    """Read from distributed Ray MLDataset.
+
+    The Ray MLDataset is a distributed dataset based on Ray's
+    `parallel iterators <https://docs.ray.io/en/master/iter.html>`_.
+
+    Shards of the MLDataset can be stored on different nodes, making
+    it suitable for distributed loading.
+    """
     supports_central_loading = True
     supports_distributed_loading = True
 

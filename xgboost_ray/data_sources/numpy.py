@@ -8,6 +8,8 @@ from xgboost_ray.data_sources.pandas import Pandas
 
 
 class Numpy(DataSource):
+    """Read from numpy arrays."""
+
     @staticmethod
     def is_data_type(data: Any,
                      filetype: Optional[RayFileType] = None) -> bool:
