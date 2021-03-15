@@ -113,7 +113,7 @@ def assign_partitions_to_actors(data, actors):
             num_actor_parts = len(actor_to_partitions[actor])
 
             if num_parts_left_on_ip > 0 and \
-                min_parts_per_actor <= num_actor_parts < max_parts_per_actor:
+               min_parts_per_actor <= num_actor_parts < max_parts_per_actor:
                 actor_to_partitions[actor].append(ip_to_parts[actor_ip].pop(0))
                 partition_assigned = True
 
@@ -134,7 +134,6 @@ def assign_partitions_to_actors(data, actors):
         raise RuntimeError(
             f"There are still partitions left to assign, but no actor "
             f"has capacity for more. This is probably a bug. Please go "
-            f"to https://github.com/ray-project/xgboost_ray to report it."
-        )
+            f"to https://github.com/ray-project/xgboost_ray to report it.")
 
     return actor_to_partitions

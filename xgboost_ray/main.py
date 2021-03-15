@@ -366,6 +366,10 @@ class RayXGBoostActor:
         """Get process PID. Used for checking if still alive"""
         return os.getpid()
 
+    def ip(self):
+        """Get node IP address."""
+        return get_node_ip_address()
+
     def _save_checkpoint_callback(self):
         """Send checkpoints to driver"""
         this = self

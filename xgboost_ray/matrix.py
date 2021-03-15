@@ -3,7 +3,7 @@ import math
 import uuid
 from enum import Enum
 from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence, \
-    Callable
+    Callable, Type
 
 try:
     import cupy as cp
@@ -46,9 +46,14 @@ class RayShardingMode(Enum):
     ``RayShardingMode.BATCH`` will divide the data in batches, i.e.
     the first 0-(m-1) rows will be passed to the first worker, the
     m-(2m-1) rows to the second worker, etc.
+
+    ``RayShardingMode.FIXED`` is set automatically when using a distributed
+    data source that assigns actors to specific data shards on initialization
+    and then keeps these fixed.
     """
     INTERLEAVED = 1
     BATCH = 2
+    FIXED = 3
 
 
 class RayDataIter(DataIter):
@@ -136,6 +141,8 @@ class _RayDMatrixLoader:
         self.feature_names = feature_names
         self.feature_types = feature_types
 
+        self.data_source = None
+
         self.filetype = filetype
         self.ignore = ignore
         self.kwargs = kwargs
@@ -160,6 +167,9 @@ class _RayDMatrixLoader:
                         "\nFIX THIS by passing "
                         "the `filetype` parameter to the RayDMatrix. Use the "
                         "`RayFileType` enum for this.")
+
+    def get_data_source(self) -> Type[DataSource]:
+        raise NotImplementedError
 
     def _split_dataframe(
             self, local_data: pd.DataFrame, data_source: DataSource
@@ -214,18 +224,9 @@ class _RayDMatrixLoader:
 class _CentralRayDMatrixLoader(_RayDMatrixLoader):
     """Load full dataset from a central location and put into object store"""
 
-    def load_data(self,
-                  num_actors: int,
-                  sharding: RayShardingMode,
-                  rank: Optional[int] = None) -> Tuple[Dict, int]:
-        """
-        Load data into memory
-        """
-        if not ray.is_initialized():
-            ray.init()
-
-        if "OMP_NUM_THREADS" in os.environ:
-            del os.environ["OMP_NUM_THREADS"]
+    def get_data_source(self) -> Type[DataSource]:
+        if self.data_source:
+            return self.data_source
 
         data_source = None
         for source in data_sources:
@@ -255,7 +256,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 "enum for that.".format(type(self.data), self.filetype))
 
         if self.label is not None and not isinstance(self.label, str) and \
-            not type(self.data) != type(self.label):  # noqa: E721:
+                not type(self.data) != type(self.label):  # noqa: E721:
             # Label is an object of a different type than the main data.
             # We have to make sure they are compatible
             if not data_source.is_data_type(self.label):
@@ -266,6 +267,24 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                     "and `label`. The `label` can always be a string. Got "
                     "{} for the main data and {} for the label.".format(
                         type(self.data), type(self.label)))
+
+        self.data_source = data_source
+        return self.data_source
+
+    def load_data(self,
+                  num_actors: int,
+                  sharding: RayShardingMode,
+                  rank: Optional[int] = None) -> Tuple[Dict, int]:
+        """
+        Load data into memory
+        """
+        if not ray.is_initialized():
+            ray.init()
+
+        if "OMP_NUM_THREADS" in os.environ:
+            del os.environ["OMP_NUM_THREADS"]
+
+        data_source = self.get_data_source()
 
         # We're doing central data loading here, so we don't pass any indices,
         # yet. Instead, we'll be selecting the rows below.
@@ -302,23 +321,9 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
 class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
     """Load each shard individually."""
 
-    def load_data(self,
-                  num_actors: int,
-                  sharding: RayShardingMode,
-                  rank: Optional[int] = None) -> Tuple[Dict, int]:
-        """
-        Load data into memory
-        """
-        if rank is None or not ray.is_initialized:
-            raise ValueError(
-                "Distributed loading should be done by the actors, not by the"
-                "driver program. "
-                "\nFIX THIS by refraining from calling `RayDMatrix.load()` "
-                "manually for distributed datasets. Hint: You can check if "
-                "`RayDMatrix.distributed` is set to True or False.")
-
-        if "OMP_NUM_THREADS" in os.environ:
-            del os.environ["OMP_NUM_THREADS"]
+    def get_data_source(self) -> Type[DataSource]:
+        if self.data_source:
+            return self.data_source
 
         invalid_data = False
         if isinstance(self.data, str):
@@ -378,6 +383,29 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 "\nFIX THIS by passing a supported data type. Supported "
                 "data types for distributed datasets are a list of "
                 "CSV or Parquet sources as well as Ray MLDatasets.")
+
+        self.data_source = data_source
+        return self.data_source
+
+    def load_data(self,
+                  num_actors: int,
+                  sharding: RayShardingMode,
+                  rank: Optional[int] = None) -> Tuple[Dict, int]:
+        """
+        Load data into memory
+        """
+        if rank is None or not ray.is_initialized:
+            raise ValueError(
+                "Distributed loading should be done by the actors, not by the"
+                "driver program. "
+                "\nFIX THIS by refraining from calling `RayDMatrix.load()` "
+                "manually for distributed datasets. Hint: You can check if "
+                "`RayDMatrix.distributed` is set to True or False.")
+
+        if "OMP_NUM_THREADS" in os.environ:
+            del os.environ["OMP_NUM_THREADS"]
+
+        data_source = self.get_data_source()
 
         n = data_source.get_n(self.data)
         indices = _get_sharding_indices(sharding, rank, num_actors, n)
