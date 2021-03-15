@@ -21,10 +21,11 @@ class DataSource:
         """Check if the supplied data matches this data source.
 
         Args:
-            data (Any): Data set
-            filetype (Optional[RayFileType]): Optional RayFileType. Some
-                data sources might require that this is explicitly set
-                (e.g. if multiple sources can read CSV files).
+            data (Any): Dataset.
+            filetype (Optional[RayFileType]): RayFileType of the provided
+                dataset. Some DataSource implementations might require 
+                that this is explicitly set (e.g. if multiple sources can 
+                read CSV files).
 
         Returns:
             Boolean indicating if this data source belongs to/is compatible
