@@ -781,6 +781,12 @@ def _train(params: Dict,
                 f"({alive_actors} total actors). Waiting until actors "
                 f"are ready for training.")
 
+    # For distributed datasets (e.g. Modin), this will initialize
+    # (and fix) the assignment of data shards to actor ranks
+    dtrain.assign_shards_to_actors(_training_state.actors)
+    for deval, _ in evals:
+        deval.assign_shards_to_actors(_training_state.actors)
+
     load_data = [dtrain] + [eval[0] for eval in evals]
 
     prepare_actor_tasks = [

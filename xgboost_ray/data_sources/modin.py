@@ -1,4 +1,4 @@
-from typing import Any, Optional, Sequence
+from typing import Any, Optional, Sequence, Dict, Union
 
 from collections import defaultdict
 import itertools
@@ -6,8 +6,11 @@ import math
 import pandas as pd
 
 import ray
+from ray import ObjectRef
+from ray.actor import ActorHandle
 
 from xgboost_ray.data_sources.data_source import DataSource, RayFileType
+from xgboost_ray.data_sources.object_store import ObjectStore
 
 try:
     import modin  # noqa: F401
@@ -51,9 +54,17 @@ class Modin(DataSource):
     def load_data(
             data: Any,  # modin.pandas.DataFrame
             ignore: Optional[Sequence[str]] = None,
-            indices: Optional[Sequence[int]] = None,
+            indices: Optional[Union[Sequence[int], Sequence[
+                ObjectRef]]] = None,
             **kwargs) -> pd.DataFrame:
         _assert_modin_installed()
+
+        if indices is not None and len(indices) > 0 and isinstance(
+                indices[0], ObjectRef):
+            # We got a list of ObjectRefs belonging to Modin partitions
+            return ObjectStore.load_data(
+                data=indices, indices=None, ignore=ignore)
+
         local_df = data
         if indices:
             local_df = local_df.iloc(indices)
@@ -78,8 +89,26 @@ class Modin(DataSource):
 
         return DataSource.convert_to_series(data)
 
+    @staticmethod
+    def get_actor_shards(
+            data: Any,  # modin.pandas.DataFrame
+            actors: Sequence[ActorHandle]) -> \
+            Optional[Dict[int, Any]]:
+        _assert_modin_installed()
+        no_obj = ray.put(None)
+        actor_rank_ips = {
+            rank: ip
+            for rank, ip in enumerate(
+                ray.get([
+                    actor.ip.remote() if actor is not None else no_obj
+                    for actor in actors
+                ]))
+        }
+        return assign_partitions_to_actors(data, actor_rank_ips)
 
-def assign_partitions_to_actors(data, actors):
+
+def assign_partitions_to_actors(data: Any, actor_rank_ips: Dict[int, str]) \
+        -> Dict[int, Sequence[ObjectRef]]:
     from modin.distributed.dataframe.pandas import unwrap_partitions
 
     unwrapped = unwrap_partitions(data, axis=0, get_ip=True)
@@ -88,34 +117,43 @@ def assign_partitions_to_actors(data, actors):
 
     # Build a table mapping from IP to list of partitions
     ip_to_parts = defaultdict(list)
-    for ip, part_obj in zip(ray.get(ip_objs), part_objs):
+    for ip, part_obj in zip(ray.get(list(ip_objs)), part_objs):
         ip_to_parts[ip].append(part_obj)
 
     num_partitions = len(part_objs)
-    num_actors = len(actors)
+    num_actors = len(actor_rank_ips)
     min_parts_per_actor = max(0, math.floor(num_partitions / num_actors))
     max_parts_per_actor = max(1, math.ceil(num_partitions / num_actors))
-
-    actor_ips = dict()  # Todo
 
     # This is our result dict that maps actor objects to a list of partitions
     actor_to_partitions = defaultdict(list)
 
     # First we loop through the actors and assign them partitions from their
-    # own IPs
+    # own IPs. Do this until each actor has `min_parts_per_actor` partitions
     partition_assigned = True
     while partition_assigned:
         partition_assigned = False
 
-        for actor in actors:
-            actor_ip = actor_ips[actor]
+        # Loop through each actor once, assigning
+        for rank, actor_ip in actor_rank_ips.items():
             num_parts_left_on_ip = len(ip_to_parts[actor_ip])
-            num_actor_parts = len(actor_to_partitions[actor])
+            num_actor_parts = len(actor_to_partitions[rank])
 
             if num_parts_left_on_ip > 0 and \
-               min_parts_per_actor <= num_actor_parts < max_parts_per_actor:
-                actor_to_partitions[actor].append(ip_to_parts[actor_ip].pop(0))
+               num_actor_parts < min_parts_per_actor:  # min
+                actor_to_partitions[rank].append(ip_to_parts[actor_ip].pop(0))
                 partition_assigned = True
+
+    # Next we loop through all actors again, trying to assign them
+    # another co-located partition if partitions are unevenly distributed.
+    if max_parts_per_actor > min_parts_per_actor:
+        for rank, actor_ip in actor_rank_ips.items():
+            num_parts_left_on_ip = len(ip_to_parts[actor_ip])
+            num_actor_parts = len(actor_to_partitions[rank])
+
+            if num_parts_left_on_ip > 0 and \
+               num_actor_parts < max_parts_per_actor:  # max!
+                actor_to_partitions[rank].append(ip_to_parts[actor_ip].pop(0))
 
     # The rest of the partitions, no matter where they are located, could not
     # be assigned to co-located actors. Thus, we assign them
@@ -124,10 +162,10 @@ def assign_partitions_to_actors(data, actors):
     partition_assigned = True
     while len(rest_parts) > 0 and partition_assigned:
         partition_assigned = False
-        for actor in actors:
-            num_actor_parts = len(actor_to_partitions[actor])
-            if min_parts_per_actor <= num_actor_parts < max_parts_per_actor:
-                actor_to_partitions[actor].append(rest_parts.pop(0))
+        for rank in actor_rank_ips:
+            num_actor_parts = len(actor_to_partitions[rank])
+            if num_actor_parts < max_parts_per_actor:
+                actor_to_partitions[rank].append(rest_parts.pop(0))
                 partition_assigned = True
 
     if len(rest_parts) != 0:
