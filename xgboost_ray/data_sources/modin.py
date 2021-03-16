@@ -69,7 +69,7 @@ class Modin(DataSource):
 
         local_df = data
         if indices:
-            local_df = local_df.iloc(indices)
+            local_df = local_df.iloc[indices]
 
         local_df = local_df._to_pandas()
 
@@ -109,6 +109,14 @@ class Modin(DataSource):
         # Modin dataframes are not serializable, so pass None here
         # as the first return value
         return None, assign_partitions_to_actors(data, actor_rank_ips)
+
+    @staticmethod
+    def get_n(data: Any):
+        """
+        For naive distributed loading we just return the number of rows
+        here. Loading by shard is achieved via `get_actor_shards()`
+        """
+        return len(data)
 
 
 def assign_partitions_to_actors(data: Any, actor_rank_ips: Dict[int, str]) \
