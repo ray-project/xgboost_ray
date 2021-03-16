@@ -98,33 +98,36 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         self._testMatrixCreation(in_df, "label")
 
     def testFromModinDfDf(self):
-        try:
-            from modin.pandas import DataFrame
-        except ImportError:
+        from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+        if not MODIN_INSTALLED:
             self.skipTest("Modin not installed.")
             return
+
+        from modin.pandas import DataFrame
 
         in_x = DataFrame(self.x)
         in_y = DataFrame(self.y)
         self._testMatrixCreation(in_x, in_y, distributed=False)
 
     def testFromModinDfSeries(self):
-        try:
-            from modin.pandas import DataFrame, Series
-        except ImportError:
+        from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+        if not MODIN_INSTALLED:
             self.skipTest("Modin not installed.")
             return
+
+        from modin.pandas import DataFrame, Series
 
         in_x = DataFrame(self.x)
         in_y = Series(self.y)
         self._testMatrixCreation(in_x, in_y, distributed=False)
 
     def testFromModinDfString(self):
-        try:
-            from modin.pandas import DataFrame
-        except ImportError:
+        from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+        if not MODIN_INSTALLED:
             self.skipTest("Modin not installed.")
             return
+
+        from modin.pandas import DataFrame
 
         in_df = DataFrame(self.x)
         in_df["label"] = self.y
