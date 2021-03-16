@@ -11,7 +11,12 @@ from ray import ObjectRef
 from xgboost_ray.data_sources import Modin
 from xgboost_ray.main import RayXGBoostActor
 
+from xgboost_ray.data_sources.modin import MODIN_INSTALLED
 
+
+@unittest.skipIf(
+    not MODIN_INSTALLED,
+    reason="Modin is not installed in a supported version.")
 class ModinDataSourceTest(unittest.TestCase):
     """This test suite validates core RayDMatrix functionality."""
 
