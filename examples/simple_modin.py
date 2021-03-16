@@ -6,9 +6,15 @@ import pandas as pd
 import ray
 
 from xgboost_ray import RayDMatrix, train, RayParams
+from xgboost_ray.data_sources.modin import MODIN_INSTALLED
 
 
 def main(cpus_per_actor, num_actors):
+    if not MODIN_INSTALLED:
+        print(f"Modin is not installed or installed in a version that is not "
+              f"compatible with xgboost_ray (< 0.9.0).")
+        return
+
     # Import modin after initializing Ray
     from modin.distributed.dataframe.pandas import from_partitions
 
