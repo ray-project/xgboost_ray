@@ -118,5 +118,18 @@ class DataSource:
             data: Any,
             actors: Sequence[ActorHandle]) -> \
             Tuple[Any, Optional[Dict[int, Any]]]:
-        """Get a dict mapping actor ranks to shards."""
+        """Get a dict mapping actor ranks to shards.
+
+        Args:
+            data (Any): Data to shard.
+
+        Returns:
+            Returns a tuple of which the first element indicates the new
+                data object that will overwrite the existing data object
+                in the RayDMatrix (e.g. when the object is not serializable).
+                The second element is a dict mapping actor ranks to shards.
+                These objects are usually passed to the ``load_data()`` method
+                for distributed loading, so that method needs to be able to
+                deal with the respective data.
+        """
         return data, None

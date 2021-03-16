@@ -28,14 +28,15 @@ class ModinDataSourceTest(unittest.TestCase):
 
     def _init_ray(self):
         if not ray.is_initialized():
-            ray.init(address="auto")
-            # ray.init(num_cpus=1)
+            ray.init(num_cpus=1)
 
     def _testAssignPartitions(self, part_nodes, actor_nodes,
                               expected_actor_parts):
         from xgboost_ray.data_sources.modin import assign_partitions_to_actors
 
-        partitions = [ray.put(p) for p in np.split(self.x, len(part_nodes))]
+        partitions = [
+            ray.put(p) for p in np.array_split(self.x, len(part_nodes))
+        ]
 
         # Dict from partition (obj ref) to node host
         part_to_node = dict(zip(partitions, [f"node{n}" for n in part_nodes]))
@@ -65,7 +66,7 @@ class ModinDataSourceTest(unittest.TestCase):
         node_ips = [
             node["NodeManagerAddress"] for node in ray.nodes() if node["Alive"]
         ]
-        if len(node_ips) < max(max(actor_nodes), max(part_nodes)):
+        if len(node_ips) < max(max(actor_nodes), max(part_nodes)) + 1:
             print("Not running on cluster, skipping rest of this test.")
             return
 
@@ -78,7 +79,7 @@ class ModinDataSourceTest(unittest.TestCase):
         def create_remote_df(arr):
             return ray.put(pd.DataFrame(arr))
 
-        partitions = np.split(self.x, len(part_nodes))
+        partitions = np.array_split(self.x, len(part_nodes))
         node_dfs: Sequence[ObjectRef] = ray.get([
             create_remote_df.options(resources={
                 f"node:{pip}": 0.1
@@ -227,6 +228,44 @@ class ModinDataSourceTest(unittest.TestCase):
             0: [0, 1, 5],
             1: [2, 3, 4],
             2: [6, 7],
+        }
+        self._testAssignPartitions(part_nodes, actor_nodes,
+                                   expected_actor_parts)
+        self._testModinAssignment(part_nodes, actor_nodes,
+                                  expected_actor_parts)
+
+    def testAssignUnevenRedistributeColocated(self):
+        """Assign actors to co-located partitions, redistribute uneven case.
+
+        Here we have an uneven split of partitions. One actor does not get
+        a co-located shard assigned in favor for a non-coloated actor.
+        """
+        part_nodes = [0, 0, 0, 0, 0, 0, 0]
+        actor_nodes = [0, 0, 1]
+
+        expected_actor_parts = {
+            0: [0, 2, 4],
+            1: [1, 3],
+            2: [5, 6],
+        }
+        self._testAssignPartitions(part_nodes, actor_nodes,
+                                   expected_actor_parts)
+        self._testModinAssignment(part_nodes, actor_nodes,
+                                  expected_actor_parts)
+
+    def testAssignUnevenRedistributeAll(self):
+        """Assign actors to co-located partitions, redistribute uneven case.
+
+        In this test case, not all actors get the same amount of partitions.
+        Some actors have to fetch partitions from other nodes
+        """
+        part_nodes = [1, 1, 1, 1, 0, 0, 0]
+        actor_nodes = [1, 1, 2]
+
+        expected_actor_parts = {
+            0: [0, 2, 4],
+            1: [1, 3],
+            2: [5, 6],
         }
         self._testAssignPartitions(part_nodes, actor_nodes,
                                    expected_actor_parts)
