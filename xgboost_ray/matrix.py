@@ -10,30 +10,21 @@ try:
 except ImportError:
     cp = None
 
-try:
-    import petastorm
-except ImportError:
-    petastorm = None
-
 import numpy as np
 import pandas as pd
 
 import os
 
 import ray
+from ray import logger
 
 from xgboost_ray.util import Unavailable
+from xgboost_ray.data_sources import DataSource, data_sources, RayFileType
 
 try:
     from ray.util.data import MLDataset
 except ImportError:
     MLDataset = Unavailable
-
-try:
-    import modin  # noqa: F401
-    MODIN_INSTALLED = True
-except ImportError:
-    MODIN_INSTALLED = False
 
 from xgboost.core import DataIter
 
@@ -41,46 +32,8 @@ Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series, MLDataset]
 
 
 def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
-    if any(df is None for df in dfs):
-        return None
-    return pd.concat(dfs, ignore_index=True, copy=False)
-
-
-def _is_modin_df(df):
-    if not MODIN_INSTALLED:
-        return False
-    from modin.pandas.dataframe import DataFrame as ModinDataFrame
-    return isinstance(df, ModinDataFrame)
-
-
-def _is_modin_series(df):
-    if not MODIN_INSTALLED:
-        return False
-    from modin.pandas.dataframe import Series as ModinSeries
-    return isinstance(df, ModinSeries)
-
-
-def _is_petastorm_compatible(data: Union[str, List[str]]):
-    if petastorm is None:
-        return False
-
-    if not isinstance(data, List):
-        data = [data]
-
-    def _is_compatible(url: str):
-        return url.endswith(".parquet") and (url.startswith("s3://")
-                                             or url.startswith("gs://")
-                                             or url.startswith("hdfs://")
-                                             or url.startswith("file://"))
-
-    return all(_is_compatible(url) for url in data)
-
-
-class RayFileType(Enum):
-    """Enum for different file types (used for overrides)."""
-    CSV = 1
-    PARQUET = 2
-    PETASTORM = 3
+    filtered = [df for df in dfs if df is not None]
+    return pd.concat(filtered, ignore_index=True, copy=False)
 
 
 class RayShardingMode(Enum):
@@ -195,14 +148,12 @@ class _RayDMatrixLoader:
 
         if check is not None:
             if not self.filetype:
-                # Try to guess filetype from file ending
-                if _is_petastorm_compatible(data):
-                    self.filetype = RayFileType.PETASTORM
-                elif check.endswith(".csv") or check.endswith("csv.gz"):
-                    self.filetype = RayFileType.CSV
-                elif check.endswith(".parquet"):
-                    self.filetype = RayFileType.PARQUET
-                else:
+                # Try to guess filetype
+                for data_source in data_sources:
+                    self.filetype = data_source.get_filetype(check)
+                    if self.filetype:
+                        break
+                if not self.filetype:
                     raise ValueError(
                         f"File or stream ({check}) specified as data source, "
                         "but filetype could not be detected. "
@@ -210,31 +161,10 @@ class _RayDMatrixLoader:
                         "the `filetype` parameter to the RayDMatrix. Use the "
                         "`RayFileType` enum for this.")
 
-    def _get_column(self, local_data: pd.DataFrame,
-                    column: Data) -> Tuple[pd.Series, Optional[str]]:
-        if isinstance(column, str):
-            return local_data[column], column
-        elif column is not None:
-            if isinstance(column, pd.DataFrame):
-                col = pd.Series(column.squeeze())
-            elif _is_modin_df(column):
-                col = pd.Series(column._to_pandas().squeeze())
-            elif _is_modin_series(column):
-                col = column._to_pandas()
-            elif not isinstance(column, pd.Series):
-                col = pd.Series(column)
-            else:
-                col = column
-            return col, None
-        return column, None
-
-    def _split_dataframe(self, local_data: pd.DataFrame) -> \
-            Tuple[pd.DataFrame,
-                  Optional[pd.Series],
-                  Optional[pd.Series],
-                  Optional[pd.Series],
-                  Optional[pd.Series],
-                  Optional[pd.Series]]:
+    def _split_dataframe(
+            self, local_data: pd.DataFrame, data_source: DataSource
+    ) -> Tuple[pd.DataFrame, Optional[pd.Series], Optional[pd.Series],
+               Optional[pd.Series], Optional[pd.Series], Optional[pd.Series]]:
         """
         Split dataframe into
 
@@ -244,25 +174,26 @@ class _RayDMatrixLoader:
         """
         exclude_cols: List[str] = []  # Exclude these columns from `x`
 
-        label, exclude = self._get_column(local_data, self.label)
+        label, exclude = data_source.get_column(local_data, self.label)
         if exclude:
             exclude_cols.append(exclude)
 
-        weight, exclude = self._get_column(local_data, self.weight)
+        weight, exclude = data_source.get_column(local_data, self.weight)
         if exclude:
             exclude_cols.append(exclude)
 
-        base_margin, exclude = self._get_column(local_data, self.base_margin)
+        base_margin, exclude = data_source.get_column(local_data,
+                                                      self.base_margin)
         if exclude:
             exclude_cols.append(exclude)
 
-        label_lower_bound, exclude = self._get_column(local_data,
-                                                      self.label_lower_bound)
+        label_lower_bound, exclude = data_source.get_column(
+            local_data, self.label_lower_bound)
         if exclude:
             exclude_cols.append(exclude)
 
-        label_upper_bound, exclude = self._get_column(local_data,
-                                                      self.label_upper_bound)
+        label_upper_bound, exclude = data_source.get_column(
+            local_data, self.label_upper_bound)
         if exclude:
             exclude_cols.append(exclude)
 
@@ -272,87 +203,6 @@ class _RayDMatrixLoader:
 
         return x, label, weight, base_margin, label_lower_bound, \
             label_upper_bound
-
-    def _load_data_numpy(self, data: Data):
-        local_df = pd.DataFrame(
-            data, columns=[f"f{i}" for i in range(data.shape[1])])
-        return self._load_data_pandas(local_df)
-
-    def _load_data_pandas(self, data: Data):
-        local_df = data
-
-        if self.ignore:
-            local_df = local_df[local_df.columns.difference(self.ignore)]
-
-        x, y, w, b, ll, lu = self._split_dataframe(local_df)
-        return x, y, w, b, ll, lu
-
-    def _load_data_modin(self, data: Data,
-                         indices: Optional[List[int]] = None):
-        local_df = data
-        if indices:
-            local_df = local_df.iloc(indices)
-
-        local_df = local_df._to_pandas()
-
-        if self.ignore:
-            local_df = local_df[local_df.columns.difference(self.ignore)]
-
-        x, y, w, b, ll, lu = self._split_dataframe(local_df)
-        return x, y, w, b, ll, lu
-
-    def _load_data_csv(self, data: Data):
-        if isinstance(data, Iterable) and not isinstance(data, str):
-            x_s, y_s, w_s, b_s, ll_s, lu_s = [], [], [], [], [], []
-            for shard in data:
-                shard_df = pd.read_csv(shard, **self.kwargs)
-                shard_tuple = self._load_data_pandas(shard_df)
-                for i, s in enumerate([x_s, y_s, w_s, b_s, ll_s, lu_s]):
-                    s.append(shard_tuple[i])
-            return x_s, y_s, w_s, b_s, ll_s, lu_s
-        else:
-            local_df = pd.read_csv(data, **self.kwargs)
-            return self._load_data_pandas(local_df)
-
-    def _load_data_parquet(self, data: Data):
-        if isinstance(data, Iterable) and not isinstance(data, str):
-            x_s, y_s, w_s, b_s, ll_s, lu_s = [], [], [], [], [], []
-            for shard in data:
-                shard_df = pd.read_parquet(shard, **self.kwargs)
-                shard_tuple = self._load_data_pandas(shard_df)
-                for i, s in enumerate([x_s, y_s, w_s, b_s, ll_s, lu_s]):
-                    s.append(shard_tuple[i])
-            return x_s, y_s, w_s, b_s, ll_s, lu_s
-        else:
-            local_df = pd.read_parquet(data, **self.kwargs)
-            return self._load_data_pandas(local_df)
-
-    def _load_data_ml_dataset(self, data: MLDataset, indices: List[int]):
-        # Shards can have multiple items, all of which will be DataFrames
-        shards: List[pd.DataFrame] = [
-            pd.concat(data.get_shard(i), copy=False) for i in indices
-        ]
-
-        # Concat all shards
-        local_df = pd.concat(shards, copy=False)
-
-        if self.ignore:
-            local_df = local_df[local_df.columns.difference(self.ignore)]
-
-        x, y, w, b, ll, lu = self._split_dataframe(local_df)
-        return x, y, w, b, ll, lu
-
-    def _load_data_petastorm(self, data: Sequence[str]):
-        with petastorm.make_batch_reader(data) as reader:
-            shards = [pd.DataFrame(batch._asdict()) for batch in reader]
-
-        local_df = pd.concat(shards, copy=False)
-
-        if self.ignore:
-            local_df = local_df[local_df.columns.difference(self.ignore)]
-
-        x, y, w, b, ll, lu = self._split_dataframe(local_df)
-        return x, y, w, b, ll, lu
 
     def load_data(self,
                   num_actors: int,
@@ -377,35 +227,24 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
         if "OMP_NUM_THREADS" in os.environ:
             del os.environ["OMP_NUM_THREADS"]
 
-        if self.label is not None and not isinstance(self.label, str) and \
-           not (isinstance(self.data, pd.DataFrame) and
-                isinstance(self.label, pd.Series)) and \
-           not (_is_modin_df(self.data) and _is_modin_series(self.label)):
-            if type(self.data) != type(self.label):  # noqa: E721
-                raise ValueError(
-                    "The passed `data` and `label` types are not compatible."
-                    "\nFIX THIS by passing the same types to the "
-                    "`RayDMatrix` - e.g. a `pandas.DataFrame` as `data` "
-                    "and `label`. The `label` can always be a string. Got "
-                    "{} for the main data and {} for the label.".format(
-                        type(self.data), type(self.label)))
+        data_source = None
+        for source in data_sources:
+            if not source.supports_central_loading:
+                continue
 
-        if isinstance(self.data, np.ndarray):
-            x, y, w, b, ll, lu = self._load_data_numpy(self.data)
-        elif isinstance(self.data, (pd.DataFrame, pd.Series)):
-            x, y, w, b, ll, lu = self._load_data_pandas(self.data)
-        elif _is_modin_df(self.data) or _is_modin_series(self.data):
-            x, y, w, b, ll, lu = self._load_data_modin(self.data)
-        elif isinstance(self.data, MLDataset):
-            x, y, w, b, ll, lu = self._load_data_ml_dataset(
-                self.data, indices=list(range(0, self.data.num_shards())))
-        elif self.filetype == RayFileType.PETASTORM:
-            x, y, w, b, ll, lu = self._load_data_petastorm(self.data)
-        elif self.filetype == RayFileType.CSV:
-            x, y, w, b, ll, lu = self._load_data_csv(self.data)
-        elif self.filetype == RayFileType.PARQUET:
-            x, y, w, b, ll, lu = self._load_data_parquet(self.data)
-        else:
+            try:
+                if source.is_data_type(self.data, self.filetype):
+                    data_source = source
+                    break
+            except Exception as exc:
+                # If checking the data throws an exception, the data source
+                # is not available.
+                logger.warning(
+                    f"Checking data source {source.__name__} failed "
+                    f"with exception: {exc}")
+                continue
+
+        if not data_source:
             raise ValueError(
                 "Unknown data source type: {} with FileType: {}."
                 "\nFIX THIS by passing a supported data type. Supported "
@@ -415,6 +254,26 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 "specify the type of the source. Use the `RayFileType` "
                 "enum for that.".format(type(self.data), self.filetype))
 
+        if self.label is not None and not isinstance(self.label, str) and \
+            not type(self.data) != type(self.label):  # noqa: E721:
+            # Label is an object of a different type than the main data.
+            # We have to make sure they are compatible
+            if not data_source.is_data_type(self.label):
+                raise ValueError(
+                    "The passed `data` and `label` types are not compatible."
+                    "\nFIX THIS by passing the same types to the "
+                    "`RayDMatrix` - e.g. a `pandas.DataFrame` as `data` "
+                    "and `label`. The `label` can always be a string. Got "
+                    "{} for the main data and {} for the label.".format(
+                        type(self.data), type(self.label)))
+
+        # We're doing central data loading here, so we don't pass any indices,
+        # yet. Instead, we'll be selecting the rows below.
+        local_df = data_source.load_data(
+            self.data, ignore=self.ignore, indices=None)
+        x, y, w, b, ll, lu = self._split_dataframe(
+            local_df, data_source=data_source)
+
         if isinstance(x, list):
             n = sum(len(a) for a in x)
         else:
@@ -422,6 +281,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
 
         refs = {}
         for i in range(num_actors):
+            # Here we actually want to split the data.
             indices = _get_sharding_indices(sharding, i, num_actors, n)
             actor_refs = {
                 "data": ray.put(x.iloc[indices]),
@@ -474,9 +334,10 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             elif os.path.exists(self.data):
                 self.data = [self.data]
             else:
-                print(f"INVALID: {self.data}")
                 invalid_data = True
 
+        # Todo (krfricke): It would be good to have a more general way to
+        # check for compatibility here. Combine with test below?
         if not isinstance(self.data, (Iterable, MLDataset)) or invalid_data:
             raise ValueError(
                 f"Distributed data loading only works with already "
@@ -493,40 +354,47 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 f"\nFIX THIS by passing a string indicating the label "
                 f"column of the dataset as the `label` argument.")
 
-        if isinstance(self.data, MLDataset):
-            indices = _get_sharding_indices(sharding, rank, num_actors,
-                                            self.data.num_shards())
-            local_input_sources = []
-        else:
-            # Shard input sources
-            input_sources = list(self.data)
-            n = len(input_sources)
+        data_source = None
+        for source in data_sources:
+            if not source.supports_distributed_loading:
+                continue
 
-            # Get files this worker should load
-            indices = _get_sharding_indices(sharding, rank, num_actors, n)
-            local_input_sources = [input_sources[i] for i in indices]
+            try:
+                if source.is_data_type(self.data, self.filetype):
+                    data_source = source
+                    break
+            except Exception as exc:
+                # If checking the data throws an exception, the data source
+                # is not available.
+                logger.warning(
+                    f"Checking data source {source.__name__} failed "
+                    f"with exception: {exc}")
+                continue
 
-        if isinstance(self.data, MLDataset):
-            x, y, w, b, ll, lu = self._load_data_ml_dataset(self.data, indices)
-        elif self.filetype == RayFileType.PETASTORM:
-            x, y, w, b, ll, lu = self._load_data_petastorm(local_input_sources)
-        elif self.filetype == RayFileType.CSV:
-            x, y, w, b, ll, lu = self._load_data_csv(local_input_sources)
-        elif self.filetype == RayFileType.PARQUET:
-            x, y, w, b, ll, lu = self._load_data_parquet(local_input_sources)
-        else:
+        if not data_source:
             raise ValueError(
-                "Invalid data source type: {} with FileType: {} for a "
-                "distributed dataset."
+                f"Invalid data source type: {type(self.data)} "
+                f"with FileType: {self.filetype} for a distributed dataset."
                 "\nFIX THIS by passing a supported data type. Supported "
                 "data types for distributed datasets are a list of "
-                "CSV or Parquet sources.".format(
-                    type(self.data), self.filetype))
+                "CSV or Parquet sources as well as Ray MLDatasets.")
 
-        if isinstance(x, list):
-            n = sum(len(a) for a in x)
+        n = data_source.get_n(self.data)
+        indices = _get_sharding_indices(sharding, rank, num_actors, n)
+
+        if not indices:
+            x, y, w, b, ll, lu = None, None, None, None, None, None
+            n = 0
         else:
-            n = len(x)
+            local_df = data_source.load_data(
+                self.data, ignore=self.ignore, indices=indices)
+            x, y, w, b, ll, lu = self._split_dataframe(
+                local_df, data_source=data_source)
+
+            if isinstance(x, list):
+                n = sum(len(a) for a in x)
+            else:
+                n = len(x)
 
         refs = {
             rank: {
