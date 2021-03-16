@@ -740,10 +740,14 @@ class RayDeviceQuantileDMatrix(RayDMatrix):
 
 def _can_load_distributed(source: Data) -> bool:
     """Returns True if it might be possible to use distributed data loading"""
+    from xgboost_ray.data_sources.ml_dataset import MLDataset
+    from xgboost_ray.data_sources.modin import Modin
+
     if isinstance(source, (int, float, bool)):
         return False
-    elif isinstance(source, MLDataset):
-        # MLDataset is distributed already
+    elif MLDataset.is_data_type(source):
+        return True
+    elif Modin.is_data_type(source):
         return True
     elif isinstance(source, str):
         # Strings should point to files or URLs
@@ -763,9 +767,14 @@ def _can_load_distributed(source: Data) -> bool:
 
 def _detect_distributed(source: Data) -> bool:
     """Returns True if we should try to use distributed data loading"""
+    from xgboost_ray.data_sources.ml_dataset import MLDataset
+    from xgboost_ray.data_sources.modin import Modin
+
     if not _can_load_distributed(source):
         return False
-    if isinstance(source, MLDataset):
+    if MLDataset.is_data_type(source):
+        return True
+    if Modin.is_data_type(source):
         return True
     if isinstance(source, Iterable) and not isinstance(source, str) and \
        not (isinstance(source, Sequence) and isinstance(source[0], str)):

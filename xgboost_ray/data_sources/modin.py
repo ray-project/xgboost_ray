@@ -39,6 +39,8 @@ class Modin(DataSource):
     Modin dataframes are stored on multiple actors, making them
     suitable for distributed loading.
     """
+    supports_central_loading = True
+    supports_distributed_loading = True
 
     @staticmethod
     def is_data_type(data: Any,
