@@ -108,7 +108,7 @@ class ModinDataSourceTest(unittest.TestCase):
                 ray.get(list(ip_objs)),
                 msg="Modin moved partitions to different IPs")
         except AssertionError as exc:
-            print(f"Modin-part of the test failed: {exc}")
+            print(f"Modin part of the test failed: {exc}")
             print("This is a stochastic test failure. Ignoring the rest "
                   "of this test.")
             return
