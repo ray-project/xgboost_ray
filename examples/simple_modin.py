@@ -89,7 +89,7 @@ if __name__ == "__main__":
     args, _ = parser.parse_known_args()
 
     if args.smoke_test:
-        ray.init(num_cpus=args.num_actors)
+        ray.init(num_cpus=args.num_actors + 1)
     else:
         ray.init(address=args.address)
 
