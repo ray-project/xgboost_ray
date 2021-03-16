@@ -7,6 +7,4 @@ pytest
 pyarrow
 ray[tune]
 scikit-learn
-# modin
-# install wheels for 0.9.1
-https://files.pythonhosted.org/packages/20/87/118bc738470e51052162f744f3f7e0d9285f6e73be34b49f62c61ae1893d/modin-0.9.1-py3-none-manylinux1_x86_64.whl
+modin
