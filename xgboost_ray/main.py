@@ -221,12 +221,13 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
             if not isinstance(param["data"], list):
                 param["base_margin"] = param["base_margin"]
 
+        param["label_lower_bound"] = None
+        param["label_upper_bound"] = None
+
         dm_param = {
             "feature_names": data.feature_names,
             "feature_types": data.feature_types,
             "missing": data.missing,
-            "label_lower_bound": None,
-            "label_upper_bound": None,
         }
         param.update(dm_param)
         it = RayDataIter(**param)
