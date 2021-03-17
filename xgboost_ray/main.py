@@ -225,6 +225,8 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
             "feature_names": data.feature_names,
             "feature_types": data.feature_types,
             "missing": data.missing,
+            "label_lower_bound": None,
+            "label_upper_bound": None,
         }
         param.update(dm_param)
         it = RayDataIter(**param)
