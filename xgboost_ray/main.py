@@ -215,8 +215,6 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
                 "feature_types": data.feature_types,
                 "missing": data.missing,
             }
-            if not isinstance(data, xgb.DeviceQuantileDMatrix):
-                pass
             param.update(dm_param)
             it = RayDataIter(**param)
             matrix = xgb.DeviceQuantileDMatrix(it, **dm_param)
@@ -432,7 +430,10 @@ class RayXGBoostActor:
             if num_threads > 0:
                 local_params["num_threads"] = num_threads
             else:
-                local_params["nthread"] = ray.utils.get_num_cpus()
+                try:
+                    local_params["nthread"] = ray._private.utils.get_num_cpus()
+                except AttributeError:
+                    local_params["nthread"] = ray.utils.get_num_cpus()
 
         if dtrain not in self._data:
             self.load_data(dtrain)

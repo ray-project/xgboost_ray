@@ -503,9 +503,9 @@ class RayDMatrix:
     def __init__(self,
                  data: Data,
                  label: Optional[Data] = None,
-                 missing: Optional[float] = None,
                  weight: Optional[Data] = None,
                  base_margin: Optional[Data] = None,
+                 missing: Optional[float] = None,
                  label_lower_bound: Optional[Data] = None,
                  label_upper_bound: Optional[Data] = None,
                  feature_names: Optional[List[str]] = None,
@@ -638,12 +638,49 @@ class RayDMatrix:
 class RayDeviceQuantileDMatrix(RayDMatrix):
     """Currently just a thin wrapper for type detection"""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self,
+                 data: Data,
+                 label: Optional[Data] = None,
+                 weight: Optional[Data] = None,
+                 base_margin: Optional[Data] = None,
+                 missing: Optional[float] = None,
+                 label_lower_bound: Optional[Data] = None,
+                 label_upper_bound: Optional[Data] = None,
+                 feature_names: Optional[List[str]] = None,
+                 feature_types: Optional[List[np.dtype]] = None,
+                 *args,
+                 **kwargs):
         if cp is None:
             raise RuntimeError(
                 "RayDeviceQuantileDMatrix requires cupy to be installed."
                 "\nFIX THIS by installing cupy: `pip install cupy`")
-        super(RayDeviceQuantileDMatrix, self).__init__(*args, **kwargs)
+        if label_lower_bound or label_upper_bound:
+            raise RuntimeError(
+                "RayDeviceQuantileDMatrix does not support "
+                "`label_lower_bound` and `label_upper_bound` (just as the "
+                "xgboost.DeviceQuantileDMatrix). Please pass None instead.")
+        super(RayDeviceQuantileDMatrix, self).__init__(
+            data=data,
+            label=label,
+            weight=weight,
+            base_margin=base_margin,
+            missing=missing,
+            label_lower_bound=None,
+            label_upper_bound=None,
+            feature_names=feature_names,
+            feature_types=feature_types,
+            *args,
+            **kwargs)
+
+    def get_data(
+            self, rank: int, num_actors: Optional[int] = None
+    ) -> Dict[str, Union[None, pd.DataFrame, List[Optional[pd.DataFrame]]]]:
+        data_dict = super(RayDeviceQuantileDMatrix, self).get_data(
+            rank=rank, num_actors=num_actors)
+        # Remove some dict keys here that are generated automatically
+        data_dict.pop("label_lower_bound", None)
+        data_dict.pop("label_upper_bound", None)
+        return data_dict
 
 
 def _can_load_distributed(source: Data) -> bool:
