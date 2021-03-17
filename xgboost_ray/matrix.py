@@ -653,7 +653,8 @@ class RayDeviceQuantileDMatrix(RayDMatrix):
         if cp is None:
             raise RuntimeError(
                 "RayDeviceQuantileDMatrix requires cupy to be installed."
-                "\nFIX THIS by installing cupy: `pip install cupy`")
+                "\nFIX THIS by installing cupy: `pip install cupy-cudaXYZ` "
+                "where XYZ is your local CUDA version.")
         if label_lower_bound or label_upper_bound:
             raise RuntimeError(
                 "RayDeviceQuantileDMatrix does not support "
