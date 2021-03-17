@@ -212,17 +212,17 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
         # If we only got a single data shard, create a list so we can
         # iterate over it
         if not isinstance(param["data"], list):
-            param["data"] = param["data"]
+            param["data"] = [param["data"]]
 
             if not isinstance(param["label"], list):
-                param["label"] = param["label"]
+                param["label"] = [param["label"]]
             if not isinstance(param["weight"], list):
-                param["weight"] = param["weight"]
+                param["weight"] = [param["weight"]]
             if not isinstance(param["data"], list):
-                param["base_margin"] = param["base_margin"]
+                param["base_margin"] = [param["base_margin"]]
 
-        param["label_lower_bound"] = None
-        param["label_upper_bound"] = None
+        param["label_lower_bound"] = [None]
+        param["label_upper_bound"] = [None]
 
         dm_param = {
             "feature_names": data.feature_names,
