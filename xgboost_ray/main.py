@@ -209,19 +209,29 @@ def _set_omp_num_threads():
 
 def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
     if isinstance(data, RayDeviceQuantileDMatrix):
-        if isinstance(param["data"], list):
-            dm_param = {
-                "feature_names": data.feature_names,
-                "feature_types": data.feature_types,
-                "missing": data.missing,
-            }
-            if not isinstance(data, xgb.DeviceQuantileDMatrix):
-                pass
-            param.update(dm_param)
-            it = RayDataIter(**param)
-            matrix = xgb.DeviceQuantileDMatrix(it, **dm_param)
-        else:
-            matrix = xgb.DeviceQuantileDMatrix(**param)
+        # If we only got a single data shard, create a list so we can
+        # iterate over it
+        if not isinstance(param["data"], list):
+            param["data"] = [param["data"]]
+
+            if not isinstance(param["label"], list):
+                param["label"] = [param["label"]]
+            if not isinstance(param["weight"], list):
+                param["weight"] = [param["weight"]]
+            if not isinstance(param["data"], list):
+                param["base_margin"] = [param["base_margin"]]
+
+        param["label_lower_bound"] = [None]
+        param["label_upper_bound"] = [None]
+
+        dm_param = {
+            "feature_names": data.feature_names,
+            "feature_types": data.feature_types,
+            "missing": data.missing,
+        }
+        param.update(dm_param)
+        it = RayDataIter(**param)
+        matrix = xgb.DeviceQuantileDMatrix(it, **dm_param)
     else:
         if isinstance(param["data"], list):
             dm_param = {
@@ -436,7 +446,8 @@ class RayXGBoostActor:
             if num_threads > 0:
                 local_params["num_threads"] = num_threads
             else:
-                local_params["nthread"] = ray.utils.get_num_cpus()
+                local_params["nthread"] = sum(
+                    num for _, num in ray.get_resource_ids().get("CPU", []))
 
         if dtrain not in self._data:
             self.load_data(dtrain)
