@@ -31,7 +31,6 @@ class Petastorm(DataSource):
     This class accesses Petastorm's dataset loading interface for efficient
     loading of large datasets.
     """
-
     supports_central_loading = True
     supports_distributed_loading = True
 

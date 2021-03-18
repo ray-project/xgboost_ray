@@ -366,6 +366,10 @@ class RayXGBoostActor:
         """Get process PID. Used for checking if still alive"""
         return os.getpid()
 
+    def ip(self):
+        """Get node IP address."""
+        return get_node_ip_address()
+
     def _save_checkpoint_callback(self):
         """Send checkpoints to driver"""
         this = self
@@ -776,6 +780,12 @@ def _train(params: Dict,
     logger.info(f"[RayXGBoost] Created {newly_created} new actors "
                 f"({alive_actors} total actors). Waiting until actors "
                 f"are ready for training.")
+
+    # For distributed datasets (e.g. Modin), this will initialize
+    # (and fix) the assignment of data shards to actor ranks
+    dtrain.assign_shards_to_actors(_training_state.actors)
+    for deval, _ in evals:
+        deval.assign_shards_to_actors(_training_state.actors)
 
     load_data = [dtrain] + [eval[0] for eval in evals]
 
