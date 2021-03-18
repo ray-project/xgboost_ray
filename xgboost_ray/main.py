@@ -442,10 +442,8 @@ class RayXGBoostActor:
             if num_threads > 0:
                 local_params["num_threads"] = num_threads
             else:
-                try:
-                    local_params["nthread"] = ray._private.utils.get_num_cpus()
-                except AttributeError:
-                    local_params["nthread"] = ray.utils.get_num_cpus()
+                local_params["nthread"] = sum(
+                    num for _, num in ray.get_resource_ids().get("CPU", []))
 
         if dtrain not in self._data:
             self.load_data(dtrain)
