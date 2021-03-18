@@ -6,10 +6,13 @@ from xgboost_ray.data_sources.ml_dataset import MLDataset
 from xgboost_ray.data_sources.petastorm import Petastorm
 from xgboost_ray.data_sources.csv import CSV
 from xgboost_ray.data_sources.parquet import Parquet
+from xgboost_ray.data_sources.object_store import ObjectStore
 
-data_sources = [Numpy, Pandas, Modin, MLDataset, Petastorm, CSV, Parquet]
+data_sources = [
+    Numpy, Pandas, Modin, MLDataset, Petastorm, CSV, Parquet, ObjectStore
+]
 
 __all__ = [
     "DataSource", "RayFileType", "Numpy", "Pandas", "Modin", "MLDataset",
-    "Petastorm", "CSV", "Parquet"
+    "Petastorm", "CSV", "Parquet", "ObjectStore"
 ]
