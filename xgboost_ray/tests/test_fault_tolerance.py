@@ -536,10 +536,11 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
         ft_manager.schedule_kill.remote(rank=1, boost_round=4)
         ft_manager.delay_return.remote(
-            rank=1, start_boost_round=4, end_boost_round=8)
+            rank=1, start_boost_round=2, end_boost_round=7)
 
-        delay_callback = DelayedLoadingCallback(ft_manager)
-        die_callback = DieCallback(ft_manager, delay=0.5)
+        delay_callback = DelayedLoadingCallback(
+            ft_manager, reload_data=True, sleep_time=0.1)
+        die_callback = DieCallback(ft_manager, training_delay=0.5)
 
         res_1 = {}
         train(
@@ -560,14 +561,19 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
         print(logs)
 
-        self.assertSequenceEqual(logs[0],
-                                 [(0, 0), (1, 1), (2, 2), (3, 3), (4, 0),
-                                  (5, 1), (6, 2), (7, 0), (8, 1), (9, 2)])
+        self.assertSequenceEqual([g for g, _ in logs[0][0:10]], range(10))
 
-        self.assertSequenceEqual(logs[1], [(0, 0), (1, 1), (2, 2), (3, 3),
-                                           (7, 0), (8, 1), (9, 2)])
-
-        print("LOGS", logs)
+        # Which steps exactly are executed is stochastic. The rank 1 actor
+        # will die at iteration 4, so at least 3 will be logged (though 4
+        # might be logged as well). Iterations 5 and 6 should never be
+        # logged. It comes back some time after iteration 7, so this might
+        # be iter 7, 8, or 9. We just make sure it comes back at all (iter 9).
+        global_steps = [g for g, _ in logs[1]]
+        self.assertTrue(global_steps)
+        self.assertIn(3, global_steps)
+        self.assertNotIn(5, global_steps)
+        self.assertNotIn(6, global_steps)
+        self.assertIn(9, global_steps)
 
 
 if __name__ == "__main__":

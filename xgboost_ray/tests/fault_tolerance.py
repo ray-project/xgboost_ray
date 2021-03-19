@@ -67,23 +67,18 @@ class FaultToleranceManager:
 class DelayedLoadingCallback(DistributedCallback):
     """Used to control when actors return to training"""
 
-    def __init__(self, ft_manager: ActorHandle, reload_data=True):
+    def __init__(self,
+                 ft_manager: ActorHandle,
+                 reload_data=True,
+                 sleep_time=0.5):
         self.ft_manager = ft_manager
         self.reload_data = reload_data
-
-    def before_data_loading(self, actor, data, *args, **kwargs):
-        print(f"Rank {actor.rank} - before load")
-        if self.reload_data and ray.get(
-                self.ft_manager.should_sleep.remote(actor.rank)):
-            print(f"Rank {actor.rank} - before pop")
-            actor._data.pop(data, None)
-        time.sleep(0.5)
+        self.sleep_time = sleep_time
 
     def after_data_loading(self, actor, data, *args, **kwargs):
         print(f"Rank {actor.rank} - after load")
         while ray.get(self.ft_manager.should_sleep.remote(actor.rank)):
-            print(f"Rank {actor.rank} - sleep")
-            time.sleep(0.5)
+            time.sleep(self.sleep_time)
 
 
 class DieCallback(TrainingCallback):
@@ -92,9 +87,9 @@ class DieCallback(TrainingCallback):
     Also can add delay to each boosting round.
     """
 
-    def __init__(self, ft_manager: ActorHandle, delay: float = 0):
+    def __init__(self, ft_manager: ActorHandle, training_delay: float = 0):
         self.ft_manager = ft_manager
-        self.delay = delay
+        self.training_delay = training_delay
         super(DieCallback, self).__init__()
 
     def before_iteration(self, model, epoch, evals_log):
@@ -102,13 +97,14 @@ class DieCallback(TrainingCallback):
             pid = os.getpid()
             print(f"Killing process: {pid}")
             print(f"Rank {get_actor_rank()} will now die.")
+            time.sleep(1)
             os.kill(pid, 9)
             time.sleep(10)  # Don't continue training, just die
 
     def after_iteration(self, model, epoch, evals_log):
         # ray.get to make sure this is up to date in the next iteration
         ray.get(self.ft_manager.log_iteration.remote(get_actor_rank(), epoch))
-        if self.delay > 0:
-            time.sleep(self.delay)
+        if self.training_delay > 0:
+            time.sleep(self.training_delay)
         if get_actor_rank() == 0:
             ray.get(self.ft_manager.inc_boost_round.remote(get_actor_rank()))
