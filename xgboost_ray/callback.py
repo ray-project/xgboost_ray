@@ -23,9 +23,6 @@ class DistributedCallback(ABC):
     ``distributed_callbacks`` parameter.
     """
 
-    def __init__(self):
-        pass
-
     def on_init(self, actor: "RayXGBoostActor", *args, **kwargs):
         pass
 
