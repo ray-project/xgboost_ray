@@ -67,14 +67,23 @@ class FaultToleranceManager:
 class DelayedLoadingCallback(DistributedCallback):
     """Used to control when actors return to training"""
 
-    def __init__(self, ft_manager: ActorHandle):
+    def __init__(self, ft_manager: ActorHandle, reload_data=True):
         self.ft_manager = ft_manager
+        self.reload_data = reload_data
+
+    def before_data_loading(self, actor, data, *args, **kwargs):
+        print(f"Rank {actor.rank} - before load")
+        if self.reload_data and ray.get(
+                self.ft_manager.should_sleep.remote(actor.rank)):
+            print(f"Rank {actor.rank} - before pop")
+            actor._data.pop(data, None)
+        time.sleep(0.5)
 
     def after_data_loading(self, actor, data, *args, **kwargs):
-        print(f"Rank {actor.rank} - load")
+        print(f"Rank {actor.rank} - after load")
         while ray.get(self.ft_manager.should_sleep.remote(actor.rank)):
             print(f"Rank {actor.rank} - sleep")
-            time.sleep(1)
+            time.sleep(0.5)
 
 
 class DieCallback(TrainingCallback):
