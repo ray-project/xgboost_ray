@@ -13,6 +13,8 @@ import ray
 
 from xgboost_ray import train, RayDMatrix, RayParams
 from xgboost_ray.main import RayXGBoostActorAvailable
+from xgboost_ray.tests.fault_tolerance import FaultToleranceManager, \
+    DelayedLoadingCallback, DieCallback
 from xgboost_ray.tests.utils import flatten_obj, _checkpoint_callback, \
     _fail_callback, tree_obj, _kill_callback, _sleep_callback, get_num_trees
 
@@ -527,6 +529,45 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             self.assertTrue(actors[1])
             self.assertTrue(actors[4])
             self.assertTrue(actors[6])
+
+    def testFaultToleranceManager(self):
+        """Test fault tolerance management utility used for benchmarking"""
+        ft_manager = FaultToleranceManager.remote()
+
+        ft_manager.schedule_kill.remote(rank=1, boost_round=4)
+        ft_manager.delay_return.remote(
+            rank=1, start_boost_round=4, end_boost_round=8)
+
+        delay_callback = DelayedLoadingCallback(ft_manager)
+        die_callback = DieCallback(ft_manager, delay=0.5)
+
+        res_1 = {}
+        train(
+            self.params,
+            RayDMatrix(self.x, self.y),
+            callbacks=[die_callback],
+            num_boost_round=10,
+            ray_params=RayParams(
+                num_actors=2,
+                checkpoint_frequency=1,
+                elastic_training=True,
+                max_failed_actors=1,
+                max_actor_restarts=1,
+                distributed_callbacks=[delay_callback]),
+            additional_results=res_1)
+
+        logs = ray.get(ft_manager.get_logs.remote())
+
+        print(logs)
+
+        self.assertSequenceEqual(logs[0],
+                                 [(0, 0), (1, 1), (2, 2), (3, 3), (4, 0),
+                                  (5, 1), (6, 2), (7, 0), (8, 1), (9, 2)])
+
+        self.assertSequenceEqual(logs[1], [(0, 0), (1, 1), (2, 2), (3, 3),
+                                           (7, 0), (8, 1), (9, 2)])
+
+        print("LOGS", logs)
 
 
 if __name__ == "__main__":
