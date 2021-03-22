@@ -430,10 +430,10 @@ class RayXGBoostActor:
         return _StopCallback()
 
     def load_data(self, data: RayDMatrix):
-        self._distributed_callbacks.before_data_loading(self, data)
-
         if data in self._data:
             return
+
+        self._distributed_callbacks.before_data_loading(self, data)
 
         param = data.get_data(self.rank, self.num_actors)
         if isinstance(param["data"], list):
