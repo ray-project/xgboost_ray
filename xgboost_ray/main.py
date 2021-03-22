@@ -1,4 +1,4 @@
-from typing import Tuple, Dict, Any, List, Optional, Callable, Union
+from typing import Tuple, Dict, Any, List, Optional, Callable, Union, Sequence
 from dataclasses import dataclass, field
 
 import multiprocessing
@@ -11,6 +11,9 @@ import numpy as np
 
 import xgboost as xgb
 from xgboost.core import XGBoostError
+
+from xgboost_ray.callback import DistributedCallback, \
+    DistributedCallbackContainer
 
 try:
     from xgboost.callback import TrainingCallback
@@ -286,6 +289,9 @@ class RayParams:
     max_actor_restarts: int = 0
     checkpoint_frequency: int = 5
 
+    # Distributed callbacks
+    distributed_callbacks: Optional[List[DistributedCallback]] = None
+
     def get_tune_resources(self):
         """Return the resources to use for xgboost_ray training with Tune."""
         if self.cpus_per_actor <= 0 or self.num_actors <= 0:
@@ -340,12 +346,14 @@ class RayXGBoostActor:
 
     """
 
-    def __init__(self,
-                 rank: int,
-                 num_actors: int,
-                 queue: Optional[Queue] = None,
-                 stop_event: Optional[Event] = None,
-                 checkpoint_frequency: int = 5):
+    def __init__(
+            self,
+            rank: int,
+            num_actors: int,
+            queue: Optional[Queue] = None,
+            stop_event: Optional[Event] = None,
+            checkpoint_frequency: int = 5,
+            distributed_callbacks: Optional[List[DistributedCallback]] = None):
         self.queue = queue
         init_session(rank, self.queue)
 
@@ -359,6 +367,10 @@ class RayXGBoostActor:
 
         self._stop_event = stop_event
 
+        self._distributed_callbacks = DistributedCallbackContainer(
+            distributed_callbacks)
+
+        self._distributed_callbacks.on_init(self)
         _set_omp_num_threads()
         logger.debug(f"Initialized remote XGBoost actor with rank {self.rank}")
 
@@ -420,6 +432,9 @@ class RayXGBoostActor:
     def load_data(self, data: RayDMatrix):
         if data in self._data:
             return
+
+        self._distributed_callbacks.before_data_loading(self, data)
+
         param = data.get_data(self.rank, self.num_actors)
         if isinstance(param["data"], list):
             self._local_n = sum(len(a) for a in param["data"])
@@ -430,9 +445,13 @@ class RayXGBoostActor:
         matrix = _get_dmatrix(data, param)
         self._data[data] = matrix
 
+        self._distributed_callbacks.after_data_loading(self, data)
+
     def train(self, rabit_args: List[str], params: Dict[str, Any],
               dtrain: RayDMatrix, evals: Tuple[RayDMatrix, str], *args,
               **kwargs) -> Dict[str, Any]:
+        self._distributed_callbacks.before_train(self)
+
         num_threads = _set_omp_num_threads()
 
         local_params = params.copy()
@@ -511,9 +530,12 @@ class RayXGBoostActor:
             raise RayXGBoostTrainingError("Training failed.")
 
         thread.join()
+        self._distributed_callbacks.after_train(self, result_dict)
         return result_dict
 
     def predict(self, model: xgb.Booster, data: RayDMatrix, **kwargs):
+        self._distributed_callbacks.before_predict(self)
+
         _set_omp_num_threads()
 
         if data not in self._data:
@@ -521,6 +543,7 @@ class RayXGBoostActor:
         local_data = self._data[data]
 
         predictions = model.predict(local_data, **kwargs)
+        self._distributed_callbacks.after_predict(self, predictions)
         return predictions
 
 
@@ -560,14 +583,17 @@ def _autodetect_resources(ray_params: RayParams,
     return cpus_per_actor, gpus_per_actor
 
 
-def _create_actor(rank: int,
-                  num_actors: int,
-                  num_cpus_per_actor: int,
-                  num_gpus_per_actor: int,
-                  resources_per_actor: Optional[Dict] = None,
-                  placement_group: Optional[PlacementGroup] = None,
-                  queue: Optional[Queue] = None,
-                  checkpoint_frequency: int = 5) -> ActorHandle:
+def _create_actor(
+        rank: int,
+        num_actors: int,
+        num_cpus_per_actor: int,
+        num_gpus_per_actor: int,
+        resources_per_actor: Optional[Dict] = None,
+        placement_group: Optional[PlacementGroup] = None,
+        queue: Optional[Queue] = None,
+        checkpoint_frequency: int = 5,
+        distributed_callbacks: Optional[Sequence[DistributedCallback]] = None
+) -> ActorHandle:
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
@@ -576,7 +602,8 @@ def _create_actor(rank: int,
             rank=rank,
             num_actors=num_actors,
             queue=queue,
-            checkpoint_frequency=checkpoint_frequency)
+            checkpoint_frequency=checkpoint_frequency,
+            distributed_callbacks=distributed_callbacks)
 
 
 def _trigger_data_load(actor, dtrain, evals):
@@ -780,7 +807,8 @@ def _train(params: Dict,
             resources_per_actor=ray_params.resources_per_actor,
             placement_group=_training_state.placement_group,
             queue=_training_state.queue,
-            checkpoint_frequency=ray_params.checkpoint_frequency)
+            checkpoint_frequency=ray_params.checkpoint_frequency,
+            distributed_callbacks=ray_params.distributed_callbacks)
         # Set actor entry in our list
         _training_state.actors[i] = actor
         # Remove from this set so it is not created again
@@ -1298,7 +1326,8 @@ def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
             num_cpus_per_actor=ray_params.cpus_per_actor,
             num_gpus_per_actor=ray_params.gpus_per_actor
             if ray_params.gpus_per_actor >= 0 else 0,
-            resources_per_actor=ray_params.resources_per_actor)
+            resources_per_actor=ray_params.resources_per_actor,
+            distributed_callbacks=ray_params.distributed_callbacks)
         for i in range(ray_params.num_actors)
     ]
     logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")

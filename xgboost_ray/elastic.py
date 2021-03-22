@@ -57,7 +57,8 @@ def _maybe_schedule_new_actors(
             resources_per_actor=resources_per_actor,
             placement_group=training_state.placement_group,
             queue=training_state.queue,
-            checkpoint_frequency=ray_params.checkpoint_frequency)
+            checkpoint_frequency=ray_params.checkpoint_frequency,
+            distributed_callbacks=ray_params.distributed_callbacks)
 
         task = _PrepareActorTask(
             actor,
