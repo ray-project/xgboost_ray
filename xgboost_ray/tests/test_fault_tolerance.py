@@ -531,23 +531,22 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             self.assertTrue(actors[6])
 
     def testFaultToleranceManager(self):
-        """Test fault tolerance management utility used for benchmarking"""
         ft_manager = FaultToleranceManager.remote()
 
-        ft_manager.schedule_kill.remote(rank=1, boost_round=4)
+        ft_manager.schedule_kill.remote(rank=1, boost_round=16)
         ft_manager.delay_return.remote(
-            rank=1, start_boost_round=2, end_boost_round=7)
+            rank=1, start_boost_round=14, end_boost_round=68)
 
         delay_callback = DelayedLoadingCallback(
             ft_manager, reload_data=True, sleep_time=0.1)
-        die_callback = DieCallback(ft_manager, training_delay=0.5)
+        die_callback = DieCallback(ft_manager, training_delay=0.1)
 
         res_1 = {}
         train(
             self.params,
             RayDMatrix(self.x, self.y),
             callbacks=[die_callback],
-            num_boost_round=10,
+            num_boost_round=100,
             ray_params=RayParams(
                 num_actors=2,
                 checkpoint_frequency=1,
@@ -561,19 +560,20 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
         print(logs)
 
-        self.assertSequenceEqual([g for g, _ in logs[0][0:10]], range(10))
+        self.assertSequenceEqual([g for g, _ in logs[0][0:99]], range(99))
 
         # Which steps exactly are executed is stochastic. The rank 1 actor
-        # will die at iteration 4, so at least 3 will be logged (though 4
-        # might be logged as well). Iterations 5 and 6 should never be
-        # logged. It comes back some time after iteration 7, so this might
-        # be iter 7, 8, or 9. We just make sure it comes back at all (iter 9).
+        # will die at iteration 16, so at least 15 will be logged (though 16
+        # might be logged as well). Iterations 17 to 67 should never be
+        # logged. It comes back some time after iteration 68, so this might
+        # be iter 68, 69, or later. We just make sure it comes back at all
+        # (iter 70+).
         global_steps = [g for g, _ in logs[1]]
         self.assertTrue(global_steps)
-        self.assertIn(3, global_steps)
-        self.assertNotIn(5, global_steps)
-        self.assertNotIn(6, global_steps)
-        self.assertIn(9, global_steps)
+        self.assertIn(15, global_steps)
+        self.assertNotIn(17, global_steps)
+        self.assertNotIn(67, global_steps)
+        self.assertIn(70, global_steps)
 
 
 if __name__ == "__main__":
