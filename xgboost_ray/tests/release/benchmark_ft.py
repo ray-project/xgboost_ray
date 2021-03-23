@@ -92,7 +92,7 @@ def train_ray(train_files,
             ft_manager, reload_data=True, sleep_time=0.1)
         distributed_callbacks.append(delay_callback)
 
-        die_callback = DieCallback(ft_manager, training_delay=0)
+        die_callback = DieCallback(ft_manager, training_delay=0.1)
         xgboost_callbacks.append(die_callback)
 
     evals_result = {}
@@ -122,7 +122,7 @@ def train_ray(train_files,
         f"train-{return_metric}": evals_result["train"][return_metric][-1],
         "eval-logloss": evals_result["eval"]["logloss"][-1],
         f"eval-{return_metric}": evals_result["eval"][return_metric][-1],
-        "n": additional_results["total_n"]
+        "total_n": additional_results["total_n"]
     }
 
     return bst, results
@@ -131,7 +131,7 @@ def train_ray(train_files,
 def ft_setup(workers: List[int], num_rounds: int, die_round_factor: 0.25,
              comeback_round_factor: 0.75):
     """Setup fault tolerance manager, schedule kills and comebacks"""
-    if not workers:
+    if workers is None:
         return None
 
     ft_manager = FaultToleranceManager.remote()
@@ -156,11 +156,13 @@ def ft_setup(workers: List[int], num_rounds: int, die_round_factor: 0.25,
 
 def run_experiments(config, files):
     """Ray Tune-compatible function trainable to run experiments"""
+    os.environ["RXGB_ALLOW_ELASTIC_TUNE"] = "1"
+
     condition = config["condition"]
 
     num_boost_round = config["num_boost_round"]
     num_workers = config["num_workers"]
-    affected_workers = config["affected_workers"]
+    num_affected_workers = config["affected_workers"]
     regression = config["regression"]
     use_gpu = config["use_gpu"]
     seed = config["seed"]
@@ -177,27 +179,25 @@ def run_experiments(config, files):
     train_files = list(files[:last_train_index])
     eval_files = list(files[last_train_index:])
 
-    if affected_workers:
-        workers = np.random.choice(
-            np.arange(1, num_workers), size=affected_workers, replace=False)
+    if num_affected_workers:
+        affected_workers = np.random.choice(
+            np.arange(1, num_workers),
+            size=num_affected_workers,
+            replace=False).tolist()
     else:
-        workers = None
+        affected_workers = None
 
     np.random.seed(seed)  # Re-seed because of conditional evaluation
 
     # Dataset to train on
     sharding_mode = RayShardingMode.INTERLEAVED
 
-    # Not the baseline.
-    if affected_workers == 0:
-        return {metric: float("inf")}
-
     if condition == "fewer_workers":
         # Sanity check: Just train with fewer workers
         remove_shards = []
 
-        if workers is not None:
-            for rank in workers:
+        if affected_workers is not None:
+            for rank in affected_workers:
                 remove_shards += _get_sharding_indices(
                     sharding=sharding_mode,
                     rank=rank,
@@ -208,7 +208,7 @@ def run_experiments(config, files):
             mask[remove_shards] = False
 
             final_files = np.array(train_files)[mask].tolist()
-            final_workers = num_workers - len(workers)
+            final_workers = num_workers - len(affected_workers)
         else:
             final_files = train_files
             final_workers = num_workers
@@ -228,18 +228,63 @@ def run_experiments(config, files):
 
         return results
 
-    if affected_workers == 0:
+    if num_affected_workers == 0:
+        # No duplicate baseline runs
         return {metric: float("inf")}
 
     if condition == "non_elastic":
         # Non-elastic training: Actors die after 50% and come back
-        return {metric: float("inf")}
+        ray_params.elastic_training = False
+        ray_params.max_failed_actors = len(affected_workers)
+        ray_params.max_actor_restarts = 1
+
+        ft_manager = ft_setup(
+            workers=affected_workers,
+            num_rounds=num_boost_round,
+            die_round_factor=0.5,
+            comeback_round_factor=0.0,
+        )
+
     elif condition == "elastic_no_comeback":
         # Elastic training: Actors die after 50% and don't come back
-        return {metric: float("inf")}
+        ray_params.elastic_training = True
+        ray_params.max_failed_actors = len(affected_workers)
+        ray_params.max_actor_restarts = 1
+
+        ft_manager = ft_setup(
+            workers=affected_workers,
+            num_rounds=num_boost_round,
+            die_round_factor=0.5,
+            comeback_round_factor=1.1,
+        )
+
     elif condition == "elastic_comeback":
         # Elastic training: Actors die after 50% and come back
-        return {metric: float("inf")}
+        ray_params.elastic_training = True
+        ray_params.max_failed_actors = len(affected_workers)
+        ray_params.max_actor_restarts = 1
+
+        ft_manager = ft_setup(
+            workers=affected_workers,
+            num_rounds=num_boost_round,
+            die_round_factor=0.5,
+            comeback_round_factor=0.75,
+        )
+    else:
+        raise ValueError("Unknown condition:", condition)
+
+    bst, results = train_ray(
+        train_files=train_files,
+        eval_files=eval_files,
+        num_workers=num_workers,
+        num_boost_round=num_boost_round,
+        regression=regression,
+        use_gpu=use_gpu,
+        ray_params=ray_params,
+        xgboost_params=xgboost_params,
+        ft_manager=ft_manager)
+
+    return results
 
 
 if __name__ == "__main__":
@@ -324,7 +369,9 @@ if __name__ == "__main__":
 
     reporter = CLIReporter(
         parameter_columns=["condition", "affected_workers"],
-        metric_columns=[metric, "eval-logloss", train_metric, "n"],
+        metric_columns=[
+            metric, "eval-logloss", train_metric, "total_n", "time_total_s"
+        ],
         print_intermediate_tables=True)
 
     analysis = tune.run(
@@ -335,6 +382,7 @@ if __name__ == "__main__":
         resources_per_trial=ray_params.get_tune_resources(),
         reuse_actors=True,
         progress_reporter=reporter,
+        log_to_file=True,
         verbose=2)
 
     print(f"Best config: {analysis.best_config} "

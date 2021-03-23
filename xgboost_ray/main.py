@@ -1098,7 +1098,8 @@ def train(
 
     added_tune_callback = _try_add_tune_callback(kwargs)
     # Tune currently does not support elastic training.
-    if added_tune_callback and ray_params.elastic_training:
+    if added_tune_callback and ray_params.elastic_training and not bool(
+            os.getenv("RXGB_ALLOW_ELASTIC_TUNE", "0")):
         raise ValueError("Elastic Training cannot be used with Ray Tune. "
                          "Please disable elastic_training in RayParams in "
                          "order to use xgboost_ray with Tune.")
