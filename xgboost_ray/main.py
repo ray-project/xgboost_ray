@@ -706,16 +706,14 @@ def _create_communication_processes(added_tune_callback: bool = False):
         # This forces all 3 to be on the same node.
         current_pg = get_current_placement_group()
         if current_pg is None:
-            raise RuntimeError(
-                "Trying to use the parent placement group "
-                "when it doesn't exist. This is probably a bug, "
-                "please raise an issue at "
-                "https://github.com/ray-project/xgboost_ray")
-
-        placement_option.update({
-            "placement_group": current_pg,
-            "placement_group_bundle_index": 0
-        })
+            # This means the user is not using Tune PGs after all -
+            # e.g. via setting an environment variable.
+            placement_option.update({"resources": {f"node:{node_ip}": 0.01}})
+        else:
+            placement_option.update({
+                "placement_group": current_pg,
+                "placement_group_bundle_index": 0
+            })
     else:
         placement_option.update({"resources": {f"node:{node_ip}": 0.01}})
     queue = Queue(actor_options=placement_option)  # Queue actor
