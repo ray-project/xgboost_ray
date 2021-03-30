@@ -38,7 +38,8 @@ worker_default_node_type: cpu_16_ondemand
 
 setup_commands:
     # - pip install -U git+https://github.com/ray-project/xgboost_ray#xgboost-ray
+    - pip uninstall -y xgboost_ray
+    - pip install awscli
     - pip install -U git+https://github.com/krfricke/xgboost_ray@fault-tolerance#xgboost-ray
 
 file_mounts_sync_continuously: false
-

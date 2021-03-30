@@ -1,6 +1,7 @@
 from abc import ABC
-from typing import Dict, Sequence, TYPE_CHECKING
+from typing import Dict, Sequence, TYPE_CHECKING, Any
 
+import os
 import pandas as pd
 
 if TYPE_CHECKING:
@@ -84,3 +85,11 @@ class DistributedCallbackContainer:
                       *args, **kwargs):
         for callback in self.callbacks:
             callback.after_predict(actor, predictions, *args, **kwargs)
+
+
+class EnvironmentCallback(DistributedCallback):
+    def __init__(self, env_dict: Dict[str, Any]):
+        self.env_dict = env_dict
+
+    def on_init(self, actor: "RayXGBoostActor", *args, **kwargs):
+        os.environ.update(self.env_dict)

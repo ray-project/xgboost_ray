@@ -1,8 +1,8 @@
-import glob
-import os
+from typing import List, Dict
 
 import argparse
-from typing import List, Dict
+import glob
+import os
 
 import numpy as np
 
@@ -11,6 +11,7 @@ from ray import tune
 from ray.tune import CLIReporter
 from xgboost_ray import train, RayDMatrix, RayFileType, \
     RayDeviceQuantileDMatrix, RayParams, RayShardingMode
+from xgboost_ray.callback import EnvironmentCallback
 from xgboost_ray.matrix import _get_sharding_indices
 from xgboost_ray.tests.fault_tolerance import DelayedLoadingCallback, \
     DieCallback, FaultToleranceManager
@@ -95,6 +96,10 @@ def train_ray(train_files,
         die_callback = DieCallback(ft_manager, training_delay=0.1)
         xgboost_callbacks.append(die_callback)
 
+    if aws:
+        aws_callback = EnvironmentCallback(aws)
+        distributed_callbacks.append(aws_callback)
+
     evals_result = {}
     additional_results = {}
     bst = train(
@@ -154,7 +159,7 @@ def ft_setup(workers: List[int], num_rounds: int, die_round_factor: 0.25,
     return ft_manager
 
 
-def run_experiments(config, files):
+def run_experiments(config, files, aws):
     """Ray Tune-compatible function trainable to run experiments"""
     os.environ["RXGB_ALLOW_ELASTIC_TUNE"] = "1"
 
@@ -342,6 +347,8 @@ if __name__ == "__main__":
     num_files = args.num_files
     use_gpu = args.gpu
 
+    aws = None
+
     temp_dir = None
     if args.smoke_test:
         temp_dir, files = create_parquet_in_tempdir(
@@ -353,7 +360,7 @@ if __name__ == "__main__":
         use_gpu = False
     else:
         path = args.file
-        if path.startswith("s3"):
+        if path.startswith("s3://"):
             base, num_partitions = path.split("#", maxsplit=1)
             files = [
                 f"{base}/partition={i}/part_{i}.parquet"
@@ -361,6 +368,19 @@ if __name__ == "__main__":
             ]
             print(f"Using S3 dataset with base {base} and "
                   f"{num_partitions} partitions.")
+            try:
+                aws = {
+                    "AWS_ACCESS_KEY_ID": os.environ["AWS_ACCESS_KEY_ID"],
+                    "AWS_SECRET_ACCESS_KEY": os.environ[
+                        "AWS_SECRET_ACCESS_KEY"],
+                    "AWS_SESSION_TOKEN": os.environ["AWS_SESSION_TOKEN"],
+                }
+            except IndexError as e:
+                raise ValueError(
+                    "Trying to access AWS S3, but credentials are not set "
+                    "in the environment. Did you forget to set your "
+                    "credentials?") from e
+
         elif not os.path.exists(path):
             raise ValueError(
                 f"Benchmarking data not found: {path}."
@@ -419,7 +439,7 @@ if __name__ == "__main__":
         print_intermediate_tables=True)
 
     analysis = tune.run(
-        tune.with_parameters(run_experiments, files=files),
+        tune.with_parameters(run_experiments, files=files, aws=aws),
         config=config,
         metric=metric,
         mode="min",
