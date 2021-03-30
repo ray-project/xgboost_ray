@@ -100,6 +100,7 @@ def train_ray(train_files,
     if aws:
         aws_callback = EnvironmentCallback(aws)
         distributed_callbacks.append(aws_callback)
+        os.environ.update(aws)
 
     evals_result = {}
     additional_results = {}
