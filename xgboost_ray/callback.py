@@ -93,8 +93,3 @@ class EnvironmentCallback(DistributedCallback):
 
     def on_init(self, actor, *args, **kwargs):
         os.environ.update(self.env_dict)
-
-    def before_data_loading(self, actor: "RayXGBoostActor", data: "RayDMatrix",
-                            *args, **kwargs):
-        print("DATA LOADING ENV", os.environ)
-        print("Out env", self.env_dict)

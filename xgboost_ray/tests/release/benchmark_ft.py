@@ -102,6 +102,11 @@ def train_ray(train_files,
         distributed_callbacks.append(aws_callback)
         os.environ.update(aws)
 
+    ray_params = ray_params or RayParams()
+    ray_params.num_actors = num_workers
+    ray_params.gpus_per_actor = 0 if not use_gpu else 1
+    ray_params.distributed_callbacks = distributed_callbacks
+
     evals_result = {}
     additional_results = {}
     bst = train(
@@ -110,12 +115,7 @@ def train_ray(train_files,
         evals_result=evals_result,
         additional_results=additional_results,
         num_boost_round=num_boost_round,
-        ray_params=ray_params or RayParams(
-            max_actor_restarts=2,
-            num_actors=num_workers,
-            gpus_per_actor=0 if not use_gpu else 1,
-            distributed_callbacks=distributed_callbacks,
-        ),
+        ray_params=ray_params,
         evals=[(dtrain, "train"), (deval, "eval")],
         callbacks=xgboost_callbacks,
         **kwargs)
