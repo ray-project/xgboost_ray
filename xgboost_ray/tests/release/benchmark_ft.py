@@ -30,6 +30,7 @@ def train_ray(train_files,
               ray_params=None,
               xgboost_params=None,
               ft_manager=None,
+              aws=None,
               **kwargs):
     use_device_matrix = False
     if use_gpu:
@@ -213,6 +214,7 @@ def run_experiments(config, files, aws):
             ray_params=ray_params,
             xgboost_params=xgboost_params,
             ft_manager=None,
+            aws=aws,
             early_stopping_rounds=10)
 
         return results
@@ -249,7 +251,8 @@ def run_experiments(config, files, aws):
             use_gpu=use_gpu,
             ray_params=ray_params,
             xgboost_params=xgboost_params,
-            ft_manager=None)
+            ft_manager=None,
+            aws=aws)
 
         return results
 
@@ -307,7 +310,8 @@ def run_experiments(config, files, aws):
         use_gpu=use_gpu,
         ray_params=ray_params,
         xgboost_params=xgboost_params,
-        ft_manager=ft_manager)
+        ft_manager=ft_manager,
+        aws=aws)
 
     return results
 
@@ -362,6 +366,7 @@ if __name__ == "__main__":
         path = args.file
         if path.startswith("s3://"):
             base, num_partitions = path.split("#", maxsplit=1)
+            num_partitions = int(num_partitions)
             files = [
                 f"{base}/partition={i}/part_{i}.parquet"
                 for i in range(num_partitions)
@@ -375,7 +380,7 @@ if __name__ == "__main__":
                         "AWS_SECRET_ACCESS_KEY"],
                     "AWS_SESSION_TOKEN": os.environ["AWS_SESSION_TOKEN"],
                 }
-            except IndexError as e:
+            except KeyError as e:
                 raise ValueError(
                     "Trying to access AWS S3, but credentials are not set "
                     "in the environment. Did you forget to set your "
@@ -398,8 +403,7 @@ if __name__ == "__main__":
     if args.smoke_test:
         ray.init(num_cpus=num_workers)
     else:
-        ray.init(num_cpus=8)
-        # ray.init(address="auto")
+        ray.init(address="auto")
 
     ray_params = RayParams(
         num_actors=num_workers,
