@@ -1,0 +1,44 @@
+cluster_name: xgboost_ray_release_tests_ft_cluster
+
+max_workers: 9
+
+upscaling_speed: 32
+
+idle_timeout_minutes: 15
+
+docker:
+    image: rayproject/ray:latest
+    container_name: ray_container
+    pull_before_run: true
+
+provider:
+    type: aws
+    region: us-west-2
+    availability_zone: us-west-2a
+    cache_stopped_nodes: false
+
+available_node_types:
+    cpu_16_ondemand:
+        node_config:
+            InstanceType: m5.4xlarge
+        resources: {"CPU": 16}
+        min_workers: 9
+        max_workers: 9
+
+file_mounts: {
+  "/release_tests": "./"
+}
+
+
+auth:
+    ssh_user: ubuntu
+
+head_node_type: cpu_16_ondemand
+worker_default_node_type: cpu_16_ondemand
+
+setup_commands:
+    # - pip install -U git+https://github.com/ray-project/xgboost_ray#xgboost-ray
+    - pip install -U git+https://github.com/krfricke/xgboost_ray@fault-tolerance#xgboost-ray
+
+file_mounts_sync_continuously: false
+

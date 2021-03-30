@@ -192,6 +192,26 @@ def run_experiments(config, files):
     # Dataset to train on
     sharding_mode = RayShardingMode.INTERLEAVED
 
+    if condition == "calibrate":
+        final_files = train_files
+        final_workers = num_workers
+
+        ray_params.num_actors = final_workers
+
+        bst, results = train_ray(
+            train_files=final_files,
+            eval_files=eval_files,
+            num_workers=final_workers,
+            num_boost_round=num_boost_round,
+            regression=regression,
+            use_gpu=use_gpu,
+            ray_params=ray_params,
+            xgboost_params=xgboost_params,
+            ft_manager=None,
+            early_stopping_rounds=10)
+
+        return results
+
     if condition == "fewer_workers":
         # Sanity check: Just train with fewer workers
         remove_shards = []
@@ -295,6 +315,9 @@ if __name__ == "__main__":
     parser.add_argument("num_files", type=int, help="num files")
 
     parser.add_argument(
+        "--cpu", default=0, type=int, help="num cpus per worker")
+
+    parser.add_argument(
         "--file", default="/data/parted.parquet", type=str, help="data file")
 
     parser.add_argument(
@@ -302,6 +325,12 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--gpu", action="store_true", default=False, help="gpu")
+
+    parser.add_argument(
+        "--calibrate",
+        action="store_true",
+        default=False,
+        help="calibrate boost rounds")
 
     parser.add_argument(
         "--smoke-test", action="store_true", default=False, help="smoke test")
@@ -315,7 +344,7 @@ if __name__ == "__main__":
 
     temp_dir = None
     if args.smoke_test:
-        temp_dir, path = create_parquet_in_tempdir(
+        temp_dir, files = create_parquet_in_tempdir(
             filename="smoketest.parquet",
             num_rows=args.num_workers * 500,
             num_features=4,
@@ -324,12 +353,23 @@ if __name__ == "__main__":
         use_gpu = False
     else:
         path = args.file
-        if not os.path.exists(path):
+        if path.startswith("s3"):
+            base, num_partitions = path.split("#", maxsplit=1)
+            files = [
+                f"{base}/partition={i}/part_{i}.parquet"
+                for i in range(num_partitions)
+            ]
+            print(f"Using S3 dataset with base {base} and "
+                  f"{num_partitions} partitions.")
+        elif not os.path.exists(path):
             raise ValueError(
                 f"Benchmarking data not found: {path}."
                 f"\nFIX THIS by running `python create_test_data.py` first.")
+        else:
+            files = sorted(glob.glob(f"{path}/**/*.parquet"))
+            print(f"Using local dataset with base {path} and "
+                  f"{len(files)} partitions.")
 
-    files = sorted(glob.glob(f"{path}/**/*.parquet"))
     if num_files:
         while num_files > len(files):
             files = files + files
@@ -343,7 +383,7 @@ if __name__ == "__main__":
 
     ray_params = RayParams(
         num_actors=num_workers,
-        cpus_per_actor=1,
+        cpus_per_actor=args.cpu,
         checkpoint_frequency=1,
     )
 
@@ -363,6 +403,10 @@ if __name__ == "__main__":
         "xgboost_params": {},
         "ray_params": ray_params,
     }
+
+    if args.calibrate:
+        config["condition"] = "calibrate"
+        config["affected_workers"] = 0
 
     metric = "eval-error" if not args.regression else "eval-rmse"
     train_metric = "train-error" if not args.regression else "train-rmse"
