@@ -96,9 +96,9 @@ if __name__ == "__main__":
     partition_arr = np.repeat(
         np.arange(num_partitions), repeats=rows_per_partition)
     if len(partition_arr) < len(data):
-        # If this was not evenly divided, the first partition will be larger
-        partition_arr = np.append([0] * (len(data) - len(partition_arr)),
-                                  partition_arr)
+        # If this was not evenly divided, append
+        missing = len(data) - len(partition_arr)
+        partition_arr = np.append(partition_arr, np.arange(missing))
 
     partition = pd.Series(partition_arr, copy=False, dtype=np.int32)
 
@@ -106,8 +106,12 @@ if __name__ == "__main__":
     data["partition"] = partition
 
     os.makedirs(filename, 0o755, exist_ok=True)
-    data.to_parquet(
-        filename,
-        partition_cols=["partition"],
-        engine="pyarrow",
-        partition_filename_cb=lambda key: f"part_{key[0]}.parquet")
+
+    # Write partition-wise to avoid OOM errors
+    for i in range(num_partitions):
+        part = data[partition_arr == i]
+        part.to_parquet(
+            filename,
+            partition_cols=["partition"],
+            engine="pyarrow",
+            partition_filename_cb=lambda key: f"part_{key[0]}.parquet")
