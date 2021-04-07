@@ -73,8 +73,14 @@ def readme_tune():
 
 
 if __name__ == "__main__":
+    import ray
+
+    ray.init(num_cpus=5)
+
+    print("Readme: Simple example")
     readme_simple()
     try:
+        print("Readme: Ray Tune example")
         readme_tune()
     except ImportError:
         print("Ray Tune not installed.")
