@@ -34,12 +34,13 @@ Usage
 function. To pass data, instead of using `xgb.DMatrix` you will 
 have to use `xgboost_ray.RayDMatrix`.
 
-Here is a simplified example:
+Here is a simplified example (which requires `sklearn`):
 
 ```python
 from xgboost_ray import RayDMatrix, RayParams, train
+from sklearn.datasets import load_breast_cancer
 
-train_x, train_y = None, None  # Load data here
+train_x, train_y = load_breast_cancer(return_X_y=True)
 train_set = RayDMatrix(train_x, train_y)
 
 evals_result = {}
@@ -53,7 +54,7 @@ bst = train(
     evals=[(train_set, "train")],
     verbose_eval=False,
     ray_params=RayParams(
-        num_actors=2, 
+        num_actors=2,
         cpus_per_actor=1))
 
 bst.save_model("model.xgb")
@@ -107,20 +108,21 @@ hyperparameter configuration, and each training run parallelized by itself. All 
 code to a function, and pass the function to `tune.run`. Internally, `train` will detect if `tune` is being used and will
 automatically report results to tune.
 
-Example using `xgboost_ray` with Tune:
+Example using `xgboost_ray` with Ray Tune:
 
 ```python
 from xgboost_ray import RayDMatrix, RayParams, train
+from sklearn.datasets import load_breast_cancer
 
 num_actors = 4
-num_cpus_per_actor = 4
+num_cpus_per_actor = 1
 
 ray_params = RayParams(
-                num_actors=num_actors, 
-                cpus_per_actor=num_cpus_per_actor)
+    num_actors=num_actors,
+    cpus_per_actor=num_cpus_per_actor)
 
 def train_model(config):
-    train_x, train_y = None, None  # Load data here
+    train_x, train_y = load_breast_cancer(return_X_y=True)
     train_set = RayDMatrix(train_x, train_y)
 
     evals_result = {}
@@ -147,10 +149,11 @@ config = {
 
 # Make sure to use the `get_tune_resources` method to set the `resources_per_trial`
 analysis = tune.run(
-    train_model, 
+    train_model,
     config=config,
-    metric="eval-error", 
-    mode="min", 
+    metric="train-error",
+    mode="min",
+    num_samples=4,
     resources_per_trial=ray_params.get_tune_resources())
 print("Best hyperparameters", analysis.best_config)
 ```
