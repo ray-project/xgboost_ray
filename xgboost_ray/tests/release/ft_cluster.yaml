@@ -7,7 +7,7 @@ upscaling_speed: 32
 idle_timeout_minutes: 15
 
 docker:
-    image: rayproject/ray:latest
+    image: rayproject/ray:nightly
     container_name: ray_container
     pull_before_run: true
 
@@ -39,7 +39,7 @@ worker_default_node_type: cpu_16_ondemand
 setup_commands:
     # - pip install -U git+https://github.com/ray-project/xgboost_ray#xgboost-ray
     - pip uninstall -y xgboost_ray
-    - pip install -U awscli fsspec petastorm s3fs botocore || true
+    - pip install -U awscli fsspec petastorm s3fs botocore
     - pip install -U git+https://github.com/krfricke/xgboost_ray@fault-tolerance#xgboost-ray
 
 file_mounts_sync_continuously: false
