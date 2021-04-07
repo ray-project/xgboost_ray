@@ -73,6 +73,7 @@ jobs:
         popd
         pushd examples/
         ray stop || true
+        echo "running readme.py" && python readme.py
         echo "running simple.py" && python simple.py --smoke-test
         echo "running simple_predict.py" && python simple_predict.py
         echo "running simple_modin.py" && python simple_modin.py --smoke-test
@@ -118,6 +119,7 @@ jobs:
         popd
         pushd examples/
         ray stop || true
+        echo "running readme.py" && python readme.py
         echo "running simple.py" && python simple.py --smoke-test
         echo "running simple_predict.py" && python simple_predict.py
         echo "running simple_modin.py" && python simple_modin.py --smoke-test
@@ -169,6 +171,7 @@ jobs:
         popd
         pushd examples/
         ray stop || true
+        echo "running readme.py" && python readme.py
         echo "running simple.py" && python simple.py --smoke-test
         echo "running simple_predict.py" && python simple_predict.py
         echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
