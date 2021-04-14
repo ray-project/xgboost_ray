@@ -174,6 +174,11 @@ class _RayDMatrixLoader:
     def get_data_source(self) -> Type[DataSource]:
         raise NotImplementedError
 
+    def assert_enough_shards_for_actors(self, num_actors: int):
+        """Assert that we have enough shards to split across actors."""
+        # Pass per default
+        pass
+
     def assign_shards_to_actors(self, actors: Sequence[ActorHandle]) -> bool:
         """Assign data shards to actors.
 
@@ -298,6 +303,13 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
 
         data_source = self.get_data_source()
 
+        max_num_shards = data_source.get_n(self.data)
+        if num_actors > max_num_shards:
+            raise RuntimeError(
+                f"Trying to shard data for {num_actors} actors, but the "
+                f"maximum number of shards (i.e. the number of data rows) "
+                f"is {max_num_shards}. Consider using fewer actors.")
+
         # We're doing central data loading here, so we don't pass any indices,
         # yet. Instead, we'll be selecting the rows below.
         local_df = data_source.load_data(
@@ -398,6 +410,19 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
 
         self.data_source = data_source
         return self.data_source
+
+    def assert_enough_shards_for_actors(self, num_actors: int):
+        data_source = self.get_data_source()
+
+        max_num_shards = data_source.get_n(self.data)
+        if num_actors > max_num_shards:
+            raise RuntimeError(
+                f"Trying to shard data for {num_actors} actors, but the "
+                f"maximum number of shards is {max_num_shards}. If you "
+                f"want to shard the dataset by rows, consider "
+                f"centralized loading by passing `distributed=False` to "
+                f"the `RayDMatrix`. Otherwise consider using fewer actors "
+                f"or re-partitioning your data.")
 
     def assign_shards_to_actors(self, actors: Sequence[ActorHandle]) -> bool:
         if not isinstance(self.label, str):
@@ -661,6 +686,9 @@ class RayDMatrix:
         if success:
             self.sharding = RayShardingMode.FIXED
         return success
+
+    def assert_enough_shards_for_actors(self, num_actors: int):
+        self.loader.assert_enough_shards_for_actors(num_actors=num_actors)
 
     def load_data(self,
                   num_actors: Optional[int] = None,

@@ -820,8 +820,10 @@ def _train(params: Dict,
 
     # For distributed datasets (e.g. Modin), this will initialize
     # (and fix) the assignment of data shards to actor ranks
+    dtrain.assert_enough_shards_for_actors(num_actors=ray_params.num_actors)
     dtrain.assign_shards_to_actors(_training_state.actors)
     for deval, _ in evals:
+        deval.assert_enough_shards_for_actors(num_actors=ray_params.num_actors)
         deval.assign_shards_to_actors(_training_state.actors)
 
     load_data = [dtrain] + [eval[0] for eval in evals]
@@ -870,9 +872,9 @@ def _train(params: Dict,
         if _training_state.checkpoint.iteration == -1:
             # -1 means training already finished.
             logger.error(
-                f"Trying to load continue from checkpoint, but the checkpoint"
-                f"indicates training already finished. Returning last"
-                f"checkpointed model instead.")
+                "Trying to load continue from checkpoint, but the checkpoint"
+                "indicates training already finished. Returning last"
+                "checkpointed model instead.")
             return kwargs["xgb_model"], {}, _training_state.additional_results
 
     # The callback_returns dict contains actor-rank indexed lists of

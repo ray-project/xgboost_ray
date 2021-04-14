@@ -286,6 +286,19 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
                 print("MLDataset not available in current Ray version. "
                       "Skipping part of test.")
 
+    def testTooManyActorsDistributed(self):
+        """Test error when too many actors are passed"""
+        with self.assertRaises(RuntimeError):
+            dtrain = RayDMatrix(["foo.csv"], num_actors=4, distributed=True)
+            dtrain.assert_enough_shards_for_actors(4)
+
+    def testTooManyActorsCentral(self):
+        """Test error when too many actors are passed"""
+        data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
+
+        with self.assertRaises(RuntimeError):
+            RayDMatrix(data_df, num_actors=34, distributed=False)
+
 
 if __name__ == "__main__":
     import pytest

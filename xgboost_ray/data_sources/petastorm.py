@@ -73,3 +73,7 @@ class Petastorm(DataSource):
             local_df = local_df[local_df.columns.difference(ignore)]
 
         return local_df
+
+    @staticmethod
+    def get_n(data: Any):
+        return len(list(data))
