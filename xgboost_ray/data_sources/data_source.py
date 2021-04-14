@@ -1,8 +1,9 @@
-from typing import Any, Optional, Sequence, Tuple, Dict
+from typing import Any, Optional, Sequence, Tuple, Dict, List
 
 from enum import Enum
 
 import pandas as pd
+import xgboost as xgb
 
 from ray.actor import ActorHandle
 
@@ -83,6 +84,19 @@ class DataSource:
             Pandas DataFrame.
         """
         raise NotImplementedError
+
+    @staticmethod
+    def update_feature_names(matrix: xgb.DMatrix,
+                             feature_names: Optional[List[str]]):
+        """Optionally update feature names before training/prediction
+
+        Args:
+            matrix (xgb.DMatrix): xgboost DMatrix object.
+            feature_names (List[str]): Feature names manually passed to the
+                ``RayDMatrix`` objet.
+
+        """
+        pass
 
     @staticmethod
     def convert_to_series(data: Any) -> pd.Series:
