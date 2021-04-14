@@ -93,7 +93,7 @@ class DataSource:
         Args:
             matrix (xgb.DMatrix): xgboost DMatrix object.
             feature_names (List[str]): Feature names manually passed to the
-                ``RayDMatrix`` objet.
+                ``RayDMatrix`` object.
 
         """
         pass
