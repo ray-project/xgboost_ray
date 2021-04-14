@@ -870,9 +870,9 @@ def _train(params: Dict,
         if _training_state.checkpoint.iteration == -1:
             # -1 means training already finished.
             logger.error(
-                f"Trying to load continue from checkpoint, but the checkpoint"
-                f"indicates training already finished. Returning last"
-                f"checkpointed model instead.")
+                "Trying to load continue from checkpoint, but the checkpoint"
+                "indicates training already finished. Returning last"
+                "checkpointed model instead.")
             return kwargs["xgb_model"], {}, _training_state.additional_results
 
     # The callback_returns dict contains actor-rank indexed lists of
@@ -1110,6 +1110,15 @@ def train(
             ray_params=ray_params,
             use_tree_method="tree_method" in params
             and params["tree_method"].startswith("gpu"))
+
+    tree_method = params.get("tree_method", "auto")
+    if gpus_per_actor > 0 and not tree_method.startswith("gpu_"):
+        logger.warning(
+            f"GPUs have been assigned to the actors, but the current XGBoost "
+            f"tree method is set to `{tree_method}`. Thus, GPUs will "
+            f"currently not be used. To enable GPUs usage, please set the "
+            f"`tree_method` to a GPU-compatible option, "
+            f"e.g. `gpu_hist`.")
 
     if gpus_per_actor == 0 and cpus_per_actor == 0:
         raise ValueError("cpus_per_actor and gpus_per_actor both cannot be "
