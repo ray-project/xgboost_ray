@@ -14,6 +14,7 @@ except ImportError:
 
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 
 import os
 
@@ -178,6 +179,10 @@ class _RayDMatrixLoader:
         """Assert that we have enough shards to split across actors."""
         # Pass per default
         pass
+
+    def update_matrix_properties(self, matrix: xgb.DMatrix):
+        data_source = self.get_data_source()
+        data_source.update_feature_names(matrix, self.feature_names)
 
     def assign_shards_to_actors(self, actors: Sequence[ActorHandle]) -> bool:
         """Assign data shards to actors.
@@ -747,6 +752,9 @@ class RayDMatrix:
             for name in list(self.refs[rank].keys()):
                 del self.refs[rank][name]
         self.loaded = False
+
+    def update_matrix_properties(self, matrix: xgb.DMatrix):
+        self.loader.update_matrix_properties(matrix)
 
     def __hash__(self):
         return self._uid
