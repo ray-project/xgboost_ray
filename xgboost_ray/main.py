@@ -254,6 +254,8 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
 
         matrix = xgb.DMatrix(**param)
         matrix.set_info(label_lower_bound=ll, label_upper_bound=lu)
+
+    data.update_matrix_properties(matrix)
     return matrix
 
 
@@ -1306,6 +1308,7 @@ def train(
         evals_result.update(train_evals_result)
     if isinstance(additional_results, dict):
         additional_results.update(train_additional_results)
+
     return bst
 
 
