@@ -39,3 +39,7 @@ class CSV(DataSource):
         else:
             local_df = pd.read_csv(data, **kwargs)
             return Pandas.load_data(local_df, ignore=ignore)
+
+    @staticmethod
+    def get_n(data: Any):
+        return len(list(data))

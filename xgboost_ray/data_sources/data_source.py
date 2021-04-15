@@ -125,7 +125,7 @@ class DataSource:
     @staticmethod
     def get_n(data: Any):
         """Get length of data source partitions for sharding."""
-        return len(list(data))
+        return len(data)
 
     @staticmethod
     def get_actor_shards(
