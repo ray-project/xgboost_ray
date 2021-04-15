@@ -185,7 +185,8 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_df.to_csv(data_file, header=True, index=False)
 
             self._testMatrixCreation(data_file, "label", distributed=False)
-            self._testMatrixCreation(data_file, "label", distributed=True)
+            with self.assertRaises(ValueError):
+                self._testMatrixCreation(data_file, "label", distributed=True)
 
     def testFromMultiCSVString(self):
         with tempfile.TemporaryDirectory() as dir:
