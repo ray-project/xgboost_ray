@@ -254,6 +254,8 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
 
         matrix = xgb.DMatrix(**param)
         matrix.set_info(label_lower_bound=ll, label_upper_bound=lu)
+
+    data.update_matrix_properties(matrix)
     return matrix
 
 
@@ -363,7 +365,7 @@ class RayXGBoostActor:
         self.checkpoint_frequency = checkpoint_frequency
 
         self._data: Dict[RayDMatrix, xgb.DMatrix] = {}
-        self._local_n = 0
+        self._local_n: Dict[RayDMatrix, int] = {}
 
         self._stop_event = stop_event
 
@@ -437,9 +439,9 @@ class RayXGBoostActor:
 
         param = data.get_data(self.rank, self.num_actors)
         if isinstance(param["data"], list):
-            self._local_n = sum(len(a) for a in param["data"])
+            self._local_n[data] = sum(len(a) for a in param["data"])
         else:
-            self._local_n = len(param["data"])
+            self._local_n[data] = len(param["data"])
         data.unload_data()  # Free object store
 
         matrix = _get_dmatrix(data, param)
@@ -511,7 +513,7 @@ class RayXGBoostActor:
                     result_dict.update({
                         "bst": bst,
                         "evals_result": evals_result,
-                        "train_n": self._local_n
+                        "train_n": self._local_n[dtrain]
                     })
             except XGBoostError:
                 # Silent fail, will be raised as RayXGBoostTrainingStopped
@@ -1306,6 +1308,7 @@ def train(
         evals_result.update(train_evals_result)
     if isinstance(additional_results, dict):
         additional_results.update(train_additional_results)
+
     return bst
 
 
