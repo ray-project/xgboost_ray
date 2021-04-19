@@ -185,7 +185,8 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_df.to_csv(data_file, header=True, index=False)
 
             self._testMatrixCreation(data_file, "label", distributed=False)
-            self._testMatrixCreation(data_file, "label", distributed=True)
+            with self.assertRaises(ValueError):
+                self._testMatrixCreation(data_file, "label", distributed=True)
 
     def testFromMultiCSVString(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -264,23 +265,33 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testDetectDistributed(self):
         with tempfile.TemporaryDirectory() as dir:
-            data_file = os.path.join(dir, "file.parquet")
+            parquet_file = os.path.join(dir, "file.parquet")
+            csv_file = os.path.join(dir, "file.csv")
 
             data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
             data_df["label"] = pd.Series(self.y)
 
-            data_df.to_parquet(data_file)
+            data_df.to_parquet(parquet_file)
+            data_df.to_csv(csv_file)
 
-            mat = RayDMatrix(data_file, lazy=True)
+            mat = RayDMatrix(parquet_file, lazy=True)
             self.assertTrue(mat.distributed)
 
-            mat = RayDMatrix([data_file] * 3, lazy=True)
+            mat = RayDMatrix(csv_file, lazy=True)
+            # Single CSV files should not be distributed
+            self.assertFalse(mat.distributed)
+
+            mat = RayDMatrix([parquet_file] * 3, lazy=True)
+            self.assertTrue(mat.distributed)
+
+            mat = RayDMatrix([csv_file] * 3, lazy=True)
             self.assertTrue(mat.distributed)
 
             try:
                 from ray.util import data as ml_data
                 mat = RayDMatrix(
-                    ml_data.read_parquet(data_file, num_shards=1), lazy=True)
+                    ml_data.read_parquet(parquet_file, num_shards=1),
+                    lazy=True)
                 self.assertTrue(mat.distributed)
             except ImportError:
                 print("MLDataset not available in current Ray version. "

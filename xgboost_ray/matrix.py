@@ -321,7 +321,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
         # We're doing central data loading here, so we don't pass any indices,
         # yet. Instead, we'll be selecting the rows below.
         local_df = data_source.load_data(
-            self.data, ignore=self.ignore, indices=None)
+            self.data, ignore=self.ignore, indices=None, **self.kwargs)
         x, y, w, b, ll, lu = self._split_dataframe(
             local_df, data_source=data_source)
 
@@ -479,7 +479,10 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                     "got None")
             rank_shards = self.actor_shards[rank]
             local_df = data_source.load_data(
-                self.data, indices=rank_shards, ignore=self.ignore)
+                self.data,
+                indices=rank_shards,
+                ignore=self.ignore,
+                **self.kwargs)
             x, y, w, b, ll, lu = self._split_dataframe(
                 local_df, data_source=data_source)
 
@@ -496,7 +499,10 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 n = 0
             else:
                 local_df = data_source.load_data(
-                    self.data, ignore=self.ignore, indices=indices)
+                    self.data,
+                    ignore=self.ignore,
+                    indices=indices,
+                    **self.kwargs)
                 x, y, w, b, ll, lu = self._split_dataframe(
                     local_df, data_source=data_source)
 
@@ -829,7 +835,8 @@ def _can_load_distributed(source: Data) -> bool:
         return True
     elif isinstance(source, str):
         # Strings should point to files or URLs
-        return True
+        # Usually parquet files point to directories
+        return source.endswith(".parquet")
     elif isinstance(source, Sequence):
         # Sequence of strings should point to files or URLs
         return isinstance(source[0], str)
@@ -847,7 +854,6 @@ def _detect_distributed(source: Data) -> bool:
     """Returns True if we should try to use distributed data loading"""
     from xgboost_ray.data_sources.ml_dataset import MLDataset
     from xgboost_ray.data_sources.modin import Modin
-
     if not _can_load_distributed(source):
         return False
     if MLDataset.is_data_type(source):
@@ -862,6 +868,7 @@ def _detect_distributed(source: Data) -> bool:
         # `distributed=True` to the RayDMatrix object.
         return False
 
+    # Otherwise, assume distributed loading is possible
     return True
 
 
