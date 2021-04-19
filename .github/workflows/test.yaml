@@ -180,7 +180,7 @@ jobs:
   test_linux_cutting_edge:
     # Tests on cutting edge, i.e. latest Ray master, latest XGBoost master
     runs-on: ubuntu-latest
-    timeout-minutes: 14
+    timeout-minutes: 20
     strategy:
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
@@ -206,21 +206,23 @@ jobs:
     - name: Install Ubuntu system dependencies
       run: |
         sudo apt-get install -y --no-install-recommends ninja-build
+    - name: Install package
+      run: |
+        python -m pip install -e .
+    - name: Clone XGBoost repo
+      uses: actions/checkout@v2
+      with:
+        repository: dmlc/xgboost
+        path: xgboost
+        submodules: true
     - name: Install XGBoost from source
       shell: bash -l {0}
       run: |
-        git clone https://github.com/dmlc/xgboost.git ~/xgboost
-        pushd ~/xgboost
-        git submodule init
-        git submodule update
-        cd python-package
+        pushd ${GITHUB_WORKSPACE}/xgboost/python-package
         python --version
         python setup.py sdist
         pip install -v ./dist/xgboost-*.tar.gz
         popd
-    - name: Install package
-      run: |
-        python -m pip install -e .
     - name: Print environment info
       run: |
         ./xgboost_ray/tests/env_info.sh
