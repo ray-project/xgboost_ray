@@ -210,7 +210,10 @@ jobs:
       shell: bash -l {0}
       run: |
         git clone https://github.com/dmlc/xgboost.git ~/xgboost
-        pushd ~/xgboost/python-package
+        pushd ~/xgboost
+        git submodule init
+        git submodule update
+        cd python-package
         python --version
         python setup.py sdist
         pip install -v ./dist/xgboost-*.tar.gz
