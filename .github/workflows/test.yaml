@@ -176,3 +176,68 @@ jobs:
         echo "running simple_predict.py" && python simple_predict.py
         echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
       # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
+
+  test_linux_cutting_edge:
+    # Tests on cutting edge, i.e. latest Ray master, latest XGBoost master
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    strategy:
+      matrix:
+        python-version: [3.6.9, 3.7, 3.8]
+        include:
+          - python-version: 3.6.9
+            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp36-cp36m-manylinux2014_x86_64.whl
+          - python-version: 3.7
+            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl
+          - python-version: 3.8
+            ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp38-cp38-manylinux2014_x86_64.whl
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install codecov
+        python -m pip install -U ${{ matrix.ray-wheel }}
+        if [ -f requirements-test.txt ]; then python -m pip install -r requirements-test.txt; fi
+    - name: Install Ubuntu system dependencies
+      run: |
+        sudo apt-get install -y --no-install-recommends ninja-build
+    - name: Install XGBoost from source
+      shell: bash -l {0}
+      run: |
+        git clone https://github.com/dmlc/xgboost.git ~/xgboost
+        pushd ~/xgboost/python-package
+        python --version
+        python setup.py sdist
+        pip install -v ./dist/xgboost-*.tar.gz
+        popd
+    - name: Install package
+      run: |
+        python -m pip install -e .
+    - name: Print environment info
+      run: |
+        ./xgboost_ray/tests/env_info.sh
+    - name: Test with pytest
+      run: |
+        pushd xgboost_ray/tests
+        python -m pytest -vv -s --log-cli-level=DEBUG --durations=0 -x test_colocation.py
+        python -m pytest -v --durations=0 -x test_matrix.py
+        python -m pytest -v --durations=0 -x test_data_source.py
+        python -m pytest -v --durations=0 -x test_xgboost_api.py
+        python -m pytest -v --durations=0 -x test_fault_tolerance.py
+        python -m pytest -v --durations=0 -x test_end_to_end.py
+        python -m pytest -v --durations=0 -x test_tune.py
+        echo "running smoke test on benchmark_cpu_gpu.py" && python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
+        popd
+        pushd examples/
+        ray stop || true
+        echo "running readme.py" && python readme.py
+        echo "running simple.py" && python simple.py --smoke-test
+        echo "running simple_predict.py" && python simple_predict.py
+        echo "running simple_modin.py" && python simple_modin.py --smoke-test
+        echo "running simple_tune.py" && python simple_tune.py --smoke-test
+        echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
