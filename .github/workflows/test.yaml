@@ -59,27 +59,12 @@ jobs:
     - name: Print environment info
       run: |
         ./xgboost_ray/tests/env_info.sh
-    - name: Test with pytest
+    - name: Run tests
       run: |
-        pushd xgboost_ray/tests
-        python -m pytest -vv -s --log-cli-level=DEBUG --durations=0 -x test_colocation.py
-        python -m pytest -v --durations=0 -x test_matrix.py
-        python -m pytest -v --durations=0 -x test_data_source.py
-        python -m pytest -v --durations=0 -x test_xgboost_api.py
-        python -m pytest -v --durations=0 -x test_fault_tolerance.py
-        python -m pytest -v --durations=0 -x test_end_to_end.py
-        python -m pytest -v --durations=0 -x test_tune.py
-        echo "running smoke test on benchmark_cpu_gpu.py" && python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
-        popd
-        pushd examples/
-        ray stop || true
-        echo "running readme.py" && python readme.py
-        echo "running simple.py" && python simple.py --smoke-test
-        echo "running simple_predict.py" && python simple_predict.py
-        echo "running simple_modin.py" && python simple_modin.py --smoke-test
-        echo "running simple_tune.py" && python simple_tune.py --smoke-test
-        echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
-      # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
+        bash ./run_ci_tests.sh
+    - name: Run examples
+      run: |
+        bash ./run_ci_examples.sh
 
   test_linux_ray_release:
     runs-on: ubuntu-latest
@@ -105,27 +90,12 @@ jobs:
     - name: Print environment info
       run: |
         ./xgboost_ray/tests/env_info.sh
-    - name: Test with pytest
+    - name: Run tests
       run: |
-        pushd xgboost_ray/tests
-        python -m pytest -vv -s --log-cli-level=DEBUG --durations=0 -x test_colocation.py
-        python -m pytest -v --durations=0 -x test_matrix.py
-        python -m pytest -v --durations=0 -x test_data_source.py
-        python -m pytest -v --durations=0 -x test_xgboost_api.py
-        python -m pytest -v --durations=0 -x test_fault_tolerance.py
-        python -m pytest -v --durations=0 -x test_end_to_end.py
-        python -m pytest -v --durations=0 -x test_tune.py
-        echo "running smoke test on benchmark_cpu_gpu.py" && python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
-        popd
-        pushd examples/
-        ray stop || true
-        echo "running readme.py" && python readme.py
-        echo "running simple.py" && python simple.py --smoke-test
-        echo "running simple_predict.py" && python simple_predict.py
-        echo "running simple_modin.py" && python simple_modin.py --smoke-test
-        echo "running simple_tune.py" && python simple_tune.py --smoke-test
-        echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
-      # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
+        bash ./run_ci_tests.sh
+    - name: Run examples
+      run: |
+        bash ./run_ci_examples.sh
 
   test_linux_compat:
     # Test compatibility when some optional libraries are missing
@@ -158,24 +128,12 @@ jobs:
     - name: Print environment info
       run: |
         ./xgboost_ray/tests/env_info.sh
-    - name: Test with pytest
+    - name: Run tests
       run: |
-        pushd xgboost_ray/tests
-        python -m pytest -vv -s --log-cli-level=DEBUG --durations=0 -x test_colocation.py
-        python -m pytest -v --durations=0 -x test_matrix.py
-        python -m pytest -v --durations=0 -x test_data_source.py
-        python -m pytest -v --durations=0 -x test_xgboost_api.py
-        python -m pytest -v --durations=0 -x test_fault_tolerance.py
-        python -m pytest -v --durations=0 -x test_end_to_end.py
-        echo "running smoke test on benchmark_cpu_gpu.py" && python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
-        popd
-        pushd examples/
-        ray stop || true
-        echo "running readme.py" && python readme.py
-        echo "running simple.py" && python simple.py --smoke-test
-        echo "running simple_predict.py" && python simple_predict.py
-        echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
-      # for f in *.py; do echo "running $f" && python "$f" || exit 1 ; done
+        bash ./run_ci_tests.sh --no-tune
+    - name: Run examples
+      run: |
+        bash ./run_ci_examples.sh --no-tune
 
   test_linux_cutting_edge:
     # Tests on cutting edge, i.e. latest Ray master, latest XGBoost master
@@ -226,23 +184,9 @@ jobs:
     - name: Print environment info
       run: |
         ./xgboost_ray/tests/env_info.sh
-    - name: Test with pytest
+    - name: Run tests
       run: |
-        pushd xgboost_ray/tests
-        python -m pytest -vv -s --log-cli-level=DEBUG --durations=0 -x test_colocation.py
-        python -m pytest -v --durations=0 -x test_matrix.py
-        python -m pytest -v --durations=0 -x test_data_source.py
-        python -m pytest -v --durations=0 -x test_xgboost_api.py
-        python -m pytest -v --durations=0 -x test_fault_tolerance.py
-        python -m pytest -v --durations=0 -x test_end_to_end.py
-        python -m pytest -v --durations=0 -x test_tune.py
-        echo "running smoke test on benchmark_cpu_gpu.py" && python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test
-        popd
-        pushd examples/
-        ray stop || true
-        echo "running readme.py" && python readme.py
-        echo "running simple.py" && python simple.py --smoke-test
-        echo "running simple_predict.py" && python simple_predict.py
-        echo "running simple_modin.py" && python simple_modin.py --smoke-test
-        echo "running simple_tune.py" && python simple_tune.py --smoke-test
-        echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
+        bash ./run_ci_tests.sh
+    - name: Run examples
+      run: |
+        bash ./run_ci_examples.sh
