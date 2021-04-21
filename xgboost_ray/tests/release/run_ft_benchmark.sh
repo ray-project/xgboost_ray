@@ -3,7 +3,14 @@ if [ ! -f "./.anyscale.yaml" ]; then
   exit 1
 fi
 
-CMD="python ~/xgboost_tests/benchmark_ft.py $*"
+ANYSCALE_CMD="python ~/xgboost_tests/benchmark_ft.py $*"
 
-echo Running: anyscale exec --tmux -- "${CMD}"
-anyscale exec --tmux -- "${CMD}"
+SESSION_STR=""
+if [ -n "${SESSION_NAME}" ]; then
+  SESSION_STR="--session-name ${SESSION_NAME}"
+fi
+
+CMD="anyscale exec --tmux ${SESSION_STR} -- ${ANYSCALE_CMD}"
+
+echo "Running: ${CMD}"
+${CMD}
