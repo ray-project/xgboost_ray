@@ -14,6 +14,7 @@ except ImportError:
 
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 
 import os
 
@@ -150,6 +151,8 @@ class _RayDMatrixLoader:
         self.ignore = ignore
         self.kwargs = kwargs
 
+        self._cached_n = None
+
         check = None
         if isinstance(data, str):
             check = data
@@ -173,6 +176,15 @@ class _RayDMatrixLoader:
 
     def get_data_source(self) -> Type[DataSource]:
         raise NotImplementedError
+
+    def assert_enough_shards_for_actors(self, num_actors: int):
+        """Assert that we have enough shards to split across actors."""
+        # Pass per default
+        pass
+
+    def update_matrix_properties(self, matrix: xgb.DMatrix):
+        data_source = self.get_data_source()
+        data_source.update_feature_names(matrix, self.feature_names)
 
     def assign_shards_to_actors(self, actors: Sequence[ActorHandle]) -> bool:
         """Assign data shards to actors.
@@ -281,6 +293,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                         type(self.data), type(self.label)))
 
         self.data_source = data_source
+        self._cached_n = data_source.get_n(self.data)
         return self.data_source
 
     def load_data(self,
@@ -298,10 +311,17 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
 
         data_source = self.get_data_source()
 
+        max_num_shards = self._cached_n or data_source.get_n(self.data)
+        if num_actors > max_num_shards:
+            raise RuntimeError(
+                f"Trying to shard data for {num_actors} actors, but the "
+                f"maximum number of shards (i.e. the number of data rows) "
+                f"is {max_num_shards}. Consider using fewer actors.")
+
         # We're doing central data loading here, so we don't pass any indices,
         # yet. Instead, we'll be selecting the rows below.
         local_df = data_source.load_data(
-            self.data, ignore=self.ignore, indices=None)
+            self.data, ignore=self.ignore, indices=None, **self.kwargs)
         x, y, w, b, ll, lu = self._split_dataframe(
             local_df, data_source=data_source)
 
@@ -397,7 +417,21 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 "CSV or Parquet sources as well as Ray MLDatasets.")
 
         self.data_source = data_source
+        self._cached_n = data_source.get_n(self.data)
         return self.data_source
+
+    def assert_enough_shards_for_actors(self, num_actors: int):
+        data_source = self.get_data_source()
+
+        max_num_shards = self._cached_n or data_source.get_n(self.data)
+        if num_actors > max_num_shards:
+            raise RuntimeError(
+                f"Trying to shard data for {num_actors} actors, but the "
+                f"maximum number of shards is {max_num_shards}. If you "
+                f"want to shard the dataset by rows, consider "
+                f"centralized loading by passing `distributed=False` to "
+                f"the `RayDMatrix`. Otherwise consider using fewer actors "
+                f"or re-partitioning your data.")
 
     def assign_shards_to_actors(self, actors: Sequence[ActorHandle]) -> bool:
         if not isinstance(self.label, str):
@@ -445,7 +479,10 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                     "got None")
             rank_shards = self.actor_shards[rank]
             local_df = data_source.load_data(
-                self.data, indices=rank_shards, ignore=self.ignore)
+                self.data,
+                indices=rank_shards,
+                ignore=self.ignore,
+                **self.kwargs)
             x, y, w, b, ll, lu = self._split_dataframe(
                 local_df, data_source=data_source)
 
@@ -454,7 +491,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             else:
                 n = len(x)
         else:
-            n = data_source.get_n(self.data)
+            n = self._cached_n or data_source.get_n(self.data)
             indices = _get_sharding_indices(sharding, rank, num_actors, n)
 
             if not indices:
@@ -462,7 +499,10 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 n = 0
             else:
                 local_df = data_source.load_data(
-                    self.data, ignore=self.ignore, indices=indices)
+                    self.data,
+                    ignore=self.ignore,
+                    indices=indices,
+                    **self.kwargs)
                 x, y, w, b, ll, lu = self._split_dataframe(
                     local_df, data_source=data_source)
 
@@ -662,6 +702,9 @@ class RayDMatrix:
             self.sharding = RayShardingMode.FIXED
         return success
 
+    def assert_enough_shards_for_actors(self, num_actors: int):
+        self.loader.assert_enough_shards_for_actors(num_actors=num_actors)
+
     def load_data(self,
                   num_actors: Optional[int] = None,
                   rank: Optional[int] = None):
@@ -719,6 +762,9 @@ class RayDMatrix:
             for name in list(self.refs[rank].keys()):
                 del self.refs[rank][name]
         self.loaded = False
+
+    def update_matrix_properties(self, matrix: xgb.DMatrix):
+        self.loader.update_matrix_properties(matrix)
 
     def __hash__(self):
         return self._uid
@@ -789,7 +835,8 @@ def _can_load_distributed(source: Data) -> bool:
         return True
     elif isinstance(source, str):
         # Strings should point to files or URLs
-        return True
+        # Usually parquet files point to directories
+        return source.endswith(".parquet")
     elif isinstance(source, Sequence):
         # Sequence of strings should point to files or URLs
         return isinstance(source[0], str)
@@ -807,7 +854,6 @@ def _detect_distributed(source: Data) -> bool:
     """Returns True if we should try to use distributed data loading"""
     from xgboost_ray.data_sources.ml_dataset import MLDataset
     from xgboost_ray.data_sources.modin import Modin
-
     if not _can_load_distributed(source):
         return False
     if MLDataset.is_data_type(source):
@@ -822,6 +868,7 @@ def _detect_distributed(source: Data) -> bool:
         # `distributed=True` to the RayDMatrix object.
         return False
 
+    # Otherwise, assume distributed loading is possible
     return True
 
 

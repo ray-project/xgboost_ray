@@ -1,8 +1,9 @@
-from typing import Any, Optional, Sequence, Tuple, Dict
+from typing import Any, Optional, Sequence, Tuple, Dict, List
 
 from enum import Enum
 
 import pandas as pd
+import xgboost as xgb
 
 from ray.actor import ActorHandle
 
@@ -85,6 +86,19 @@ class DataSource:
         raise NotImplementedError
 
     @staticmethod
+    def update_feature_names(matrix: xgb.DMatrix,
+                             feature_names: Optional[List[str]]):
+        """Optionally update feature names before training/prediction
+
+        Args:
+            matrix (xgb.DMatrix): xgboost DMatrix object.
+            feature_names (List[str]): Feature names manually passed to the
+                ``RayDMatrix`` object.
+
+        """
+        pass
+
+    @staticmethod
     def convert_to_series(data: Any) -> pd.Series:
         """Convert data from the data source type to a pandas series"""
         if isinstance(data, pd.DataFrame):
@@ -111,7 +125,7 @@ class DataSource:
     @staticmethod
     def get_n(data: Any):
         """Get length of data source partitions for sharding."""
-        return len(list(data))
+        return len(data)
 
     @staticmethod
     def get_actor_shards(
