@@ -25,6 +25,21 @@ def readme_simple():
         evals_result["train"]["error"][-1]))
 
 
+def readme_predict():
+    from xgboost_ray import RayDMatrix, RayParams, predict
+    from sklearn.datasets import load_breast_cancer
+    import xgboost as xgb
+
+    data, labels = load_breast_cancer(return_X_y=True)
+
+    dpred = RayDMatrix(data, labels)
+
+    bst = xgb.Booster(model_file="model.xgb")
+    pred_ray = predict(bst, dpred, ray_params=RayParams(num_actors=2))
+
+    print(pred_ray)
+
+
 def readme_tune():
     from xgboost_ray import RayDMatrix, RayParams, train
     from sklearn.datasets import load_breast_cancer
@@ -79,6 +94,7 @@ if __name__ == "__main__":
 
     print("Readme: Simple example")
     readme_simple()
+    readme_predict()
     try:
         print("Readme: Ray Tune example")
         readme_tune()
