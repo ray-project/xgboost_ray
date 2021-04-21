@@ -3,14 +3,19 @@ if [ ! -f "./.anyscale.yaml" ]; then
   exit 1
 fi
 
-ANYSCALE_CMD="python ~/xgboost_tests/benchmark_cpu_gpu.py $*"
+ANYSCALE_CMD="python ~/xgboost_tests/benchmark_ft.py $*"
 
 SESSION_STR=""
 if [ -n "${SESSION_NAME}" ]; then
   SESSION_STR="--session-name ${SESSION_NAME}"
 fi
 
-CMD="anyscale exec --tmux ${SESSION_STR} -- ${ANYSCALE_CMD}"
+TMUX="--tmux"
+if [ "${NO_TMUX}" = "1" ]; then
+  TMUX=""
+fi
+
+CMD="anyscale exec ${TMUX} ${SESSION_STR} -- ${ANYSCALE_CMD}"
 
 echo "Running: ${CMD}"
 ${CMD}

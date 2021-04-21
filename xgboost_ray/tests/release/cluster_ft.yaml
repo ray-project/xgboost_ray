@@ -39,6 +39,6 @@ worker_default_node_type: cpu_16_ondemand
 setup_commands:
     - pip install -U awscli fsspec petastorm s3fs botocore
     - pip install -U {{env["RAY_WHEEL"] | default("ray")}}
-    - /bin/bash ~/xgboost_tests/setup_xgboost.sh
+    - export XGBOOST_RAY_PACKAGE="{{env["XGBOOST_RAY_PACKAGE"] | default("xgboost_ray")}}" && /bin/bash ~/xgboost_tests/setup_xgboost.sh
 
 file_mounts_sync_continuously: false

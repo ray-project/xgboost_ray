@@ -41,4 +41,4 @@ file_mounts_sync_continuously: false
 setup_commands:
     - pip install -U pyarrow cupy-cuda101
     - pip install -U {{env["RAY_WHEEL"] | default("ray")}}
-    - /bin/bash ~/xgboost_tests/setup_xgboost.sh
+    - export XGBOOST_RAY_PACKAGE="{{env["XGBOOST_RAY_PACKAGE"] | default("xgboost_ray")}}" && /bin/bash ~/xgboost_tests/setup_xgboost.sh

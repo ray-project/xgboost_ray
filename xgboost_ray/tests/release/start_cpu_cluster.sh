@@ -3,8 +3,8 @@ if [ ! -f "./.anyscale.yaml" ]; then
   exit 1
 fi
 
-export XGBOOST_RAY_PACKAGE="git+https://github.com/krfricke/xgboost_ray@fault-tolerance#xgboost-ray"
-export NUM_WORKERS=4
+export XGBOOST_RAY_PACKAGE="${XGBOOST_RAY_PACKAGE:-xgboost_ray}"
+export NUM_WORKERS="${NUM_WORKERS:-3}"
 
 SESSION_NAME=${SESSION_NAME:-xgboost_ray_release_cpu_$(date +%s)}
 
