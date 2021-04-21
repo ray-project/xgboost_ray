@@ -539,7 +539,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
         delay_callback = DelayedLoadingCallback(
             ft_manager, reload_data=True, sleep_time=0.1)
-        die_callback = DieCallback(ft_manager, training_delay=0.1)
+        die_callback = DieCallback(ft_manager, training_delay=0.25)
 
         res_1 = {}
         train(
