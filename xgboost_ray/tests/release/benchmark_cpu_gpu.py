@@ -80,11 +80,7 @@ def train_ray(path,
             max_actor_restarts=2,
             num_actors=num_workers,
             cpus_per_actor=4 if not smoke_test else 1,
-            gpus_per_actor=0 if not use_gpu else 1,
-            resources_per_actor={
-                "actor_cpus": 4 if not smoke_test else 0,
-                "actor_gpus": 0 if not use_gpu else 1
-            }),
+            gpus_per_actor=0 if not use_gpu else 1),
         evals=[(dtrain, "train")],
         **kwargs)
     taken = time.time() - start
