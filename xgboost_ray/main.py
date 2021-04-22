@@ -184,7 +184,7 @@ class RabitContext:
 
 def _ray_get_actor_cpus():
     # Get through resource IDs
-    resource_ids = ray.get_resource_ids()
+    resource_ids = ray.worker.get_resource_ids()
     if "CPU" in resource_ids:
         return sum(cpu[1] for cpu in resource_ids["CPU"])
     return None
@@ -468,7 +468,8 @@ class RayXGBoostActor:
                 local_params["num_threads"] = num_threads
             else:
                 local_params["nthread"] = sum(
-                    num for _, num in ray.get_resource_ids().get("CPU", []))
+                    num
+                    for _, num in ray.worker.get_resource_ids().get("CPU", []))
 
         if dtrain not in self._data:
             self.load_data(dtrain)
