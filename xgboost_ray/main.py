@@ -14,13 +14,7 @@ from xgboost.core import XGBoostError
 
 from xgboost_ray.callback import DistributedCallback, \
     DistributedCallbackContainer
-
-try:
-    from xgboost.callback import TrainingCallback
-except ImportError:
-    print(f"xgboost_ray requires xgboost>=1.3 to work. Got version "
-          f"{xgb.__version__}. Install latest release with "
-          f"`pip install -U xgboost`.")
+from xgboost_ray.compat import TrainingCallback, RabitTracker, LEGACY_CALLBACK
 
 try:
     import ray
@@ -43,7 +37,8 @@ from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources, \
     TUNE_USING_PG, is_session_enabled
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
-    RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes
+    RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes, \
+    LEGACY_MATRIX
 from xgboost_ray.session import init_session, put_queue, \
     set_session_queue
 
@@ -103,7 +98,7 @@ def _is_client_connected() -> bool:
         return False
 
 
-class _RabitTracker(xgb.RabitTracker):
+class _RabitTracker(RabitTracker):
     """
     This method overwrites the xgboost-provided RabitTracker to switch
     from a daemon thread to a multiprocessing Process. This is so that
@@ -211,7 +206,7 @@ def _set_omp_num_threads():
 
 
 def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
-    if isinstance(data, RayDeviceQuantileDMatrix):
+    if not LEGACY_MATRIX and isinstance(data, RayDeviceQuantileDMatrix):
         # If we only got a single data shard, create a list so we can
         # iterate over it
         if not isinstance(param["data"], list):
@@ -252,8 +247,13 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
         ll = param.pop("label_lower_bound", None)
         lu = param.pop("label_upper_bound", None)
 
+        if LEGACY_MATRIX:
+            param.pop("base_margin", None)
+
         matrix = xgb.DMatrix(**param)
-        matrix.set_info(label_lower_bound=ll, label_upper_bound=lu)
+
+        if not LEGACY_MATRIX:
+            matrix.set_info(label_lower_bound=ll, label_upper_bound=lu)
 
     data.update_matrix_properties(matrix)
     return matrix
@@ -504,6 +504,10 @@ class RayXGBoostActor:
         def _train():
             try:
                 with RabitContext(str(id(self)), rabit_args):
+                    if LEGACY_CALLBACK:
+                        for xgb_callback in kwargs.get("callbacks", []):
+                            xgb_callback.before_training(None)
+
                     bst = xgb.train(
                         local_params,
                         local_dtrain,
@@ -511,6 +515,11 @@ class RayXGBoostActor:
                         evals=local_evals,
                         evals_result=evals_result,
                         **kwargs)
+
+                    if LEGACY_CALLBACK:
+                        for xgb_callback in kwargs.get("callbacks", []):
+                            xgb_callback.after_training(bst)
+
                     result_dict.update({
                         "bst": bst,
                         "evals_result": evals_result,

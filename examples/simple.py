@@ -34,7 +34,7 @@ def main(cpus_per_actor, num_actors):
         evals=[(test_set, "eval")],
         evals_result=evals_result,
         ray_params=RayParams(
-            max_actor_restarts=1,
+            max_actor_restarts=0,
             gpus_per_actor=0,
             cpus_per_actor=cpus_per_actor,
             num_actors=num_actors),

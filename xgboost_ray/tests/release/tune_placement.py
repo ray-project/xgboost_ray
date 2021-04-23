@@ -25,7 +25,7 @@ import shutil
 import time
 from collections import defaultdict
 
-from xgboost.callback import TrainingCallback
+from xgboost_ray.compat import TrainingCallback
 
 import ray
 

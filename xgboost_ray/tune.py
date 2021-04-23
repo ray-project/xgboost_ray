@@ -9,8 +9,7 @@ except ImportError:
 
 import logging
 
-from xgboost.callback import TrainingCallback
-
+from xgboost_ray.compat import TrainingCallback
 from xgboost_ray.session import put_queue, get_actor_rank
 from xgboost_ray.util import Unavailable
 
