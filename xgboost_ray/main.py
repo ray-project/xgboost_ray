@@ -506,7 +506,8 @@ class RayXGBoostActor:
                 with RabitContext(str(id(self)), rabit_args):
                     if LEGACY_CALLBACK:
                         for xgb_callback in kwargs.get("callbacks", []):
-                            xgb_callback.before_training(None)
+                            if isinstance(xgb_callback, TrainingCallback):
+                                xgb_callback.before_training(None)
 
                     bst = xgb.train(
                         local_params,
@@ -518,7 +519,8 @@ class RayXGBoostActor:
 
                     if LEGACY_CALLBACK:
                         for xgb_callback in kwargs.get("callbacks", []):
-                            xgb_callback.after_training(bst)
+                            if isinstance(xgb_callback, TrainingCallback):
+                                xgb_callback.after_training(bst)
 
                     result_dict.update({
                         "bst": bst,

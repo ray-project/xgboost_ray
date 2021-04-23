@@ -10,7 +10,7 @@ except ImportError:
         f"(version {xgb.__version__}). While we try to support "
         f"older XGBoost versions, please note that this library is only "
         f"fully tested and supported for XGBoost >= 1.4. Please consider "
-        f"upgrading your XGBoost version (`pip install -u xgboost`).")
+        f"upgrading your XGBoost version (`pip install -U xgboost`).")
 
     class TrainingCallback:
         def __init__(self):
