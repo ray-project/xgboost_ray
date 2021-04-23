@@ -73,11 +73,7 @@ def tune_test(path,
         max_actor_restarts=0,
         num_actors=num_workers,
         cpus_per_actor=1,
-        gpus_per_actor=0 if not use_gpu else 1,
-        resources_per_actor={
-            "actor_cpus": 1 if not smoke_test else 0,
-            "actor_gpus": 0 if not use_gpu else 1
-        })
+        gpus_per_actor=0 if not use_gpu else 1)
 
     def local_train(config):
         temp_dir = None
