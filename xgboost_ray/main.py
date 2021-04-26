@@ -1067,8 +1067,6 @@ def train(
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
-    _maybe_print_legacy_warning()
-
     if _remote is None:
         _remote = _is_client_connected() and \
                   not is_session_enabled()
@@ -1105,6 +1103,8 @@ def train(
         if isinstance(additional_results, dict):
             additional_results.update(train_additional_results)
         return bst
+
+    _maybe_print_legacy_warning()
 
     start_time = time.time()
 
@@ -1428,8 +1428,6 @@ def predict(model: xgb.Booster,
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
-    _maybe_print_legacy_warning()
-
     if _remote is None:
         _remote = _is_client_connected() and \
                   not is_session_enabled()
@@ -1441,6 +1439,8 @@ def predict(model: xgb.Booster,
         return ray.get(
             ray.remote(num_cpus=0)(predict).remote(
                 model, data, ray_params, _remote=False, **kwargs))
+
+    _maybe_print_legacy_warning()
 
     ray_params = _validate_ray_params(ray_params)
 
