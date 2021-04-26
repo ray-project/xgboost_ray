@@ -1,16 +1,9 @@
 import xgboost as xgb
-import logging
 
 try:
     from xgboost.callback import TrainingCallback
     LEGACY_CALLBACK = False
 except ImportError:
-    logging.warning(
-        f"You are using `xgboost_ray` with a legacy XGBoost version "
-        f"(version {xgb.__version__}). While we try to support "
-        f"older XGBoost versions, please note that this library is only "
-        f"fully tested and supported for XGBoost >= 1.4. Please consider "
-        f"upgrading your XGBoost version (`pip install -U xgboost`).")
 
     class TrainingCallback:
         def __init__(self):

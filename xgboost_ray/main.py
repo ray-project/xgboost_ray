@@ -91,6 +91,16 @@ def _assert_ray_support():
             "Try: `pip install ray`")
 
 
+def _maybe_print_legacy_warning():
+    if LEGACY_MATRIX or LEGACY_CALLBACK:
+        logger.warning(
+            f"You are using `xgboost_ray` with a legacy XGBoost version "
+            f"(version {xgb.__version__}). While we try to support "
+            f"older XGBoost versions, please note that this library is only "
+            f"fully tested and supported for XGBoost >= 1.4. Please consider "
+            f"upgrading your XGBoost version (`pip install -U xgboost`).")
+
+
 def _is_client_connected() -> bool:
     try:
         return ray.util.client.ray.is_connected()
@@ -1057,6 +1067,8 @@ def train(
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
+    _maybe_print_legacy_warning()
+
     if _remote is None:
         _remote = _is_client_connected() and \
                   not is_session_enabled()
@@ -1415,6 +1427,8 @@ def predict(model: xgb.Booster,
 
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
+
+    _maybe_print_legacy_warning()
 
     if _remote is None:
         _remote = _is_client_connected() and \
