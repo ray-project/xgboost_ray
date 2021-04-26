@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 
 import xgboost as xgb
-from xgboost.callback import TrainingCallback
 
+from xgboost_ray.compat import TrainingCallback
 from xgboost_ray.session import get_actor_rank, put_queue
 
 
@@ -185,9 +185,12 @@ def _checkpoint_callback(frequency: int = 1, before_iteration_=False):
             if epoch % frequency == 0:
                 put_queue(model.save_raw())
 
-        def before_iteration(self, model, epoch, evals_log):
-            if before_iteration_:
-                self.after_iteration(model, epoch, evals_log)
+    if before_iteration_:
+
+        def _before_iteration(self, model, epoch, evals_log):
+            self.after_iteration(model, epoch, evals_log)
+
+        _CheckpointCallback.before_iteration = _before_iteration
 
     return _CheckpointCallback()
 

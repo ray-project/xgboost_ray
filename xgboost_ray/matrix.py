@@ -29,7 +29,12 @@ try:
 except ImportError:
     MLDataset = Unavailable
 
-from xgboost.core import DataIter
+try:
+    from xgboost.core import DataIter
+    LEGACY_MATRIX = False
+except ImportError:
+    DataIter = object
+    LEGACY_MATRIX = True
 
 Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series, MLDataset]
 

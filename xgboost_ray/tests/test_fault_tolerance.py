@@ -332,7 +332,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             num_boost_round=4,
             ray_params=RayParams(num_actors=2),
             additional_results=res_2,
-            xgb_model=last_checkpoint_1)
+            xgb_model=lc1)
         first_checkpoint_2 = res_2["callback_returns"][0][0]
         first_checkpoint_other_actor_2 = res_2["callback_returns"][1][0]
         last_checkpoint_2 = res_2["callback_returns"][0][-1]
