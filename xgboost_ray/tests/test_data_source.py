@@ -37,8 +37,6 @@ class ModinDataSourceTest(unittest.TestCase):
 
     def _testAssignPartitions(self, part_nodes, actor_nodes,
                               expected_actor_parts):
-        from xgboost_ray.data_sources.modin import assign_partitions_to_actors
-
         partitions = [
             ray.put(p) for p in np.array_split(self.x, len(part_nodes))
         ]
@@ -52,11 +50,18 @@ class ModinDataSourceTest(unittest.TestCase):
         def unwrap(data, *args, **kwargs):
             return data
 
+        def actor_ranks(actors):
+            return actors_to_node
+
         with patch("modin.distributed.dataframe.pandas.unwrap_partitions"
-                   ) as mocked:
-            mocked.side_effect = unwrap
-            actor_to_parts = assign_partitions_to_actors(
-                node_to_part, actor_rank_ips=actors_to_node)
+                   ) as mock_unwrap, patch(
+                       "xgboost_ray.data_sources.modin.get_actor_rank_ips"
+                   ) as mock_ranks:
+            mock_unwrap.side_effect = unwrap
+            mock_ranks.side_effect = actor_ranks
+
+            _, actor_to_parts = Modin.get_actor_shards(
+                data=node_to_part, actors=[])
 
         for actor_rank, part_ids in expected_actor_parts.items():
             for i, part_id in enumerate(part_ids):
