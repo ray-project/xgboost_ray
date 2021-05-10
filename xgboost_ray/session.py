@@ -54,6 +54,11 @@ def get_actor_rank() -> int:
     return session.get_actor_rank()
 
 
+def get_rabit_rank() -> int:
+    import xgboost as xgb
+    return xgb.rabit.get_rank()
+
+
 def put_queue(*args, **kwargs):
     session = get_session()
     session.put_queue(*args, **kwargs)

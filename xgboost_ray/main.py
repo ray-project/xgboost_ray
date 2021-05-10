@@ -410,12 +410,12 @@ class RayXGBoostActor:
 
         class _SaveInternalCheckpointCallback(TrainingCallback):
             def after_iteration(self, model, epoch, evals_log):
-                if this.rank == 0 and \
+                if xgb.rabit.get_rank() == 0 and \
                         epoch % this.checkpoint_frequency == 0:
                     put_queue(_Checkpoint(epoch, pickle.dumps(model)))
 
             def after_training(self, model):
-                if this.rank == 0:
+                if xgb.rabit.get_rank() == 0:
                     put_queue(_Checkpoint(-1, pickle.dumps(model)))
                 return model
 
