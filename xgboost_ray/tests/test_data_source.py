@@ -350,6 +350,9 @@ class DaskDataSourceTest(_DistributedDataSourceTest):
 
     def _testDataSourceAssignment(self, part_nodes, actor_nodes,
                                   expected_actor_parts):
+        self.skipTest(
+            "Data-locality aware scheduling using Dask is currently broken.")
+
         import dask
         import dask.dataframe as dd
         from ray.util.dask import ray_dask_get
