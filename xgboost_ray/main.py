@@ -459,8 +459,9 @@ class RayXGBoostActor:
 
         self._distributed_callbacks.after_data_loading(self, data)
 
-    def train(self, rabit_args: List[str], params: Dict[str, Any],
-              dtrain: RayDMatrix, evals: Tuple[RayDMatrix, str], *args,
+    def train(self, rabit_args: List[str], return_bst: bool,
+              params: Dict[str, Any], dtrain: RayDMatrix,
+              evals: Tuple[RayDMatrix, str], *args,
               **kwargs) -> Dict[str, Any]:
         self._distributed_callbacks.before_train(self)
 
@@ -555,6 +556,10 @@ class RayXGBoostActor:
 
         thread.join()
         self._distributed_callbacks.after_train(self, result_dict)
+
+        if not return_bst:
+            result_dict.pop("bst", None)
+
         return result_dict
 
     def predict(self, model: xgb.Booster, data: RayDMatrix, **kwargs):
@@ -914,9 +919,12 @@ def _train(params: Dict,
     _training_state.training_started_at = time.time()
 
     # Trigger the train function
+    live_actors = [
+        actor for actor in _training_state.actors if actor is not None
+    ]
     training_futures = [
-        actor.train.remote(rabit_args, params, dtrain, evals, *args, **kwargs)
-        for actor in _training_state.actors if actor is not None
+        actor.train.remote(rabit_args, i == 0, params, dtrain, evals, *args,
+                           **kwargs) for i, actor in enumerate(live_actors)
     ]
 
     # Failure handling loop. Here we wait until all training tasks finished.
@@ -953,11 +961,9 @@ def _train(params: Dict,
                             f"({wait_time:.0f} seconds since last restart).")
                 last_status = time.time()
 
-            ready, not_ready = ray.wait(not_ready, timeout=0)
+            ready, not_ready = ray.wait(
+                not_ready, num_returns=len(not_ready), timeout=1)
             ray.get(ready)
-        # Once everything is ready
-        logger.debug("[RayXGBoost] Waiting for results...")
-        ray.get(training_futures)
 
         # Get items from queue one last time
         if _training_state.queue:
@@ -989,8 +995,8 @@ def _train(params: Dict,
     # Get all results from all actors.
     all_results: List[Dict[str, Any]] = ray.get(training_futures)
 
-    # All results should be the same because of Rabit tracking. So we just
-    # return the first one.
+    # All results should be the same because of Rabit tracking. But only
+    # the first one actually returns its bst object.
     bst = all_results[0]["bst"]
     evals_result = all_results[0]["evals_result"]
 
