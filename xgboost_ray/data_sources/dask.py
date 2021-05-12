@@ -1,10 +1,11 @@
 from collections import defaultdict
-import re
 from typing import Any, Optional, Sequence, Dict, Union, Tuple
 
 import pandas as pd
 
+import ray
 from ray.actor import ActorHandle
+from ray.util.dask import ray_dask_get
 
 from xgboost_ray.data_sources._distributed import \
     assign_partitions_to_actors, get_actor_rank_ips
@@ -118,26 +119,34 @@ class Dask(DataSource):
 
 
 def get_ip_to_parts(data: Any) -> Dict[int, Sequence[Any]]:
-    from dask.distributed import wait, get_client
-
-    persisted = data.persist()
-    wait(persisted)
-
+    persisted = data.persist(scheduler=ray_dask_get)
     name = persisted._name
-    client = get_client()
 
-    pattern = re.compile(r"(\w+://)?([^:]+)(:[0-9]+)?")
+    node_ids_to_node = {node["NodeID"]: node for node in ray.state.nodes()}
+
+    # This is a hacky way to get the partition node IDs, and it's not
+    # 100% accurate as the map task could get scheduled on a different node
+    # (though Ray tries to keep locality). We need to use that until
+    # ray.state.objects() or something like it is available again.
+    partition_locations_df = persisted.map_partitions(lambda df: pd.DataFrame(
+        [ray.get_runtime_context().node_id.hex()])).compute()
+    partition_locations = [
+        partition_locations_df[0].iloc[i]
+        for i in range(partition_locations_df.size)
+    ]
 
     ip_to_parts = defaultdict(list)
-    for (obj_name, pid), uris in client.who_has(persisted):
+    for (obj_name,
+         pid), obj_ref in dask.base.collections_to_dsk([persisted]).items():
         assert obj_name == name
-        uri = uris[0]  # Is usually just one IP. Ignore all others.
 
-        # parse e.g. from tcp://127.0.0.1:12345
-        result = pattern.match(uri)
-        assert result, f"Got invalid partition location: {uri}"
+        if isinstance(obj_ref, ray.ObjectRef):
+            node_id = partition_locations[pid]
+            node = node_ids_to_node.get(node_id, {})
+            ip = node.get("NodeManagerAddress", "_no_ip")
+        else:
+            ip = "_no_ip"
 
-        ip = result.groups([1])
         # Pass tuples here (integers can be misinterpreted as row numbers)
         ip_to_parts[ip].append((pid, ))
 
