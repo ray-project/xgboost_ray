@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 import xgboost as xgb
-from xgboost.callback import TrainingCallback
+from xgboost_ray.compat import TrainingCallback
 
 import ray
 

@@ -8,7 +8,7 @@ import pandas as pd
 import ray
 
 from xgboost_ray import RayDMatrix
-from xgboost_ray.matrix import concat_dataframes
+from xgboost_ray.matrix import concat_dataframes, RayShardingMode
 
 
 class XGBoostRayDMatrixTest(unittest.TestCase):
@@ -43,19 +43,39 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         self.assertTrue(ray.get(same.remote(data, data)))
 
     def _testMatrixCreation(self, in_x, in_y, **kwargs):
+        if "sharding" not in kwargs:
+            kwargs["sharding"] = RayShardingMode.BATCH
         mat = RayDMatrix(in_x, in_y, **kwargs)
+
+        def _load_data(params):
+            x = params["data"]
+            y = params["label"]
+
+            if isinstance(x, list):
+                x = concat_dataframes(x)
+            if isinstance(y, list):
+                y = concat_dataframes(y)
+            return x, y
+
         params = mat.get_data(rank=0, num_actors=1)
-
-        x = params["data"]
-        y = params["label"]
-
-        if isinstance(x, list):
-            x = concat_dataframes(x)
-        if isinstance(y, list):
-            y = concat_dataframes(y)
+        x, y = _load_data(params)
 
         self.assertTrue(np.allclose(self.x, x))
         self.assertTrue(np.allclose(self.y, y))
+
+        # Multi actor check
+        mat = RayDMatrix(in_x, in_y, **kwargs)
+
+        params = mat.get_data(rank=0, num_actors=2)
+        x1, y1 = _load_data(params)
+
+        mat.unload_data()
+
+        params = mat.get_data(rank=1, num_actors=2)
+        x2, y2 = _load_data(params)
+
+        self.assertTrue(np.allclose(self.x, concat_dataframes([x1, x2])))
+        self.assertTrue(np.allclose(self.y, concat_dataframes([y1, y2])))
 
     def testFromNumpy(self):
         in_x = self.x
@@ -78,37 +98,41 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         self._testMatrixCreation(in_df, "label")
 
     def testFromModinDfDf(self):
-        try:
-            from modin.pandas import DataFrame
-        except ImportError:
+        from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+        if not MODIN_INSTALLED:
             self.skipTest("Modin not installed.")
             return
+
+        from modin.pandas import DataFrame
 
         in_x = DataFrame(self.x)
         in_y = DataFrame(self.y)
-        self._testMatrixCreation(in_x, in_y)
+        self._testMatrixCreation(in_x, in_y, distributed=False)
 
     def testFromModinDfSeries(self):
-        try:
-            from modin.pandas import DataFrame, Series
-        except ImportError:
+        from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+        if not MODIN_INSTALLED:
             self.skipTest("Modin not installed.")
             return
+
+        from modin.pandas import DataFrame, Series
 
         in_x = DataFrame(self.x)
         in_y = Series(self.y)
-        self._testMatrixCreation(in_x, in_y)
+        self._testMatrixCreation(in_x, in_y, distributed=False)
 
     def testFromModinDfString(self):
-        try:
-            from modin.pandas import DataFrame
-        except ImportError:
+        from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+        if not MODIN_INSTALLED:
             self.skipTest("Modin not installed.")
             return
 
+        from modin.pandas import DataFrame
+
         in_df = DataFrame(self.x)
         in_df["label"] = self.y
-        self._testMatrixCreation(in_df, "label")
+        self._testMatrixCreation(in_df, "label", distributed=False)
+        self._testMatrixCreation(in_df, "label", distributed=True)
 
     def testFromPetastormParquetString(self):
         try:
@@ -124,7 +148,10 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_df["label"] = pd.Series(self.y)
             data_df.to_parquet(data_file)
 
-            self._testMatrixCreation(f"file://{data_file}", "label")
+            self._testMatrixCreation(
+                f"file://{data_file}", "label", distributed=False)
+            self._testMatrixCreation(
+                f"file://{data_file}", "label", distributed=True)
 
     def testFromPetastormMultiParquetString(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -141,7 +168,13 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             df_2.to_parquet(data_file_2)
 
             self._testMatrixCreation(
-                [f"file://{data_file_1}", f"file://{data_file_2}"], "label")
+                [f"file://{data_file_1}", f"file://{data_file_2}"],
+                "label",
+                distributed=False)
+            self._testMatrixCreation(
+                [f"file://{data_file_1}", f"file://{data_file_2}"],
+                "label",
+                distributed=True)
 
     def testFromCSVString(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -151,7 +184,9 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_df["label"] = pd.Series(self.y)
             data_df.to_csv(data_file, header=True, index=False)
 
-            self._testMatrixCreation(data_file, "label")
+            self._testMatrixCreation(data_file, "label", distributed=False)
+            with self.assertRaises(ValueError):
+                self._testMatrixCreation(data_file, "label", distributed=True)
 
     def testFromMultiCSVString(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -167,7 +202,10 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             df_1.to_csv(data_file_1, header=True, index=False)
             df_2.to_csv(data_file_2, header=True, index=False)
 
-            self._testMatrixCreation([data_file_1, data_file_2], "label")
+            self._testMatrixCreation(
+                [data_file_1, data_file_2], "label", distributed=False)
+            self._testMatrixCreation(
+                [data_file_1, data_file_2], "label", distributed=True)
 
     def testFromParquetString(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -177,7 +215,8 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_df["label"] = pd.Series(self.y)
             data_df.to_parquet(data_file)
 
-            self._testMatrixCreation(data_file, "label")
+            self._testMatrixCreation(data_file, "label", distributed=False)
+            self._testMatrixCreation(data_file, "label", distributed=True)
 
     def testFromMultiParquetString(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -193,7 +232,10 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             df_1.to_parquet(data_file_1)
             df_2.to_parquet(data_file_2)
 
-            self._testMatrixCreation([data_file_1, data_file_2], "label")
+            self._testMatrixCreation(
+                [data_file_1, data_file_2], "label", distributed=False)
+            self._testMatrixCreation(
+                [data_file_1, data_file_2], "label", distributed=True)
 
     def testFromMLDataset(self):
         try:
@@ -223,27 +265,50 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testDetectDistributed(self):
         with tempfile.TemporaryDirectory() as dir:
-            data_file = os.path.join(dir, "file.parquet")
+            parquet_file = os.path.join(dir, "file.parquet")
+            csv_file = os.path.join(dir, "file.csv")
 
             data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
             data_df["label"] = pd.Series(self.y)
 
-            data_df.to_parquet(data_file)
+            data_df.to_parquet(parquet_file)
+            data_df.to_csv(csv_file)
 
-            mat = RayDMatrix(data_file, lazy=True)
+            mat = RayDMatrix(parquet_file, lazy=True)
             self.assertTrue(mat.distributed)
 
-            mat = RayDMatrix([data_file] * 3, lazy=True)
+            mat = RayDMatrix(csv_file, lazy=True)
+            # Single CSV files should not be distributed
+            self.assertFalse(mat.distributed)
+
+            mat = RayDMatrix([parquet_file] * 3, lazy=True)
+            self.assertTrue(mat.distributed)
+
+            mat = RayDMatrix([csv_file] * 3, lazy=True)
             self.assertTrue(mat.distributed)
 
             try:
                 from ray.util import data as ml_data
                 mat = RayDMatrix(
-                    ml_data.read_parquet(data_file, num_shards=1), lazy=True)
+                    ml_data.read_parquet(parquet_file, num_shards=1),
+                    lazy=True)
                 self.assertTrue(mat.distributed)
             except ImportError:
                 print("MLDataset not available in current Ray version. "
                       "Skipping part of test.")
+
+    def testTooManyActorsDistributed(self):
+        """Test error when too many actors are passed"""
+        with self.assertRaises(RuntimeError):
+            dtrain = RayDMatrix(["foo.csv"], num_actors=4, distributed=True)
+            dtrain.assert_enough_shards_for_actors(4)
+
+    def testTooManyActorsCentral(self):
+        """Test error when too many actors are passed"""
+        data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
+
+        with self.assertRaises(RuntimeError):
+            RayDMatrix(data_df, num_actors=34, distributed=False)
 
 
 if __name__ == "__main__":

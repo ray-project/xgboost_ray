@@ -5,7 +5,7 @@ Distributed XGBoost on Ray
 This library adds a new backend for XGBoost utilizing the
 [distributed computing framework Ray](https://ray.io).
 
-XGBoost on Ray enables multi node and multi GPU 
+XGBoost-Ray enables multi node and multi GPU 
 training with an interface compatible with the usual
 XGBoost API. It also integrates with [Ray Tune](#hyperparameter-tuning)
 and offers advanced fault tolerance configuration.
@@ -15,7 +15,7 @@ All releases are tested on large clusters and workloads.
 
 Installation
 ------------
-You can install the latest `xgboost_ray` release like this:
+You can install the latest XGBoost-Ray release like this:
 
 ```bash
 pip install xgboost_ray
@@ -30,16 +30,19 @@ pip install git+https://github.com/ray-project/xgboost_ray.git#xgboost_ray
 
 Usage
 -----
-`xgboost_ray` provides a drop-in replacement for XGBoost's `train`
+XGBoost-Ray provides a drop-in replacement for XGBoost's `train`
 function. To pass data, instead of using `xgb.DMatrix` you will 
 have to use `xgboost_ray.RayDMatrix`.
 
-Here is a simplified example:
+Here is a simplified example (which requires `sklearn`):
+
+**Training:**
 
 ```python
 from xgboost_ray import RayDMatrix, RayParams, train
+from sklearn.datasets import load_breast_cancer
 
-train_x, train_y = None, None  # Load data here
+train_x, train_y = load_breast_cancer(return_X_y=True)
 train_set = RayDMatrix(train_x, train_y)
 
 evals_result = {}
@@ -53,7 +56,7 @@ bst = train(
     evals=[(train_set, "train")],
     verbose_eval=False,
     ray_params=RayParams(
-        num_actors=2, 
+        num_actors=2,
         cpus_per_actor=1))
 
 bst.save_model("model.xgb")
@@ -61,10 +64,27 @@ print("Final training error: {:.4f}".format(
     evals_result["train"]["error"][-1]))
 ```
 
+**Prediction:**
+
+```python
+from xgboost_ray import RayDMatrix, RayParams, predict
+from sklearn.datasets import load_breast_cancer
+import xgboost as xgb
+
+data, labels = load_breast_cancer(return_X_y=True)
+
+dpred = RayDMatrix(data, labels)
+
+bst = xgb.Booster(model_file="model.xgb")
+pred_ray = predict(bst, dpred, ray_params=RayParams(num_actors=2))
+
+print(pred_ray)
+```
+
 Data loading
 ------------
 
-Data is passed to `xgboost_ray` via a `RayDMatrix` object.
+Data is passed to XGBoost-Ray via a `RayDMatrix` object.
 
 The `RayDMatrix` lazy loads data and stores it sharded in the
 Ray object store. The Ray XGBoost actors then access these
@@ -101,26 +121,27 @@ dtrain = RayDMatrix(
 Hyperparameter Tuning
 ---------------------
 
-`xgboost_ray` integrates with [Ray Tune](https://tune.io) to provide distributed hyperparameter tuning for your
-distributed XGBoost models. You can run multiple `xgboost_ray` training runs in parallel, each with a different
+XGBoost-Ray integrates with [Ray Tune](https://tune.io) to provide distributed hyperparameter tuning for your
+distributed XGBoost models. You can run multiple XGBoost-Ray training runs in parallel, each with a different
 hyperparameter configuration, and each training run parallelized by itself. All you have to do is move your training
 code to a function, and pass the function to `tune.run`. Internally, `train` will detect if `tune` is being used and will
 automatically report results to tune.
 
-Example using `xgboost_ray` with Tune:
+Example using XGBoost-Ray with Ray Tune:
 
 ```python
 from xgboost_ray import RayDMatrix, RayParams, train
+from sklearn.datasets import load_breast_cancer
 
 num_actors = 4
-num_cpus_per_actor = 4
+num_cpus_per_actor = 1
 
 ray_params = RayParams(
-                num_actors=num_actors, 
-                cpus_per_actor=num_cpus_per_actor)
+    num_actors=num_actors,
+    cpus_per_actor=num_cpus_per_actor)
 
 def train_model(config):
-    train_x, train_y = None, None  # Load data here
+    train_x, train_y = load_breast_cancer(return_X_y=True)
     train_set = RayDMatrix(train_x, train_y)
 
     evals_result = {}
@@ -147,10 +168,11 @@ config = {
 
 # Make sure to use the `get_tune_resources` method to set the `resources_per_trial`
 analysis = tune.run(
-    train_model, 
+    train_model,
     config=config,
-    metric="eval-error", 
-    mode="min", 
+    metric="train-error",
+    mode="min",
+    num_samples=4,
     resources_per_trial=ray_params.get_tune_resources())
 print("Best hyperparameters", analysis.best_config)
 ```
@@ -159,7 +181,7 @@ Also see examples/simple_tune.py for another example.
 
 Resources
 ---------
-By default, `xgboost_ray` tries to determine the number of CPUs
+By default, XGBoost-Ray tries to determine the number of CPUs
 available and distributes them evenly across actors.
 
 In the case of very large clusters or clusters with many different
@@ -223,7 +245,7 @@ suggestions:
 
 Placement Strategies
 --------------------
-`xgboost_ray` leverages Ray's Placement Group API (https://docs.ray.io/en/master/placement-group.html)
+XGBoost-Ray leverages Ray's Placement Group API (https://docs.ray.io/en/master/placement-group.html)
 to implement placement strategies for better fault tolerance. 
 
 By default, a SPREAD strategy is used for training, which attempts to spread all of the training workers
@@ -235,11 +257,11 @@ particular placement strategy will be used.
 Note that this strategy is used only when `elastic_training` is not used. If `elastic_training` is set to `True`,
 no placement strategy is used.
 
-When `xgboost_ray` is used with Ray Tune for hyperparameter tuning, a PACK strategy is used. This strategy
+When XGBoost-Ray is used with Ray Tune for hyperparameter tuning, a PACK strategy is used. This strategy
 attempts to place all workers for each trial on the same node on a best-effort basis. This means that if a node
 goes down, it will be less likely to impact multiple trials.
 
-When placement strategies are used, `xgboost_ray` will wait for 100 seconds for the required resources
+When placement strategies are used, XGBoost-Ray will wait for 100 seconds for the required resources
 to become available, and will fail if the required resources cannot be reserved and the cluster cannot autoscale
 to increase the number of resources. You can change the `PLACEMENT_GROUP_TIMEOUT_S` environment variable to modify 
 how long this timeout should be. 
