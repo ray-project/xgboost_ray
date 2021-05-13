@@ -923,8 +923,14 @@ def _train(params: Dict,
         actor for actor in _training_state.actors if actor is not None
     ]
     training_futures = [
-        actor.train.remote(rabit_args, i == 0, params, dtrain, evals, *args,
-                           **kwargs) for i, actor in enumerate(live_actors)
+        actor.train.remote(
+            rabit_args=rabit_args,
+            return_bst=i == 0,
+            params=params,
+            dtrain=dtrain,
+            evals=evals,
+            *args,
+            **kwargs) for i, actor in enumerate(live_actors)
     ]
 
     # Failure handling loop. Here we wait until all training tasks finished.
