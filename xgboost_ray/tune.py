@@ -211,19 +211,19 @@ def _get_tune_resources(num_actors: int, cpus_per_actor: int,
                 extra_custom_resources=extra_custom_resources,
             )
         else:
-            from ray.util import placement_group
+            from ray.tune import PlacementGroupFactory
 
-            def placement_group_factory():
-                head_bundle = {"CPU": 1}
-                child_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
-                child_bundle_extra = {} if resources_per_actor is None else \
-                    resources_per_actor
-                child_bundles = [{
-                    **child_bundle,
-                    **child_bundle_extra
-                } for _ in range(num_actors)]
-                bundles = [head_bundle] + child_bundles
-                return placement_group(bundles, strategy="PACK")
+            head_bundle = {"CPU": 1}
+            child_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
+            child_bundle_extra = {} if resources_per_actor is None else \
+                resources_per_actor
+            child_bundles = [{
+                **child_bundle,
+                **child_bundle_extra
+            } for _ in range(num_actors)]
+            bundles = [head_bundle] + child_bundles
+            placement_group_factory = PlacementGroupFactory(
+                bundles, strategy="PACK")
 
             return placement_group_factory
     else:
