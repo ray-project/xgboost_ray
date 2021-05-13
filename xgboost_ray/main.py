@@ -924,12 +924,12 @@ def _train(params: Dict,
     ]
     training_futures = [
         actor.train.remote(
+            *args,
             rabit_args=rabit_args,
             return_bst=i == 0,
             params=params,
             dtrain=dtrain,
             evals=evals,
-            *args,
             **kwargs) for i, actor in enumerate(live_actors)
     ]
 
