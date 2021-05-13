@@ -46,7 +46,7 @@ else:
 
 # Todo(amogkam): Remove after Ray 1.3 release.
 try:
-    from ray.tune.resources import PlacementGroupFactory
+    from ray.tune import PlacementGroupFactory
 
     TUNE_USING_PG = True
 except ImportError:
