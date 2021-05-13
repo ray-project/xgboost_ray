@@ -5,8 +5,6 @@ import pandas as pd
 
 import ray
 
-import dask.dataframe as dd
-
 from xgboost_ray import RayDMatrix, train, RayParams
 from xgboost_ray.data_sources.dask import DASK_INSTALLED
 
@@ -15,6 +13,12 @@ def main(cpus_per_actor, num_actors):
     if not DASK_INSTALLED:
         print("Dask is not installed. Install with `pip install dask`")
         return
+
+    # Local import so the installation check comes first
+    import dask
+    import dask.dataframe as dd
+    from ray.util.dask import ray_dask_get
+    dask.config.set(scheduler=ray_dask_get)
 
     # Generate dataset
     x = np.repeat(range(8), 16).reshape((32, 4))
