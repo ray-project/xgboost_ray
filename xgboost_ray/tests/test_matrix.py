@@ -134,6 +134,47 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         self._testMatrixCreation(in_df, "label", distributed=False)
         self._testMatrixCreation(in_df, "label", distributed=True)
 
+    def testFromDaskDfSeries(self):
+        from xgboost_ray.data_sources.dask import DASK_INSTALLED
+        if not DASK_INSTALLED:
+            self.skipTest("Dask not installed.")
+            return
+
+        import dask.dataframe as dd
+
+        in_x = dd.from_array(self.x)
+        in_y = dd.from_array(self.y)
+
+        self._testMatrixCreation(in_x, in_y, distributed=False)
+
+    def testFromDaskDfArray(self):
+        from xgboost_ray.data_sources.dask import DASK_INSTALLED
+        if not DASK_INSTALLED:
+            self.skipTest("Dask not installed.")
+            return
+
+        import dask.dataframe as dd
+        import dask.array as da
+
+        in_x = dd.from_array(self.x)
+        in_y = da.from_array(self.y)
+
+        self._testMatrixCreation(in_x, in_y, distributed=False)
+
+    def testFromDaskDfString(self):
+        from xgboost_ray.data_sources.dask import DASK_INSTALLED
+        if not DASK_INSTALLED:
+            self.skipTest("Dask not installed.")
+            return
+
+        import dask.dataframe as dd
+
+        in_df = dd.from_array(self.x)
+        in_df["label"] = dd.from_array(self.y)
+
+        self._testMatrixCreation(in_df, "label", distributed=False)
+        self._testMatrixCreation(in_df, "label", distributed=True)
+
     def testFromPetastormParquetString(self):
         try:
             import petastorm  # noqa: F401

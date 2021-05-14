@@ -32,12 +32,9 @@ auth:
 head_node_type: cpu_4_ondemand
 worker_default_node_type: cpu_4_ondemand
 
-file_mounts: {
-    "~/xgboost_tests": "."
-}
-
 file_mounts_sync_continuously: false
 
 setup_commands:
     - pip install -U {{env["RAY_WHEEL"] | default("ray")}}
-    - export XGBOOST_RAY_PACKAGE="{{env["XGBOOST_RAY_PACKAGE"] | default("xgboost_ray")}}" && /bin/bash ~/xgboost_tests/setup_xgboost.sh
+    - pip install dask pytest
+    - pip install -U {{env["XGBOOST_RAY_PACKAGE"] | default("xgboost_ray")}}
