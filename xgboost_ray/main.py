@@ -1310,6 +1310,9 @@ def train(
                     start_again = True
 
                 elif tries + 1 <= max_actor_restarts:
+                    if exc.__cause__ and isinstance(exc.__cause__,
+                                                    RayXGBoostTrainingError):
+                        logger.warning(f"Caught exception: {exc.__cause__}")
                     logger.warning(
                         f"A Ray actor died during training. Trying to "
                         f"continue training on the remaining actors. "
@@ -1319,6 +1322,9 @@ def train(
                     start_again = True
 
             elif tries + 1 <= max_actor_restarts:
+                if exc.__cause__ and isinstance(exc.__cause__,
+                                                RayXGBoostTrainingError):
+                    logger.warning(f"Caught exception: {exc.__cause__}")
                 logger.warning(
                     f"A Ray actor died during training. Trying to restart "
                     f"and continue training from last checkpoint "
