@@ -7,8 +7,10 @@ import unittest
 import xgboost as xgb
 
 import ray
+from ray.exceptions import RayActorError, RayTaskError
 
 from xgboost_ray import RayParams, train, RayDMatrix, predict
+from xgboost_ray.main import RayXGBoostTrainingError
 from xgboost_ray.callback import DistributedCallback
 from xgboost_ray.tests.utils import get_num_trees
 
@@ -230,6 +232,38 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             self.assertTrue(ray.util.client.ray.is_connected())
 
             self.testDistributedCallbacksTrainPredict(init=False, remote=None)
+
+    def testFailPrintErrors(self):
+        """Test that XGBoost training errors are propagated"""
+        x = np.random.uniform(0, 1, size=(100, 4))
+        y = np.random.randint(0, 2, size=100)
+
+        train_set = RayDMatrix(x, y)
+
+        try:
+            train(
+                {
+                    "objective": "multi:softmax",
+                    "num_class": 2,
+                    "eval_metric": ["logloss", "error"]
+                },  # This will error
+                train_set,
+                evals=[(train_set, "train")],
+                ray_params=RayParams(num_actors=1, max_actor_restarts=0))
+        except RuntimeError as exc:
+            self.assertTrue(exc.__cause__)
+            self.assertTrue(isinstance(exc.__cause__, RayActorError))
+
+            self.assertTrue(exc.__cause__.__cause__)
+            self.assertTrue(isinstance(exc.__cause__.__cause__, RayTaskError))
+
+            self.assertTrue(exc.__cause__.__cause__.cause)
+            self.assertTrue(
+                isinstance(exc.__cause__.__cause__.cause,
+                           RayXGBoostTrainingError))
+
+            self.assertIn("label and prediction size not match",
+                          str(exc.__cause__.__cause__))
 
 
 if __name__ == "__main__":
