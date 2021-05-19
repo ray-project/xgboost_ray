@@ -9,9 +9,9 @@ on top of
 [distributed computing framework Ray](https://ray.io).
 
 XGBoost-Ray
-- enables [**multi-node**](#training) and [**multi-GPU**](#multi-gpu-training) training
-- integrates seamlessly with distributed [**hyperparameter optimization** library Ray Tune](#hyperparameter-tuning)
-- comes with advanced [**fault tolerance handling**]((#fault-tolerance)) mechanisms, and
+- enables [**multi-node**](#usage) and [**multi-GPU**](#multi-gpu-training) training
+- integrates seamlessly with distributed [**hyperparameter optimization**](#hyperparameter-tuning) library [Ray Tune](http://tune.io)
+- comes with advanced [**fault tolerance handling**](#fault-tolerance) mechanisms, and
 - supports [**distributed dataframes** and **distributed data loading**](#distributed-data-loading)
 
 All releases are tested on large clusters and workloads.
