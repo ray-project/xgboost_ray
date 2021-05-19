@@ -9,10 +9,10 @@ on top of
 [distributed computing framework Ray](https://ray.io).
 
 XGBoost-Ray
-- enables **multi-node** and [**multi-GPU**](#multi-gpu-training) training
-- integrates seamlessly with distributed **hyperparameter optimization** library [Ray Tune](#hyperparameter-tuning)
+- enables [**multi-node**](#training) and [**multi-GPU**](#multi-gpu-training) training
+- integrates seamlessly with distributed [**hyperparameter optimization** library Ray Tune](#hyperparameter-tuning)
 - comes with advanced [**fault tolerance handling**]((#fault-tolerance)) mechanisms, and
-- supports **distributed dataframes** and **distributed data loading**
+- supports [**distributed dataframes** and **distributed data loading**](#distributed-data-loading)
 
 All releases are tested on large clusters and workloads.
 
@@ -60,7 +60,7 @@ bst = train(
     evals=[(train_set, "train")],
     verbose_eval=False,
     ray_params=RayParams(
-        num_actors=2,
+        num_actors=2,  # Number of remote actors
         cpus_per_actor=1))
 
 bst.save_model("model.xgb")
@@ -294,6 +294,32 @@ more than one actor per node:
   E.g. for a cluster with three nodes of 4, 8, and 12 CPUs, respectively,
   you should set the number of actors to 6 and the CPUs per 
   actor to 4.
+
+Distributed data loading
+------------------------
+XGBoost-Ray can leverage both centralized and distributed data loading.
+
+In **centralized data loading**, the data is partitioned by the head node
+and stored in the object store. Each remote actor than retrieves their
+partitions by querying the Ray object store. Centralized loading is used
+when you pass centralized in-memory dataframes, such as Pandas dataframes
+or numpy arrays, or when you pass single source files, such as a single CSV.
+
+In **distributed data loading**, each remote actor loads their data directly from
+the source, without a central bottleneck. The data is still stored in the
+object store, but locally to each actor. This mode is used automatically
+when loading data from multiple CSV or Parquet files. Please note that
+we do not check or enforce partition sizes in this case - it is your job
+to make sure the data is evenly distributed across the source files.
+
+Lastly, XGBoost-Ray supports **distributed dataframe** representations, such
+as [Modin](https://modin.readthedocs.io/en/latest/) and 
+[Dask dataframes](https://docs.dask.org/en/latest/dataframe.html)
+(used with [Dask on Ray](https://docs.ray.io/en/master/dask-on-ray.html)). 
+Here, XGBoost-Ray will check on which nodes the distributed partitions 
+are currently located, and will assign partitions to actors in order to
+minimize cross-node data transfer. Please note that we also assume here
+that partition sizes are uniform. 
 
 Memory usage
 -------------
