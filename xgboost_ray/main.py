@@ -8,9 +8,10 @@ import time
 import threading
 
 import numpy as np
+import pandas as pd
 
 import xgboost as xgb
-from xgboost.core import XGBoostError
+from xgboost.core import XGBoostError, EarlyStopException
 
 from xgboost_ray.callback import DistributedCallback, \
     DistributedCallbackContainer
@@ -510,6 +511,7 @@ class RayXGBoostActor:
         kwargs["callbacks"] = callbacks
 
         result_dict = {}
+        error_dict = {}
 
         # We run xgb.train in a thread to be able to react to the stop event.
         def _train():
@@ -538,8 +540,12 @@ class RayXGBoostActor:
                         "evals_result": evals_result,
                         "train_n": self._local_n[dtrain]
                     })
-            except XGBoostError:
-                # Silent fail, will be raised as RayXGBoostTrainingStopped
+            except EarlyStopException:
+                # Usually this should be caught by XGBoost core.
+                # Silent fail, will be raised as RayXGBoostTrainingStopped.
+                return
+            except XGBoostError as e:
+                error_dict.update({"exception": e})
                 return
 
         thread = threading.Thread(target=_train)
@@ -552,7 +558,8 @@ class RayXGBoostActor:
             time.sleep(0.1)
 
         if not result_dict:
-            raise RayXGBoostTrainingError("Training failed.")
+            raise_from = error_dict.get("exception", None)
+            raise RayXGBoostTrainingError("Training failed.") from raise_from
 
         thread.join()
         self._distributed_callbacks.after_train(self, result_dict)
@@ -571,7 +578,7 @@ class RayXGBoostActor:
             self.load_data(data)
         local_data = self._data[data]
 
-        predictions = model.predict(local_data, **kwargs)
+        predictions = pd.Series(model.predict(local_data, **kwargs))
         self._distributed_callbacks.after_predict(self, predictions)
         return predictions
 
@@ -1303,6 +1310,9 @@ def train(
                     start_again = True
 
                 elif tries + 1 <= max_actor_restarts:
+                    if exc.__cause__ and isinstance(exc.__cause__,
+                                                    RayXGBoostTrainingError):
+                        logger.warning(f"Caught exception: {exc.__cause__}")
                     logger.warning(
                         f"A Ray actor died during training. Trying to "
                         f"continue training on the remaining actors. "
@@ -1312,6 +1322,9 @@ def train(
                     start_again = True
 
             elif tries + 1 <= max_actor_restarts:
+                if exc.__cause__ and isinstance(exc.__cause__,
+                                                RayXGBoostTrainingError):
+                    logger.warning(f"Caught exception: {exc.__cause__}")
                 logger.warning(
                     f"A Ray actor died during training. Trying to restart "
                     f"and continue training from last checkpoint "
