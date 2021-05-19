@@ -9,7 +9,7 @@ on top of
 [distributed computing framework Ray](https://ray.io).
 
 XGBoost-Ray
-- enables **multi-node** and **multi-GPU** training
+- enables **multi-node** and [**multi-GPU**](#multi-gpu-training) training
 - integrates seamlessly with distributed **hyperparameter optimization** library [Ray Tune](#hyperparameter-tuning)
 - comes with advanced [**fault tolerance handling**]((#fault-tolerance)) mechanisms, and
 - supports **distributed dataframes** and **distributed data loading**
@@ -251,6 +251,29 @@ setting this explicitly.
 The number of XGBoost actors always has to be set manually with
 the `num_actors` argument. 
 
+### Multi GPU training
+XGBoost-Ray enables multi GPU training. The XGBoost core backend
+will automatically leverage NCCL2 for cross-device communication.
+All you have to do is to start one actor per GPU.
+
+For instance, if you have 2 machines with 4 GPUs each, you will want
+to start 8 remote actors, and set `gpus_per_actor=1`. There is usually
+no benefit in allocating less (e.g. 0.5) or more than one GPU per actor. 
+
+You should divide the CPUs evenly across actors per machine, so if your 
+machines have 16 CPUs in addition to the 4 GPUs, each actor should have
+4 CPUs to use.
+
+```python
+from xgboost_ray import RayParams
+
+ray_params = RayParams(
+    num_actors=8,
+    gpus_per_actor=1,
+    cpus_per_actor=4,   # Divide evenly across actors per machine
+)
+```
+
 ### How many remote actors should I use?
 
 This depends on your workload and your cluster setup.
@@ -261,7 +284,7 @@ XGBoost core can already leverage multiple CPUs via threading.
 However, there are some cases when you should consider starting
 more than one actor per node:
 
-- For **multi GPU training**, each GPU should have a separate
+- For [**multi GPU training**](#multi-gpu-training), each GPU should have a separate
   remote actor. Thus, if your machine has 24 CPUs and 4 GPUs,
   you will want to start 4 remote actors with 6 CPUs and 1 GPU
   each
