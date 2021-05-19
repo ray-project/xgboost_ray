@@ -1,21 +1,25 @@
 Distributed XGBoost on Ray
 ==========================
 ![Build Status](https://github.com/ray-project/xgboost_ray/workflows/pytest%20on%20push/badge.svg)
+[![docs.ray.io](https://img.shields.io/badge/docs-ray.io-blue)](https://docs.ray.io/en/master/xgboost-ray.html)
 
-This library adds a new backend for XGBoost utilizing the
+XGBoost-Ray is a distributed backend for 
+[XGBoost](https://xgboost.readthedocs.io/en/latest/), built
+on top of 
 [distributed computing framework Ray](https://ray.io).
 
-XGBoost-Ray enables multi node and multi GPU 
-training with an interface compatible with the usual
-XGBoost API. It also integrates with [Ray Tune](#hyperparameter-tuning)
-and offers advanced fault tolerance configuration.
+XGBoost-Ray
+- enables **multi-node** and **multi-GPU** training
+- integrates seamlessly with distributed **hyperparameter optimization** library [Ray Tune](#hyperparameter-tuning)
+- comes with advanced [**fault tolerance handling**]((#fault-tolerance)) mechanisms, and
+- supports **distributed dataframes** and **distributed data loading**
 
 All releases are tested on large clusters and workloads.
 
 
 Installation
 ------------
-You can install the latest XGBoost-Ray release like this:
+You can install the latest XGBoost-Ray release from PIP:
 
 ```bash
 pip install xgboost_ray
@@ -179,6 +183,61 @@ print("Best hyperparameters", analysis.best_config)
 
 Also see examples/simple_tune.py for another example.
 
+Fault tolerance
+---------------
+XGBoost-Ray leverages the stateful Ray actor model to
+enable fault tolerant training. There are currently
+two modes implemented.
+
+### Non-elastic training (warm restart)
+
+When an actor or node dies, XGBoost-Ray will retain the
+state of the remaining actors. In non-elastic training,
+the failed actors will be replaced as soon as resources
+are available again. Only these actors will reload their
+parts of the data. Training will resume once all actors
+are ready for training again.
+
+You can set this mode in the `RayParams`:
+
+```python
+from xgboost_ray import RayParams
+
+ray_params = RayParams(
+    elastic_training=False,  # Use non-elastic training
+    max_actor_restarts=2,    # How often are actors allowed to fail
+)
+```
+
+### Elastic training
+
+In elastic training, XGBoost-Ray will continue training
+with fewer actors (and on fewer data) when a node or actor
+dies. The missing actors are staged in the background,
+and are reintegrated into training once they are back and
+loaded their data.
+
+This mode will train on fewer data for a period of time,
+which can impact accuracy. In practice, we found these 
+effects to be minor, especially for large shuffled datasets.
+The immediate benefit is that training time is reduced 
+significantly to almost the same level as if no actors died.
+Thus, especially when data loading takes a large part of 
+the total training time, this setting can dramatically speed
+up training times for large distributed jobs.
+
+You can configure this mode in the `RayParams`:
+
+```python
+from xgboost_ray import RayParams
+
+ray_params = RayParams(
+    elastic_training=True,  # Use elastic training
+    max_failed_actors=3,    # Only allow at most 3 actors to die at the same time
+    max_actor_restarts=2,   # How often are actors allowed to fail
+)
+```
+
 Resources
 ---------
 By default, XGBoost-Ray tries to determine the number of CPUs
@@ -191,6 +250,27 @@ setting this explicitly.
 
 The number of XGBoost actors always has to be set manually with
 the `num_actors` argument. 
+
+### How many remote actors should I use?
+
+This depends on your workload and your cluster setup.
+Generally there is no inherent benefit of running more than
+one remote actor per node for CPU-only training. This is because
+XGBoost core can already leverage multiple CPUs via threading.
+
+However, there are some cases when you should consider starting
+more than one actor per node:
+
+- For **multi GPU training**, each GPU should have a separate
+  remote actor. Thus, if your machine has 24 CPUs and 4 GPUs,
+  you will want to start 4 remote actors with 6 CPUs and 1 GPU
+  each
+- In a **heterogeneous cluster**, you might want to find the
+  [greatest common divisor](https://en.wikipedia.org/wiki/Greatest_common_divisor)
+  for the number of CPUs.
+  E.g. for a cluster with three nodes of 4, 8, and 12 CPUs, respectively,
+  you should set the number of actors to 6 and the CPUs per 
+  actor to 4.
 
 Memory usage
 -------------
@@ -281,4 +361,6 @@ the [examples folder](examples/):
 
 Resources
 ---------
+* [XGBoost-Ray documentation](https://docs.ray.io/en/master/xgboost-ray.html)
 * [Ray community slack](https://forms.gle/9TSdDYUgxYs8SA9e8)
+
