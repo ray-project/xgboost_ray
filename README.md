@@ -300,17 +300,42 @@ Distributed data loading
 XGBoost-Ray can leverage both centralized and distributed data loading.
 
 In **centralized data loading**, the data is partitioned by the head node
-and stored in the object store. Each remote actor than retrieves their
+and stored in the object store. Each remote actor then retrieves their
 partitions by querying the Ray object store. Centralized loading is used
 when you pass centralized in-memory dataframes, such as Pandas dataframes
-or numpy arrays, or when you pass single source files, such as a single CSV.
+or Numpy arrays, or when you pass a single source file, such as a single CSV
+or Parquet file.
+
+
+```python
+from xgboost_ray import RayDMatrix
+
+# This will use centralized data loading, as only one source file is specified
+# `label_col` is a column in the CSV, used as the target label
+ray_params = RayDMatrix("./source_file.csv", label="label_col")
+```
 
 In **distributed data loading**, each remote actor loads their data directly from
-the source, without a central bottleneck. The data is still stored in the
+the source (e.g. local hard disk, NFS, HDFS, S3), 
+without a central bottleneck. The data is still stored in the
 object store, but locally to each actor. This mode is used automatically
 when loading data from multiple CSV or Parquet files. Please note that
 we do not check or enforce partition sizes in this case - it is your job
 to make sure the data is evenly distributed across the source files.
+
+```python
+from xgboost_ray import RayDMatrix
+
+# This will use distributed data loading, as four source files are specified
+# Please note that you cannot schedule more than 4 actors in this case.
+# `label_col` is a column in the CSV, used as the target label
+ray_params = RayDMatrix([
+    "hdfs:///tmp/part1.parquet",
+    "hdfs:///tmp/part2.parquet",
+    "hdfs:///tmp/part3.parquet",
+    "hdfs:///tmp/part4.parquet",
+], label="label_col")
+```
 
 Lastly, XGBoost-Ray supports **distributed dataframe** representations, such
 as [Modin](https://modin.readthedocs.io/en/latest/) and 
@@ -320,6 +345,16 @@ Here, XGBoost-Ray will check on which nodes the distributed partitions
 are currently located, and will assign partitions to actors in order to
 minimize cross-node data transfer. Please note that we also assume here
 that partition sizes are uniform. 
+
+```python
+from xgboost_ray import RayDMatrix
+
+# This will try to allocate the existing Modin partitions
+# to co-located Ray actors. If this is not possible, data will
+# be transferred across nodes
+ray_params = RayDMatrix(existing_modin_df)
+```
+
 
 Memory usage
 -------------
