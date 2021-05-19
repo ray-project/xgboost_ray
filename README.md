@@ -38,6 +38,11 @@ XGBoost-Ray provides a drop-in replacement for XGBoost's `train`
 function. To pass data, instead of using `xgb.DMatrix` you will 
 have to use `xgboost_ray.RayDMatrix`.
 
+Distributed training parameters are configured with a
+`xgboost_ray.RayParams` object. For instance, you can set
+the `num_actors` property to specify how many distributed actors
+you would like to use.
+
 Here is a simplified example (which requires `sklearn`):
 
 **Training:**
@@ -327,8 +332,8 @@ to make sure the data is evenly distributed across the source files.
 from xgboost_ray import RayDMatrix
 
 # This will use distributed data loading, as four source files are specified
-# Please note that you cannot schedule more than 4 actors in this case.
-# `label_col` is a column in the CSV, used as the target label
+# Please note that you cannot schedule more than four actors in this case.
+# `label_col` is a column in the Parquet files, used as the target label
 ray_params = RayDMatrix([
     "hdfs:///tmp/part1.parquet",
     "hdfs:///tmp/part2.parquet",
