@@ -364,16 +364,16 @@ ray_params = RayDMatrix(existing_modin_df)
 
 | Type                                                             | Centralized loading | Distributed loading |
 |------------------------------------------------------------------|---------------------|---------------------|
-| Numpy array                                                      | [x]                 | [ ]                 |
-| Pandas dataframe                                                 | [x]                 | [ ]                 |
-| Single CSV                                                       | [x]                 | [ ]                 |
-| Multi CSV                                                        | [x]                 | [x]                 |
-| Single Parquet                                                   | [x]                 | [ ]                 |
-| Multi Parquet                                                    | [x]                 | [x]                 |
-| [Petastorm](https://github.com/uber/petastorm)                   | [x]                 | [x]                 |
-| [Ray MLDataset](https://docs.ray.io/en/master/iter.html)         | [x]                 | [x]                 |
-| [Dask dataframe](https://docs.dask.org/en/latest/dataframe.html) | [x]                 | [x]                 |
-| [Modin dataframe](https://modin.readthedocs.io/en/latest/)       | [x]                 | [x]                 |
+| Numpy array                                                      | Yes                 | No                  |
+| Pandas dataframe                                                 | Yes                 | No                  |
+| Single CSV                                                       | Yes                 | No                  |
+| Multi CSV                                                        | Yes                 | Yes                 |
+| Single Parquet                                                   | Yes                 | No                  |
+| Multi Parquet                                                    | Yes                 | Yes                 |
+| [Petastorm](https://github.com/uber/petastorm)                   | Yes                 | Yes                 |
+| [Ray MLDataset](https://docs.ray.io/en/master/iter.html)         | Yes                 | Yes                 |
+| [Dask dataframe](https://docs.dask.org/en/latest/dataframe.html) | Yes                 | Yes                 |
+| [Modin dataframe](https://modin.readthedocs.io/en/latest/)       | Yes                 | Yes                 |
 
 
 Memory usage
