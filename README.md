@@ -360,6 +360,21 @@ from xgboost_ray import RayDMatrix
 ray_params = RayDMatrix(existing_modin_df)
 ```
 
+### Data sources
+
+| Type                                                             | Centralized loading | Distributed loading |
+|------------------------------------------------------------------|---------------------|---------------------|
+| Numpy array                                                      | [x]                 | [ ]                 |
+| Pandas dataframe                                                 | [x]                 | [ ]                 |
+| Single CSV                                                       | [x]                 | [ ]                 |
+| Multi CSV                                                        | [x]                 | [x]                 |
+| Single Parquet                                                   | [x]                 | [ ]                 |
+| Multi Parquet                                                    | [x]                 | [x]                 |
+| [Petastorm](https://github.com/uber/petastorm)                   | [x]                 | [x]                 |
+| [Ray MLDataset](https://docs.ray.io/en/master/iter.html)         | [x]                 | [x]                 |
+| [Dask dataframe](https://docs.dask.org/en/latest/dataframe.html) | [x]                 | [x]                 |
+| [Modin dataframe](https://modin.readthedocs.io/en/latest/)       | [x]                 | [x]                 |
+
 
 Memory usage
 -------------
