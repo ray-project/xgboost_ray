@@ -3,7 +3,7 @@ from xgboost_ray.matrix import RayDMatrix, RayDeviceQuantileDMatrix,\
     RayFileType, RayShardingMode, \
     Data, combine_data
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "__version__", "RayParams", "RayDMatrix", "RayDeviceQuantileDMatrix",
