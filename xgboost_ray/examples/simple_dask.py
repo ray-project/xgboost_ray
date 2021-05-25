@@ -6,17 +6,19 @@ import pandas as pd
 import ray
 
 from xgboost_ray import RayDMatrix, train, RayParams
-from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+from xgboost_ray.data_sources.dask import DASK_INSTALLED
 
 
 def main(cpus_per_actor, num_actors):
-    if not MODIN_INSTALLED:
-        print(f"Modin is not installed or installed in a version that is not "
-              f"compatible with xgboost_ray (< 0.9.0).")
+    if not DASK_INSTALLED:
+        print("Dask is not installed. Install with `pip install dask`")
         return
 
-    # Import modin after initializing Ray
-    from modin.distributed.dataframe.pandas import from_partitions
+    # Local import so the installation check comes first
+    import dask
+    import dask.dataframe as dd
+    from ray.util.dask import ray_dask_get
+    dask.config.set(scheduler=ray_dask_get)
 
     # Generate dataset
     x = np.repeat(range(8), 16).reshape((32, 4))
@@ -31,12 +33,9 @@ def main(cpus_per_actor, num_actors):
     data["label"] = y
 
     # Split into 4 partitions
-    partitions = [ray.put(part) for part in np.split(data, 4)]
+    dask_df = dd.from_pandas(data, npartitions=4)
 
-    # Create modin df here
-    modin_df = from_partitions(partitions, axis=0)
-
-    train_set = RayDMatrix(modin_df, "label")
+    train_set = RayDMatrix(dask_df, "label")
 
     evals_result = {}
     # Set XGBoost config.
@@ -60,7 +59,7 @@ def main(cpus_per_actor, num_actors):
         verbose_eval=False,
         num_boost_round=10)
 
-    model_path = "modin.xgb"
+    model_path = "dask.xgb"
     bst.save_model(model_path)
     print("Final training error: {:.4f}".format(
         evals_result["train"]["error"][-1]))
@@ -73,6 +72,11 @@ if __name__ == "__main__":
         required=False,
         type=str,
         help="the address to use for Ray")
+    parser.add_argument(
+        "--server-address",
+        required=False,
+        type=str,
+        help="Address of the remote server if using Ray Client.")
     parser.add_argument(
         "--cpus-per-actor",
         type=int,
@@ -90,6 +94,8 @@ if __name__ == "__main__":
 
     if args.smoke_test:
         ray.init(num_cpus=args.num_actors + 1)
+    elif args.server_address:
+        ray.util.connect(args.server_address)
     else:
         ray.init(address=args.address)
 

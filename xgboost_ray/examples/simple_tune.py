@@ -9,6 +9,7 @@ import ray
 from ray import tune
 
 from xgboost_ray import train, RayDMatrix, RayParams
+from xgboost_ray.util import force_on_current_node
 
 
 def train_breast_cancer(config, ray_params):
@@ -38,6 +39,13 @@ def train_breast_cancer(config, ray_params):
         evals_result["eval"]["error"][-1]))
 
 
+def load_best_model(checkpoint_dir):
+    """Loads the XGBoost model."""
+    best_bst = xgb.Booster()
+    best_bst.load_model(os.path.join(checkpoint_dir, "tuned.xgb"))
+    return best_bst
+
+
 def main(cpus_per_actor, num_actors, num_samples):
     # Set XGBoost config.
     config = {
@@ -65,8 +73,15 @@ def main(cpus_per_actor, num_actors, num_samples):
         mode="min")
 
     # Load the best model checkpoint
-    best_bst = xgb.Booster()
-    best_bst.load_model(os.path.join(analysis.best_logdir, "tuned.xgb"))
+    if ray.util.client.ray.is_connected():
+        # If using Ray Client, the best model is saved on the server.
+        # So we have to wrap the model loading in a ray task.
+        remote_load = ray.remote(load_best_model)
+        remote_load = force_on_current_node(remote_load)
+        best_bst = ray.get(remote_load.remote(analysis.best_logdir))
+    else:
+        best_bst = load_best_model(analysis.best_logdir)
+
     accuracy = 1. - analysis.best_result["eval-error"]
     print(f"Best model parameters: {analysis.best_config}")
     print(f"Best model total accuracy: {accuracy:.4f}")
@@ -79,6 +94,11 @@ if __name__ == "__main__":
         required=False,
         type=str,
         help="the address to use for Ray")
+    parser.add_argument(
+        "--server-address",
+        required=False,
+        type=str,
+        help="Address of the remote server if using Ray Client.")
     parser.add_argument(
         "--cpus-per-actor",
         type=int,
@@ -94,13 +114,14 @@ if __name__ == "__main__":
         type=int,
         default=4,
         help="Number of samples to use for Tune.")
-    parser.add_argument(
-        "--smoke-test", action="store_true", default=False, help="gpu")
+    parser.add_argument("--smoke-test", action="store_true", default=False)
 
     args, _ = parser.parse_known_args()
 
     if args.smoke_test:
         ray.init(num_cpus=args.num_actors * args.num_samples)
+    elif args.server_address:
+        ray.util.connect(args.server_address)
     else:
         ray.init(address=args.address)
 

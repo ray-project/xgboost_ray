@@ -454,13 +454,13 @@ More examples
 -------------
 
 Fore complete end to end examples, please have a look at 
-the [examples folder](examples/):
+the [examples folder](xgboost_ray/examples/):
 
-* [Simple sklearn breastcancer dataset example](examples/simple.py) (requires `sklearn`)
-* [HIGGS classification example](examples/higgs.py) 
+* [Simple sklearn breastcancer dataset example](xgboost_ray/examples/simple.py) (requires `sklearn`)
+* [HIGGS classification example](xgboost_ray/examples/higgs.py) 
 ([download dataset (2.6 GB)](https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz))
-* [HIGGS classification example with Parquet](examples/higgs_parquet.py) (uses the same dataset) 
-* [Test data classification](examples/train_on_test_data.py) (uses a self-generated dataset) 
+* [HIGGS classification example with Parquet](xgboost_ray/examples/higgs_parquet.py) (uses the same dataset) 
+* [Test data classification](xgboost_ray/examples/train_on_test_data.py) (uses a self-generated dataset) 
 
 
 Resources

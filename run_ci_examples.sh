@@ -14,7 +14,7 @@ case "$i" in
 esac
 done
 
-pushd examples/ || exit 1
+pushd xgboost_ray/examples/ || exit 1
 ray stop || true
 echo "================"
 echo "Running examples"
@@ -32,4 +32,9 @@ else
 fi
 
 echo "running train_on_test_data.py" && python train_on_test_data.py --smoke-test
+popd
+
+pushd xgboost_ray/tests
+echo "running examples with Ray Client"
+python -m pytest -v --durations=0 -x test_client.py
 popd || exit 1

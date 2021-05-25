@@ -1,43 +1,25 @@
 import argparse
 
-import numpy as np
-import pandas as pd
+from sklearn import datasets
+from sklearn.model_selection import train_test_split
 
 import ray
 
 from xgboost_ray import RayDMatrix, train, RayParams
-from xgboost_ray.data_sources.dask import DASK_INSTALLED
 
 
 def main(cpus_per_actor, num_actors):
-    if not DASK_INSTALLED:
-        print("Dask is not installed. Install with `pip install dask`")
-        return
+    # Load dataset
+    data, labels = datasets.load_breast_cancer(return_X_y=True)
+    # Split into train and test set
+    train_x, test_x, train_y, test_y = train_test_split(
+        data, labels, test_size=0.25)
 
-    # Local import so the installation check comes first
-    import dask
-    import dask.dataframe as dd
-    from ray.util.dask import ray_dask_get
-    dask.config.set(scheduler=ray_dask_get)
-
-    # Generate dataset
-    x = np.repeat(range(8), 16).reshape((32, 4))
-    # Even numbers --> 0, odd numbers --> 1
-    y = np.tile(np.repeat(range(2), 4), 4)
-
-    # Flip some bits to reduce max accuracy
-    bits_to_flip = np.random.choice(32, size=6, replace=False)
-    y[bits_to_flip] = 1 - y[bits_to_flip]
-
-    data = pd.DataFrame(x)
-    data["label"] = y
-
-    # Split into 4 partitions
-    dask_df = dd.from_pandas(data, npartitions=4)
-
-    train_set = RayDMatrix(dask_df, "label")
+    train_set = RayDMatrix(train_x, train_y)
+    test_set = RayDMatrix(test_x, test_y)
 
     evals_result = {}
+
     # Set XGBoost config.
     xgboost_params = {
         "tree_method": "approx",
@@ -49,7 +31,7 @@ def main(cpus_per_actor, num_actors):
     bst = train(
         params=xgboost_params,
         dtrain=train_set,
-        evals=[(train_set, "train")],
+        evals=[(test_set, "eval")],
         evals_result=evals_result,
         ray_params=RayParams(
             max_actor_restarts=0,
@@ -59,10 +41,10 @@ def main(cpus_per_actor, num_actors):
         verbose_eval=False,
         num_boost_round=10)
 
-    model_path = "dask.xgb"
+    model_path = "simple.xgb"
     bst.save_model(model_path)
-    print("Final training error: {:.4f}".format(
-        evals_result["train"]["error"][-1]))
+    print("Final validation error: {:.4f}".format(
+        evals_result["eval"]["error"][-1]))
 
 
 if __name__ == "__main__":
@@ -72,6 +54,11 @@ if __name__ == "__main__":
         required=False,
         type=str,
         help="the address to use for Ray")
+    parser.add_argument(
+        "--server-address",
+        required=False,
+        type=str,
+        help="Address of the remote server if using Ray Client.")
     parser.add_argument(
         "--cpus-per-actor",
         type=int,
@@ -88,7 +75,9 @@ if __name__ == "__main__":
     args, _ = parser.parse_known_args()
 
     if args.smoke_test:
-        ray.init(num_cpus=args.num_actors + 1)
+        ray.init(num_cpus=args.num_actors)
+    elif args.server_address:
+        ray.util.connect(args.server_address)
     else:
         ray.init(address=args.address)
 
