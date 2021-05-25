@@ -28,7 +28,7 @@ try:
         remove_placement_group, get_current_placement_group
 
     from xgboost_ray.util import Event, Queue, MultiActorTask, \
-    force_on_current_node
+        force_on_current_node
 
     RAY_INSTALLED = True
 except ImportError:

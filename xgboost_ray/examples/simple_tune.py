@@ -82,6 +82,8 @@ def main(cpus_per_actor, num_actors, num_samples):
     else:
         best_bst = load_best_model(analysis.best_logdir)
 
+    best_bst.save_model("best_model.xgb")
+
     accuracy = 1. - analysis.best_result["eval-error"]
     print(f"Best model parameters: {analysis.best_config}")
     print(f"Best model total accuracy: {accuracy:.4f}")
