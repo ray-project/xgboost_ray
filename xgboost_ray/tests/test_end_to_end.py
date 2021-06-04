@@ -148,16 +148,25 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         pred_y = bst.predict(x_mat)
         self.assertSequenceEqual(list(self.y), list(pred_y))
 
-    def testTrainPredict(self, init=True, remote=None, **ray_param_dict):
+    def testTrainPredict(self,
+                         init=True,
+                         remote=None,
+                         softprob=False,
+                         **ray_param_dict):
         """Train with evaluation and predict"""
         if init:
             ray.init(num_cpus=2, num_gpus=0)
 
         dtrain = RayDMatrix(self.x, self.y)
 
+        params = self.params
+        if softprob:
+            params = params.copy()
+            params["objective"] = "multi:softprob"
+
         evals_result = {}
         bst = train(
-            self.params,
+            params,
             dtrain,
             num_boost_round=38,
             ray_params=RayParams(num_actors=2, **ray_param_dict),
@@ -175,7 +184,18 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             x_mat,
             ray_params=RayParams(num_actors=2, **ray_param_dict),
             _remote=remote)
+
+        if softprob:
+            self.assertEqual(pred_y.shape[1], len(np.unique(self.y)))
+            pred_y = np.argmax(pred_y, axis=1)
+
         self.assertSequenceEqual(list(self.y), list(pred_y))
+
+    def testTrainPredictSoftprob(self):
+        """Train with evaluation and predict on softprob objective
+        (which returns predictions in a 2d array)
+        """
+        self.testTrainPredict(init=True, softprob=True)
 
     def testTrainPredictRemote(self):
         """Train with evaluation and predict in a remote call"""
