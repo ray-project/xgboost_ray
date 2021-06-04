@@ -192,7 +192,9 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         self.assertSequenceEqual(list(self.y), list(pred_y))
 
     def testTrainPredictSoftprob(self):
-        """Train with evaluation and predict on softprob objective"""
+        """Train with evaluation and predict on softprob objective
+        (which returns predictions in a 2d array)
+        """
         self.testTrainPredict(init=True, softprob=True)
 
     def testTrainPredictRemote(self):
