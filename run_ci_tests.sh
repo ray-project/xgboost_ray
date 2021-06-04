@@ -24,6 +24,7 @@ python -m pytest -v --durations=0 -x test_data_source.py
 python -m pytest -v --durations=0 -x test_xgboost_api.py
 python -m pytest -v --durations=0 -x test_fault_tolerance.py
 python -m pytest -v --durations=0 -x test_end_to_end.py
+python -m pytest -v --durations=0 -x test_sklearn.py
 
 if [ "$TUNE" = "1" ]; then
   python -m pytest -v --durations=0 -x test_tune.py

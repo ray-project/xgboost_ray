@@ -1157,9 +1157,10 @@ def train(
         cpus_per_actor, gpus_per_actor = _autodetect_resources(
             ray_params=ray_params,
             use_tree_method="tree_method" in params
+            and params["tree_method"] is not None
             and params["tree_method"].startswith("gpu"))
 
-    tree_method = params.get("tree_method", "auto")
+    tree_method = params.get("tree_method", "auto") or "auto"
     if gpus_per_actor > 0 and not tree_method.startswith("gpu_"):
         logger.warning(
             f"GPUs have been assigned to the actors, but the current XGBoost "
