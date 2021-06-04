@@ -46,6 +46,7 @@ def softprob_obj(classes):
 
 class TemporaryDirectory(object):
     """Context manager for tempfile.mkdtemp()"""
+
     def __enter__(self):
         self.name = tempfile.mkdtemp()
         return self.name
@@ -80,13 +81,15 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         for cls in (RayXGBClassifier, ):
             for train_index, test_index in kf.split(X, y):
                 clf = cls(random_state=42)
-                xgb_model = clf.fit(X[train_index],
-                                    y[train_index],
-                                    eval_metric=['auc', 'logloss'])
+                xgb_model = clf.fit(
+                    X[train_index],
+                    y[train_index],
+                    eval_metric=['auc', 'logloss'])
                 preds = xgb_model.predict(X[test_index])
                 labels = y[test_index]
-                err = sum(1 for i in range(len(preds)) if int(
-                    preds[i] > 0.5) != labels[i]) / float(len(preds))
+                err = sum(1 for i in range(len(preds))
+                          if int(preds[i] > 0.5) != labels[i]) / float(
+                              len(preds))
                 assert err < 0.1
 
     def test_multiclass_classification(self):
@@ -115,15 +118,12 @@ class XGBoostRaySklearnTest(unittest.TestCase):
                     xgb_model.n_estimators)
             preds = xgb_model.predict(X[test_index])
             # test other params in XGBClassifier().fit
-            preds2 = xgb_model.predict(X[test_index],
-                                       output_margin=True,
-                                       ntree_limit=3)
-            preds3 = xgb_model.predict(X[test_index],
-                                       output_margin=True,
-                                       ntree_limit=0)
-            preds4 = xgb_model.predict(X[test_index],
-                                       output_margin=False,
-                                       ntree_limit=3)
+            preds2 = xgb_model.predict(
+                X[test_index], output_margin=True, ntree_limit=3)
+            preds3 = xgb_model.predict(
+                X[test_index], output_margin=True, ntree_limit=0)
+            preds4 = xgb_model.predict(
+                X[test_index], output_margin=False, ntree_limit=3)
             labels = y[test_index]
 
             check_pred(preds, labels, output_margin=False)
@@ -138,8 +138,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         assert proba.shape[1] == cls.n_classes_
 
         # custom objective, the default is multi:softprob so no transformation is required.
-        cls = RayXGBClassifier(n_estimators=4,
-                               objective=softprob_obj(3)).fit(X, y)
+        cls = RayXGBClassifier(
+            n_estimators=4, objective=softprob_obj(3)).fit(X, y)
         proba = cls.predict_proba(X)
         assert proba.shape[0] == X.shape[0]
         assert proba.shape[1] == cls.n_classes_
@@ -153,13 +153,10 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
         def train(booster, forest):
             rounds = 4
-            cls = RayXGBClassifier(n_estimators=rounds,
-                                   num_parallel_tree=forest,
-                                   booster=booster).fit(
-                                       X,
-                                       y,
-                                       eval_set=[(X, y)],
-                                       early_stopping_rounds=3)
+            cls = RayXGBClassifier(
+                n_estimators=rounds, num_parallel_tree=forest,
+                booster=booster).fit(
+                    X, y, eval_set=[(X, y)], early_stopping_rounds=3)
 
             if forest:
                 assert cls.best_ntree_limit == rounds * forest
@@ -187,13 +184,13 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         X, y = load_diabetes(return_X_y=True)
         estimators = [('gbm', RayXGBRegressor(objective='reg:squarederror')),
                       ('lr', RidgeCV())]
-        reg = StackingRegressor(estimators=estimators,
-                                final_estimator=RandomForestRegressor(
-                                    n_estimators=10, random_state=42))
+        reg = StackingRegressor(
+            estimators=estimators,
+            final_estimator=RandomForestRegressor(
+                n_estimators=10, random_state=42))
 
-        X_train, X_test, y_train, y_test = train_test_split(X,
-                                                            y,
-                                                            random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, random_state=42)
         reg.fit(X_train, y_train).score(X_test, y_test)
 
     def test_stacking_classification(self):
@@ -210,14 +207,13 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         X, y = load_iris(return_X_y=True)
         estimators = [('gbm', RayXGBClassifier()),
                       ('svr',
-                       make_pipeline(StandardScaler(),
-                                     LinearSVC(random_state=42)))]
-        clf = StackingClassifier(estimators=estimators,
-                                 final_estimator=LogisticRegression())
+                       make_pipeline(
+                           StandardScaler(), LinearSVC(random_state=42)))]
+        clf = StackingClassifier(
+            estimators=estimators, final_estimator=LogisticRegression())
 
-        X_train, X_test, y_train, y_test = train_test_split(X,
-                                                            y,
-                                                            random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, random_state=42)
         clf.fit(X_train, y_train).score(X_test, y_test)
 
     # exact tree method doesn't support distributed training
@@ -337,9 +333,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         self._init_ray()
 
         from sklearn.datasets import load_boston
-        reg = RayXGBRegressor(n_estimators=4,
-                              num_parallel_tree=4,
-                              tree_method='hist')
+        reg = RayXGBRegressor(
+            n_estimators=4, num_parallel_tree=4, tree_method='hist')
         boston = load_boston()
         bst = reg.fit(X=boston['data'], y=boston['target'])
         dump = bst.get_booster().get_dump(dump_format='json')
@@ -351,8 +346,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         assert len(dump) == 4
 
         config = json.loads(bst.get_booster().save_config())
-        assert int(config['learner']['gradient_booster']['gbtree_train_param']
-                   ['num_parallel_tree']) == 4
+        assert int(config['learner']['gradient_booster']['gbtree_train_param'][
+            'num_parallel_tree']) == 4
 
     def test_boston_housing_regression(self):
         self._init_ray()
@@ -370,15 +365,12 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
             preds = xgb_model.predict(X[test_index])
             # test other params in XGBRegressor().fit
-            preds2 = xgb_model.predict(X[test_index],
-                                       output_margin=True,
-                                       ntree_limit=3)
-            preds3 = xgb_model.predict(X[test_index],
-                                       output_margin=True,
-                                       ntree_limit=0)
-            preds4 = xgb_model.predict(X[test_index],
-                                       output_margin=False,
-                                       ntree_limit=3)
+            preds2 = xgb_model.predict(
+                X[test_index], output_margin=True, ntree_limit=3)
+            preds3 = xgb_model.predict(
+                X[test_index], output_margin=True, ntree_limit=0)
+            preds4 = xgb_model.predict(
+                X[test_index], output_margin=False, ntree_limit=3)
             labels = y[test_index]
 
             assert mean_squared_error(preds, labels) < 25
@@ -394,9 +386,9 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         X, y = load_boston(return_X_y=True)
         kf = KFold(n_splits=2, shuffle=True, random_state=self.rng)
         for train_index, test_index in kf.split(X, y):
-            xgb_model = xgb.XGBRFRegressor(random_state=42,
-                                           tree_method=tree_method).fit(
-                                               X[train_index], y[train_index])
+            xgb_model = xgb.XGBRFRegressor(
+                random_state=42, tree_method=tree_method).fit(
+                    X[train_index], y[train_index])
             preds = xgb_model.predict(X[test_index])
             labels = y[test_index]
             assert mean_squared_error(preds, labels) < 35
@@ -416,12 +408,13 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         y = boston['target']
         X = boston['data']
         xgb_model = RayXGBRegressor(learning_rate=0.1)
-        clf = GridSearchCV(xgb_model, {
-            'max_depth': [2, 4, 6],
-            'n_estimators': [50, 100, 200]
-        },
-                           cv=3,
-                           verbose=1)
+        clf = GridSearchCV(
+            xgb_model, {
+                'max_depth': [2, 4, 6],
+                'n_estimators': [50, 100, 200]
+            },
+            cv=3,
+            verbose=1)
         clf.fit(X, y)
         assert clf.best_score_ < 0.7
         assert clf.best_params_ == {'n_estimators': 100, 'max_depth': 4}
@@ -520,18 +513,16 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         from sklearn.model_selection import train_test_split
 
         iris = load_iris()
-        tr_d, te_d, tr_l, te_l = train_test_split(iris.data,
-                                                  iris.target,
-                                                  train_size=120,
-                                                  test_size=0.2)
+        tr_d, te_d, tr_l, te_l = train_test_split(
+            iris.data, iris.target, train_size=120, test_size=0.2)
 
         classifier = RayXGBClassifier(booster='gbtree', n_estimators=10)
         classifier.fit(tr_d, tr_l)
 
         preds = classifier.predict(te_d)
         labels = te_l
-        err = sum([1
-                   for p, l in zip(preds, labels) if p != l]) * 1.0 / len(te_l)
+        err = sum([1 for p, l in zip(preds, labels)
+                   if p != l]) * 1.0 / len(te_l)
         assert err < 0.2
 
     def test_sklearn_api_gblinear(self):
@@ -541,17 +532,16 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         from sklearn.model_selection import train_test_split
 
         iris = load_iris()
-        tr_d, te_d, tr_l, te_l = train_test_split(iris.data,
-                                                  iris.target,
-                                                  train_size=120)
+        tr_d, te_d, tr_l, te_l = train_test_split(
+            iris.data, iris.target, train_size=120)
 
         classifier = RayXGBClassifier(booster='gblinear', n_estimators=100)
         classifier.fit(tr_d, tr_l)
 
         preds = classifier.predict(te_d)
         labels = te_l
-        err = sum([1
-                   for p, l in zip(preds, labels) if p != l]) * 1.0 / len(te_l)
+        err = sum([1 for p, l in zip(preds, labels)
+                   if p != l]) * 1.0 / len(te_l)
         assert err < 0.5
 
     def test_sklearn_random_state(self):
@@ -672,12 +662,13 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
         # train it using instance weights only in the training set
         weights_train = np.random.choice([1, 2], len(X_train))
-        clf.fit(X_train,
-                y_train,
-                sample_weight=weights_train,
-                eval_set=[(X_test, y_test)],
-                eval_metric='logloss',
-                verbose=False)
+        clf.fit(
+            X_train,
+            y_train,
+            sample_weight=weights_train,
+            eval_set=[(X_test, y_test)],
+            eval_metric='logloss',
+            verbose=False)
 
         # evaluate logloss metric on test set *without* using weights
         evals_result_without_weights = clf.evals_result()
@@ -687,13 +678,14 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         # now use weights for the test set
         np.random.seed(0)
         weights_test = np.random.choice([1, 2], len(X_test))
-        clf.fit(X_train,
-                y_train,
-                sample_weight=weights_train,
-                eval_set=[(X_test, y_test)],
-                sample_weight_eval_set=[weights_test],
-                eval_metric='logloss',
-                verbose=False)
+        clf.fit(
+            X_train,
+            y_train,
+            sample_weight=weights_train,
+            eval_set=[(X_test, y_test)],
+            sample_weight_eval_set=[weights_test],
+            eval_metric='logloss',
+            verbose=False)
         evals_result_with_weights = clf.evals_result()
         logloss_with_weights = evals_result_with_weights["validation_0"][
             "logloss"]
@@ -705,19 +697,21 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
         with pytest.raises(ValueError):
             # length of eval set and sample weight doesn't match.
-            clf.fit(X_train,
-                    y_train,
-                    sample_weight=weights_train,
-                    eval_set=[(X_train, y_train), (X_test, y_test)],
-                    sample_weight_eval_set=[weights_train])
+            clf.fit(
+                X_train,
+                y_train,
+                sample_weight=weights_train,
+                eval_set=[(X_train, y_train), (X_test, y_test)],
+                sample_weight_eval_set=[weights_train])
 
         with pytest.raises(ValueError):
             cls = RayXGBClassifier()
-            cls.fit(X_train,
-                    y_train,
-                    sample_weight=weights_train,
-                    eval_set=[(X_train, y_train), (X_test, y_test)],
-                    sample_weight_eval_set=[weights_train])
+            cls.fit(
+                X_train,
+                y_train,
+                sample_weight=weights_train,
+                eval_set=[(X_train, y_train), (X_test, y_test)],
+                sample_weight_eval_set=[weights_train])
 
     def test_validation_weights_xgbclassifier(self):
         self._init_ray()
@@ -740,12 +734,13 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
         # train it using instance weights only in the training set
         weights_train = np.random.choice([1, 2], len(X_train))
-        clf.fit(X_train,
-                y_train,
-                sample_weight=weights_train,
-                eval_set=[(X_test, y_test)],
-                eval_metric='logloss',
-                verbose=False)
+        clf.fit(
+            X_train,
+            y_train,
+            sample_weight=weights_train,
+            eval_set=[(X_test, y_test)],
+            eval_metric='logloss',
+            verbose=False)
 
         # evaluate logloss metric on test set *without* using weights
         evals_result_without_weights = clf.evals_result()
@@ -755,13 +750,14 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         # now use weights for the test set
         np.random.seed(0)
         weights_test = np.random.choice([1, 2], len(X_test))
-        clf.fit(X_train,
-                y_train,
-                sample_weight=weights_train,
-                eval_set=[(X_test, y_test)],
-                sample_weight_eval_set=[weights_test],
-                eval_metric='logloss',
-                verbose=False)
+        clf.fit(
+            X_train,
+            y_train,
+            sample_weight=weights_train,
+            eval_set=[(X_test, y_test)],
+            sample_weight_eval_set=[weights_test],
+            eval_metric='logloss',
+            verbose=False)
         evals_result_with_weights = clf.evals_result()
         logloss_with_weights = evals_result_with_weights["validation_0"][
             "logloss"]
@@ -801,8 +797,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             # test native booster
             preds = xgb_model.predict(X[test_index], output_margin=True)
             booster = xgb.Booster(model_file=model_path)
-            predt_1 = booster.predict(xgb.DMatrix(X[test_index]),
-                                      output_margin=True)
+            predt_1 = booster.predict(
+                xgb.DMatrix(X[test_index]), output_margin=True)
             assert np.allclose(preds, predt_1)
 
             with pytest.raises(TypeError):
@@ -860,43 +856,44 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
         # Regression
         X, y = load_boston(return_X_y=True)
-        bst = RayXGBRegressor(booster='gblinear',
-                              learning_rate=0.1,
-                              n_estimators=10,
-                              objective='reg:squarederror',
-                              random_state=0,
-                              verbosity=0)
-        rfecv = RFECV(estimator=bst,
-                      step=1,
-                      cv=3,
-                      scoring='neg_mean_squared_error')
+        bst = RayXGBRegressor(
+            booster='gblinear',
+            learning_rate=0.1,
+            n_estimators=10,
+            objective='reg:squarederror',
+            random_state=0,
+            verbosity=0)
+        rfecv = RFECV(
+            estimator=bst, step=1, cv=3, scoring='neg_mean_squared_error')
         rfecv.fit(X, y)
 
         # Binary classification
         X, y = load_breast_cancer(return_X_y=True)
-        bst = RayXGBClassifier(booster='gblinear',
-                               learning_rate=0.1,
-                               n_estimators=10,
-                               objective='binary:logistic',
-                               random_state=0,
-                               verbosity=0,
-                               use_label_encoder=False)
+        bst = RayXGBClassifier(
+            booster='gblinear',
+            learning_rate=0.1,
+            n_estimators=10,
+            objective='binary:logistic',
+            random_state=0,
+            verbosity=0,
+            use_label_encoder=False)
         rfecv = RFECV(estimator=bst, step=1, cv=3, scoring='roc_auc')
         rfecv.fit(X, y)
 
         # Multi-class classification
         X, y = load_iris(return_X_y=True)
-        bst = RayXGBClassifier(base_score=0.4,
-                               booster='gblinear',
-                               learning_rate=0.1,
-                               n_estimators=10,
-                               objective='multi:softprob',
-                               random_state=0,
-                               reg_alpha=0.001,
-                               reg_lambda=0.01,
-                               scale_pos_weight=0.5,
-                               verbosity=0,
-                               use_label_encoder=False)
+        bst = RayXGBClassifier(
+            base_score=0.4,
+            booster='gblinear',
+            learning_rate=0.1,
+            n_estimators=10,
+            objective='multi:softprob',
+            random_state=0,
+            reg_alpha=0.001,
+            reg_lambda=0.01,
+            scale_pos_weight=0.5,
+            verbosity=0,
+            use_label_encoder=False)
         rfecv = RFECV(estimator=bst, step=1, cv=3, scoring='neg_log_loss')
         rfecv.fit(X, y)
 
@@ -906,10 +903,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         rfecv.fit(X, y)
 
         cls = RayXGBClassifier(use_label_encoder=False)
-        rfecv = RFECV(estimator=cls,
-                      step=1,
-                      cv=3,
-                      scoring='neg_mean_squared_error')
+        rfecv = RFECV(
+            estimator=cls, step=1, cv=3, scoring='neg_mean_squared_error')
         rfecv.fit(X, y)
 
     def test_XGBClassifier_resume(self):
@@ -925,9 +920,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
             X, Y = load_breast_cancer(return_X_y=True)
 
-            model1 = RayXGBClassifier(learning_rate=0.3,
-                                      random_state=0,
-                                      n_estimators=8)
+            model1 = RayXGBClassifier(
+                learning_rate=0.3, random_state=0, n_estimators=8)
             model1.fit(X, Y)
 
             pred1 = model1.predict(X)
@@ -935,9 +929,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
             # file name of stored xgb model
             model1.save_model(model1_path)
-            model2 = RayXGBClassifier(learning_rate=0.3,
-                                      random_state=0,
-                                      n_estimators=8)
+            model2 = RayXGBClassifier(
+                learning_rate=0.3, random_state=0, n_estimators=8)
             model2.fit(X, Y, xgb_model=model1_path)
 
             pred2 = model2.predict(X)
@@ -948,9 +941,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
             # file name of 'Booster' instance Xgb model
             model1.get_booster().save_model(model1_booster_path)
-            model2 = RayXGBClassifier(learning_rate=0.3,
-                                      random_state=0,
-                                      n_estimators=8)
+            model2 = RayXGBClassifier(
+                learning_rate=0.3, random_state=0, n_estimators=8)
             model2.fit(X, Y, xgb_model=model1_booster_path)
 
             pred2 = model2.predict(X)
@@ -968,9 +960,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         reg.fit(X, y)
 
         config = json.loads(reg.get_booster().save_config())
-        assert config['learner']['gradient_booster']['updater'][
-            'prune']['train_param'][
-                'interaction_constraints'] == '[[0, 1], [2, 3, 4]]'
+        assert config['learner']['gradient_booster']['updater']['prune'][
+            'train_param']['interaction_constraints'] == '[[0, 1], [2, 3, 4]]'
 
     # TODO check why this is not working (output is empty, probably due to Ray)
     # def test_parameter_validation(self):
@@ -1063,14 +1054,14 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         train = df.drop(columns=['status'])
         model = RayXGBClassifier()
         model.fit(train, target)
-        clf_isotonic = CalibratedClassifierCV(model,
-                                              cv='prefit',
-                                              method='isotonic')
+        clf_isotonic = CalibratedClassifierCV(
+            model, cv='prefit', method='isotonic')
         clf_isotonic.fit(train, target)
         assert isinstance(
             clf_isotonic.calibrated_classifiers_[0].base_estimator,
             RayXGBClassifier)
-        self.assertTrue(np.allclose(np.array(clf_isotonic.classes_), np.array([0, 1])))
+        self.assertTrue(
+            np.allclose(np.array(clf_isotonic.classes_), np.array([0, 1])))
 
     # def run_feature_weights(self, X, y, fw, model=RayXGBRegressor):
     #     with TemporaryDirectory() as tmpdir:
@@ -1133,24 +1124,27 @@ class XGBoostRaySklearnTest(unittest.TestCase):
     def run_boost_from_prediction(self, tree_method):
         from sklearn.datasets import load_breast_cancer
         X, y = load_breast_cancer(return_X_y=True)
-        model_0 = RayXGBClassifier(learning_rate=0.3,
-                                   random_state=0,
-                                   n_estimators=4,
-                                   tree_method=tree_method)
+        model_0 = RayXGBClassifier(
+            learning_rate=0.3,
+            random_state=0,
+            n_estimators=4,
+            tree_method=tree_method)
         model_0.fit(X=X, y=y)
         margin = model_0.predict(X, output_margin=True)
 
-        model_1 = RayXGBClassifier(learning_rate=0.3,
-                                   random_state=0,
-                                   n_estimators=4,
-                                   tree_method=tree_method)
+        model_1 = RayXGBClassifier(
+            learning_rate=0.3,
+            random_state=0,
+            n_estimators=4,
+            tree_method=tree_method)
         model_1.fit(X=X, y=y, base_margin=margin)
         predictions_1 = model_1.predict(X, base_margin=margin)
 
-        cls_2 = RayXGBClassifier(learning_rate=0.3,
-                                 random_state=0,
-                                 n_estimators=8,
-                                 tree_method=tree_method)
+        cls_2 = RayXGBClassifier(
+            learning_rate=0.3,
+            random_state=0,
+            n_estimators=8,
+            tree_method=tree_method)
         cls_2.fit(X=X, y=y)
         predictions_2 = cls_2.predict(X)
         assert np.all(predictions_1 == predictions_2)

@@ -16,21 +16,19 @@ from xgboost_ray.matrix import RayDMatrix
 
 # would normally use a mixin class but it breaks xgb's get_params
 def _predict(
-    model: XGBModel,
-    X,
-    output_margin=False,
-    ntree_limit=None,
-    validate_features=True,
-    base_margin=None,
-    iteration_range=None,
+        model: XGBModel,
+        X,
+        output_margin=False,
+        ntree_limit=None,
+        validate_features=True,
+        base_margin=None,
+        iteration_range=None,
 ):
     iteration_range = _convert_ntree_limit(model.get_booster(), ntree_limit,
                                            iteration_range)
     iteration_range = model._get_iteration_range(iteration_range)
 
-    test = RayDMatrix(X,
-                      base_margin=base_margin,
-                      missing=model.missing)
+    test = RayDMatrix(X, base_margin=base_margin, missing=model.missing)
     return predict(
         model.get_booster(),
         data=test,
@@ -110,21 +108,22 @@ class RayXGBRegressor(XGBRegressor):
         return False
 
     def predict(
-        self,
-        X,
-        output_margin=False,
-        ntree_limit=None,
-        validate_features=True,
-        base_margin=None,
-        iteration_range=None,
+            self,
+            X,
+            output_margin=False,
+            ntree_limit=None,
+            validate_features=True,
+            base_margin=None,
+            iteration_range=None,
     ):
-        return _predict(self,
-                        X,
-                        output_margin=output_margin,
-                        ntree_limit=ntree_limit,
-                        validate_features=validate_features,
-                        base_margin=base_margin,
-                        iteration_range=iteration_range)
+        return _predict(
+            self,
+            X,
+            output_margin=output_margin,
+            ntree_limit=ntree_limit,
+            validate_features=validate_features,
+            base_margin=base_margin,
+            iteration_range=iteration_range)
 
     def load_model(self, fname):
         if not hasattr(self, '_Booster'):
@@ -271,13 +270,13 @@ class RayXGBClassifier(XGBClassifier):
         return False
 
     def predict(
-        self,
-        X,
-        output_margin=False,
-        ntree_limit=None,
-        validate_features=True,
-        base_margin=None,
-        iteration_range: Optional[Tuple[int, int]] = None,
+            self,
+            X,
+            output_margin=False,
+            ntree_limit=None,
+            validate_features=True,
+            base_margin=None,
+            iteration_range: Optional[Tuple[int, int]] = None,
     ):
         class_probs = _predict(
             self,
@@ -305,12 +304,12 @@ class RayXGBClassifier(XGBClassifier):
         return column_indexes
 
     def predict_proba(
-        self,
-        X,
-        ntree_limit=None,
-        validate_features=False,
-        base_margin=None,
-        iteration_range: Optional[Tuple[int, int]] = None,
+            self,
+            X,
+            ntree_limit=None,
+            validate_features=False,
+            base_margin=None,
+            iteration_range: Optional[Tuple[int, int]] = None,
     ) -> np.ndarray:
         """ Predict the probability of each `X` example being of a given class.
 
@@ -344,16 +343,17 @@ class RayXGBClassifier(XGBClassifier):
         # softmax:         Use output margin to remove the argmax in PredTransform.
         # binary:logistic: Expand the prob vector into 2-class matrix after predict.
         # binary:logitraw: Unsupported by predict_proba()
-        class_probs = _predict(self,
-                               X=X,
-                               output_margin=self.objective == "multi:softmax",
-                               ntree_limit=ntree_limit,
-                               validate_features=validate_features,
-                               base_margin=base_margin,
-                               iteration_range=iteration_range)
+        class_probs = _predict(
+            self,
+            X=X,
+            output_margin=self.objective == "multi:softmax",
+            ntree_limit=ntree_limit,
+            validate_features=validate_features,
+            base_margin=base_margin,
+            iteration_range=iteration_range)
         # If model is loaded from a raw booster there's no `n_classes_`
-        return _cls_predict_proba(getattr(self, "n_classes_", None),
-                                  class_probs, np.vstack)
+        return _cls_predict_proba(
+            getattr(self, "n_classes_", None), class_probs, np.vstack)
 
     def load_model(self, fname):
         if not hasattr(self, '_Booster'):
