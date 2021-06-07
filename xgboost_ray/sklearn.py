@@ -3,12 +3,26 @@ from typing import Tuple, Dict, Optional, Union
 import numpy as np
 
 import warnings
+import functools
 
 from xgboost import Booster
 from xgboost.sklearn import (
-    XGBModel, XGBClassifier, XGBRegressor, _deprecate_positional_args,
+    XGBModel, XGBClassifier, XGBRegressor,
     _objective_decorator, _wrap_evaluation_matrices, _convert_ntree_limit,
     _is_cudf_df, _is_cudf_ser, _is_cupy_array, _cls_predict_proba)
+
+# avoiding exception in xgboost==0.9.0
+try:
+    from xgboost.sklearn import _deprecate_positional_args
+except ImportError:
+    def _deprecate_positional_args(f):
+        """Dummy decorator, does nothing"""
+        @functools.wraps(f)
+        def inner_f(*args, **kwargs):
+            return f(*args, **kwargs)
+
+        return inner_f
+
 from xgboost.compat import XGBoostLabelEncoder
 
 from xgboost_ray.main import RayParams, train, predict
