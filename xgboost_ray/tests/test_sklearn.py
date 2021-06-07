@@ -850,7 +850,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             predt_1 = cls.predict(X)
             assert np.allclose(predt_0, predt_1)
 
-    def test_RFECV(self):
+    # forcing it to be last as it's the longest test by far
+    def test_zzzzzzz_RFECV(self):
         self._init_ray()
 
         from sklearn.datasets import load_boston
