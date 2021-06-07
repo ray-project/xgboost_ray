@@ -1162,6 +1162,16 @@ def train(
             and params["tree_method"].startswith("gpu"))
 
     tree_method = params.get("tree_method", "auto") or "auto"
+
+    # preemptively raise exceptions with bad params
+    if tree_method == "exact":
+        raise ValueError(
+            "`exact` tree method doesn't support distributed training.")
+
+    if params.get("updater", None) == "grow_colmaker":
+        raise ValueError(
+            "`grow_colmaker` updater doesn't support distributed training.")
+
     if gpus_per_actor > 0 and not tree_method.startswith("gpu_"):
         logger.warning(
             f"GPUs have been assigned to the actors, but the current XGBoost "
