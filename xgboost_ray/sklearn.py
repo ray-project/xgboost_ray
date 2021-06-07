@@ -37,8 +37,7 @@ def _treat_estimator_doc(doc: str) -> str:
     """Helper function to make nececssary changes in estimator docstrings"""
     doc = doc.replace(*_N_JOBS_DOC_REPLACE).replace(
         "Implementation of the scikit-learn API for XGBoost",
-        "Implementation of the scikit-learn API for Ray-distributed XGBoost"
-    )
+        "Implementation of the scikit-learn API for Ray-distributed XGBoost")
     return doc
 
 
@@ -98,22 +97,45 @@ class RayXGBRegressor(XGBRegressor):
             _remote: Optional[bool] = None):
         evals_result = {}
 
-        train_dmatrix, evals = _wrap_evaluation_matrices(
-            missing=self.missing,
-            X=X,
-            y=y,
-            group=None,
-            qid=None,
-            sample_weight=sample_weight,
-            base_margin=base_margin,
-            feature_weights=feature_weights,
-            eval_set=eval_set,
-            sample_weight_eval_set=sample_weight_eval_set,
-            base_margin_eval_set=base_margin_eval_set,
-            eval_group=None,
-            eval_qid=None,
-            create_dmatrix=lambda **kwargs: RayDMatrix(**kwargs),
-        )
+        # enable_categorical param has been added in xgboost 1.5.0
+        try:
+            train_dmatrix, evals = _wrap_evaluation_matrices(
+                missing=self.missing,
+                X=X,
+                y=y,
+                group=None,
+                qid=None,
+                sample_weight=sample_weight,
+                base_margin=base_margin,
+                feature_weights=feature_weights,
+                eval_set=eval_set,
+                sample_weight_eval_set=sample_weight_eval_set,
+                base_margin_eval_set=base_margin_eval_set,
+                eval_group=None,
+                eval_qid=None,
+                create_dmatrix=lambda **kwargs: RayDMatrix(**kwargs),
+                enable_categorical=self.enable_categorical,
+            )
+        except AttributeError as e:
+            if "enable_categorical" not in str(e):
+                raise e
+            train_dmatrix, evals = _wrap_evaluation_matrices(
+                missing=self.missing,
+                X=X,
+                y=y,
+                group=None,
+                qid=None,
+                sample_weight=sample_weight,
+                base_margin=base_margin,
+                feature_weights=feature_weights,
+                eval_set=eval_set,
+                sample_weight_eval_set=sample_weight_eval_set,
+                base_margin_eval_set=base_margin_eval_set,
+                eval_group=None,
+                eval_qid=None,
+                create_dmatrix=lambda **kwargs: RayDMatrix(**kwargs),
+            )
+
         params = self.get_xgb_params()
 
         if callable(self.objective):
@@ -290,23 +312,46 @@ class RayXGBClassifier(XGBClassifier):
             raise ValueError(
                 "Please reshape the input data X into 2-dimensional matrix.")
 
-        train_dmatrix, evals = _wrap_evaluation_matrices(
-            missing=self.missing,
-            X=X,
-            y=y,
-            group=None,
-            qid=None,
-            sample_weight=sample_weight,
-            base_margin=base_margin,
-            feature_weights=feature_weights,
-            eval_set=eval_set,
-            sample_weight_eval_set=sample_weight_eval_set,
-            base_margin_eval_set=base_margin_eval_set,
-            eval_group=None,
-            eval_qid=None,
-            create_dmatrix=lambda **kwargs: RayDMatrix(**kwargs),
-            label_transform=label_transform,
-        )
+        # enable_categorical param has been added in xgboost 1.5.0
+        try:
+            train_dmatrix, evals = _wrap_evaluation_matrices(
+                missing=self.missing,
+                X=X,
+                y=y,
+                group=None,
+                qid=None,
+                sample_weight=sample_weight,
+                base_margin=base_margin,
+                feature_weights=feature_weights,
+                eval_set=eval_set,
+                sample_weight_eval_set=sample_weight_eval_set,
+                base_margin_eval_set=base_margin_eval_set,
+                eval_group=None,
+                eval_qid=None,
+                create_dmatrix=lambda **kwargs: RayDMatrix(**kwargs),
+                label_transform=label_transform,
+                enable_categorical=self.enable_categorical,
+            )
+        except AttributeError as e:
+            if "enable_categorical" not in str(e):
+                raise e
+            train_dmatrix, evals = _wrap_evaluation_matrices(
+                missing=self.missing,
+                X=X,
+                y=y,
+                group=None,
+                qid=None,
+                sample_weight=sample_weight,
+                base_margin=base_margin,
+                feature_weights=feature_weights,
+                eval_set=eval_set,
+                sample_weight_eval_set=sample_weight_eval_set,
+                base_margin_eval_set=base_margin_eval_set,
+                eval_group=None,
+                eval_qid=None,
+                create_dmatrix=lambda **kwargs: RayDMatrix(**kwargs),
+                label_transform=label_transform,
+            )
 
         # remove those as they will be set in RayXGBoostActor
         params.pop("n_jobs", None)
