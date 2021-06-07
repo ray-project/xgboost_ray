@@ -1,10 +1,14 @@
-import collections
-import importlib.util
+# Copied almost verbatim from https://github.com/dmlc/xgboost/blob/a5c852660b1056204aa2e0cbfcd5b4ecfbf31adf/tests/python/test_with_sklearn.py
+# in order to ensure 1:1 coverage, with minimal modifications.
+# Some tests were disabled due to not being applicable for a distributed setting.
+
+#import collections
+#import importlib.util
 import numpy as np
 import xgboost as xgb
 import unittest
-import io
-from contextlib import redirect_stdout, redirect_stderr
+#import io
+#from contextlib import redirect_stdout, redirect_stderr
 import tempfile
 import os
 import shutil
