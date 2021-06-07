@@ -1,17 +1,45 @@
-from typing import Tuple, Dict, Any, List, Optional, Callable, Union, Sequence
+from typing import Tuple, Dict, Optional, Union
 
 import numpy as np
 
 import warnings
-import copy
-import json
 
 from xgboost import Booster
-from xgboost.sklearn import XGBModel, XGBClassifier, XGBRegressor, _deprecate_positional_args, _objective_decorator, _wrap_evaluation_matrices, _convert_ntree_limit, _is_cudf_df, _is_cudf_ser, _is_cupy_array, _cls_predict_proba
+from xgboost.sklearn import (
+    XGBModel, XGBClassifier, XGBRegressor, _deprecate_positional_args,
+    _objective_decorator, _wrap_evaluation_matrices, _convert_ntree_limit,
+    _is_cudf_df, _is_cudf_ser, _is_cupy_array, _cls_predict_proba)
 from xgboost.compat import XGBoostLabelEncoder
 
 from xgboost_ray.main import RayParams, train, predict
 from xgboost_ray.matrix import RayDMatrix
+
+_RAY_PARAMS_DOC = """
+    ray_params (Union[None, RayParams, Dict]): Parameters to configure
+        Ray-specific behavior. See :class:`RayParams` for a list of valid
+        configuration parameters.
+    _remote (bool): Whether to run the driver process in a remote
+        function. This is enabled by default in Ray client mode.
+
+"""
+
+_N_JOBS_DOC_REPLACE = ("""    n_jobs : int
+        Number of parallel threads used to run xgboost.  When used with other Scikit-Learn
+        algorithms like grid search, you may choose which algorithm to parallelize and
+        balance the threads.  Creating thread contention will significantly slow down both
+        algorithms.""", """    n_jobs : int
+        Number of Ray actors used to run xgboost in parallel.
+        In order to set number of threads per actor, pass a ``RayParams`` object to the 
+        relevant method as a ``ray_params`` argument.""")
+
+
+def _treat_estimator_doc(doc: str) -> str:
+    """Helper function to make nececssary changes in estimator docstrings"""
+    doc = doc.replace(*_N_JOBS_DOC_REPLACE).replace(
+        "Implementation of the scikit-learn API for XGBoost",
+        "Implementation of the scikit-learn API for Ray-distributed XGBoost"
+    )
+    return doc
 
 
 # would normally use a mixin class but it breaks xgb's get_params
@@ -23,10 +51,19 @@ def _predict(
         validate_features=True,
         base_margin=None,
         iteration_range=None,
+        ray_params: Union[None, RayParams, Dict] = None,
+        _remote: Optional[bool] = None,
 ):
     iteration_range = _convert_ntree_limit(model.get_booster(), ntree_limit,
                                            iteration_range)
     iteration_range = model._get_iteration_range(iteration_range)
+
+    if ray_params is None:
+        # TODO warning here?
+        n_jobs = model.n_jobs
+        if not n_jobs or n_jobs < 1:
+            n_jobs = 1
+        ray_params = RayParams(num_actors=n_jobs)
 
     test = RayDMatrix(X, base_margin=base_margin, missing=model.missing)
     return predict(
@@ -35,6 +72,8 @@ def _predict(
         iteration_range=iteration_range,
         output_margin=output_margin,
         validate_features=validate_features,
+        ray_params=ray_params,
+        _remote=_remote,
     )
 
 
@@ -54,7 +93,9 @@ class RayXGBRegressor(XGBRegressor):
             sample_weight_eval_set=None,
             base_margin_eval_set=None,
             feature_weights=None,
-            callbacks=None):
+            callbacks=None,
+            ray_params: Union[None, RayParams, Dict] = None,
+            _remote: Optional[bool] = None):
         evals_result = {}
 
         train_dmatrix, evals = _wrap_evaluation_matrices(
@@ -84,7 +125,16 @@ class RayXGBRegressor(XGBRegressor):
         model, feval, params = self._configure_fit(xgb_model, eval_metric,
                                                    params)
 
-        ray_params = RayParams(num_actors=self.n_jobs or 1)
+        # remove those as they will be set in RayXGBoostActor
+        params.pop("n_jobs", None)
+        params.pop("nthread", None)
+
+        if ray_params is None:
+            # TODO warning here?
+            n_jobs = self.n_jobs
+            if not n_jobs or n_jobs < 1:
+                n_jobs = 1
+            ray_params = RayParams(num_actors=n_jobs)
 
         self._Booster = train(
             params,
@@ -99,23 +149,26 @@ class RayXGBRegressor(XGBRegressor):
             xgb_model=model,
             callbacks=callbacks,
             ray_params=ray_params,
+            _remote=_remote,
         )
 
         self._set_evaluation_result(evals_result)
         return self
 
+    fit.__doc__ = XGBRegressor.fit.__doc__ + _RAY_PARAMS_DOC
+
     def _can_use_inplace_predict(self) -> bool:
         return False
 
-    def predict(
-            self,
-            X,
-            output_margin=False,
-            ntree_limit=None,
-            validate_features=True,
-            base_margin=None,
-            iteration_range=None,
-    ):
+    def predict(self,
+                X,
+                output_margin=False,
+                ntree_limit=None,
+                validate_features=True,
+                base_margin=None,
+                iteration_range=None,
+                ray_params: Union[None, RayParams, Dict] = None,
+                _remote: Optional[bool] = None):
         return _predict(
             self,
             X,
@@ -123,12 +176,19 @@ class RayXGBRegressor(XGBRegressor):
             ntree_limit=ntree_limit,
             validate_features=validate_features,
             base_margin=base_margin,
-            iteration_range=iteration_range)
+            iteration_range=iteration_range,
+            ray_params=ray_params,
+            _remote=_remote)
+
+    predict.__doc__ = XGBRegressor.predict.__doc__ + _RAY_PARAMS_DOC
 
     def load_model(self, fname):
-        if not hasattr(self, '_Booster'):
-            self._Booster = Booster({'n_jobs': 1})
+        if not hasattr(self, "_Booster"):
+            self._Booster = Booster()
         return super().load_model(fname)
+
+
+RayXGBRegressor.__doc__ = _treat_estimator_doc(XGBRegressor.__doc__)
 
 
 class RayXGBClassifier(XGBClassifier):
@@ -147,7 +207,9 @@ class RayXGBClassifier(XGBClassifier):
             sample_weight_eval_set=None,
             base_margin_eval_set=None,
             feature_weights=None,
-            callbacks=None):
+            callbacks=None,
+            ray_params: Union[None, RayParams, Dict] = None,
+            _remote: Optional[bool] = None):
         # pylint: disable = attribute-defined-outside-init,too-many-statements
         can_use_label_encoder = True
         label_encoding_check_error = (
@@ -203,19 +265,22 @@ class RayXGBClassifier(XGBClassifier):
             params["objective"] = "multi:softprob"
             params["num_class"] = self.n_classes_
 
+        def identity_transform(x):
+            return x
+
         if self.use_label_encoder:
             if not can_use_label_encoder:
                 raise ValueError(
-                    'The option use_label_encoder=True is incompatible with inputs '
+                    "The option use_label_encoder=True is incompatible with inputs "
                     +
-                    'of type cuDF or cuPy. Please set use_label_encoder=False when '
-                    + 'constructing XGBClassifier object. NOTE: ' +
+                    "of type cuDF or cuPy. Please set use_label_encoder=False when "
+                    + "constructing XGBClassifier object. NOTE: " +
                     label_encoder_deprecation_msg)
             warnings.warn(label_encoder_deprecation_msg, UserWarning)
             self._le = XGBoostLabelEncoder().fit(y)
             label_transform = self._le.transform
         else:
-            label_transform = lambda x: x
+            label_transform = identity_transform
 
         model, feval, params = self._configure_fit(xgb_model, eval_metric,
                                                    params)
@@ -243,7 +308,16 @@ class RayXGBClassifier(XGBClassifier):
             label_transform=label_transform,
         )
 
-        ray_params = RayParams(num_actors=self.n_jobs or 1)
+        # remove those as they will be set in RayXGBoostActor
+        params.pop("n_jobs", None)
+        params.pop("nthread", None)
+
+        if ray_params is None:
+            # TODO warning here?
+            n_jobs = self.n_jobs
+            if not n_jobs or n_jobs < 1:
+                n_jobs = 1
+            ray_params = RayParams(num_actors=n_jobs)
 
         self._Booster = train(
             params,
@@ -258,6 +332,7 @@ class RayXGBClassifier(XGBClassifier):
             xgb_model=model,
             callbacks=callbacks,
             ray_params=ray_params,
+            _remote=_remote,
         )
 
         if not callable(self.objective):
@@ -266,18 +341,20 @@ class RayXGBClassifier(XGBClassifier):
         self._set_evaluation_result(evals_result)
         return self
 
+    fit.__doc__ = XGBClassifier.fit.__doc__ + _RAY_PARAMS_DOC
+
     def _can_use_inplace_predict(self) -> bool:
         return False
 
-    def predict(
-            self,
-            X,
-            output_margin=False,
-            ntree_limit=None,
-            validate_features=True,
-            base_margin=None,
-            iteration_range: Optional[Tuple[int, int]] = None,
-    ):
+    def predict(self,
+                X,
+                output_margin=False,
+                ntree_limit=None,
+                validate_features=True,
+                base_margin=None,
+                iteration_range: Optional[Tuple[int, int]] = None,
+                ray_params: Union[None, RayParams, Dict] = None,
+                _remote: Optional[bool] = None):
         class_probs = _predict(
             self,
             X=X,
@@ -286,6 +363,8 @@ class RayXGBClassifier(XGBClassifier):
             validate_features=validate_features,
             base_margin=base_margin,
             iteration_range=iteration_range,
+            ray_params=ray_params,
+            _remote=_remote,
         )
         if output_margin:
             # If output_margin is active, simply return the scores
@@ -299,45 +378,20 @@ class RayXGBClassifier(XGBClassifier):
             column_indexes = np.repeat(0, class_probs.shape[0])
             column_indexes[class_probs > 0.5] = 1
 
-        if hasattr(self, '_le'):
+        if hasattr(self, "_le"):
             return self._le.inverse_transform(column_indexes)
         return column_indexes
 
-    def predict_proba(
-            self,
-            X,
-            ntree_limit=None,
-            validate_features=False,
-            base_margin=None,
-            iteration_range: Optional[Tuple[int, int]] = None,
-    ) -> np.ndarray:
-        """ Predict the probability of each `X` example being of a given class.
+    predict.__doc__ = XGBModel.predict.__doc__ + _RAY_PARAMS_DOC
 
-        .. note:: This function is only thread safe for `gbtree` and `dart`.
-
-        Parameters
-        ----------
-        X : array_like
-            Feature matrix.
-        ntree_limit : int
-            Deprecated, use `iteration_range` instead.
-        validate_features : bool
-            When this is True, validate that the Booster's and data's feature_names are
-            identical.  Otherwise, it is assumed that the feature_names are the same.
-        base_margin : array_like
-            Margin added to prediction.
-        iteration_range :
-            Specifies which layer of trees are used in prediction.  For example, if a
-            random forest is trained with 100 rounds.  Specifying `iteration_range=(10,
-            20)`, then only the forests built during [10, 20) (half open set) rounds are
-            used in this prediction.
-
-        Returns
-        -------
-        prediction : numpy array
-            a numpy array of shape array-like of shape (n_samples, n_classes) with the
-            probability of each data example being of a given class.
-        """
+    def predict_proba(self,
+                      X,
+                      ntree_limit=None,
+                      validate_features=False,
+                      base_margin=None,
+                      iteration_range: Optional[Tuple[int, int]] = None,
+                      ray_params: Union[None, RayParams, Dict] = None,
+                      _remote: Optional[bool] = None) -> np.ndarray:
         # custom obj:      Do nothing as we don't know what to do.
         # softprob:        Do nothing, output is proba.
         # softmax:         Use output margin to remove the argmax in PredTransform.
@@ -350,12 +404,20 @@ class RayXGBClassifier(XGBClassifier):
             ntree_limit=ntree_limit,
             validate_features=validate_features,
             base_margin=base_margin,
-            iteration_range=iteration_range)
+            iteration_range=iteration_range,
+            ray_params=ray_params,
+            _remote=_remote,
+        )
         # If model is loaded from a raw booster there's no `n_classes_`
         return _cls_predict_proba(
             getattr(self, "n_classes_", None), class_probs, np.vstack)
 
     def load_model(self, fname):
-        if not hasattr(self, '_Booster'):
-            self._Booster = Booster({'n_jobs': 1})
+        if not hasattr(self, "_Booster"):
+            self._Booster = Booster()
         return super().load_model(fname)
+
+    predict_proba.__doc__ = XGBClassifier.predict_proba.__doc__ + _RAY_PARAMS_DOC
+
+
+RayXGBClassifier.__doc__ = _treat_estimator_doc(XGBClassifier.__doc__)
