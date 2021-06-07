@@ -6,22 +6,25 @@ import warnings
 import functools
 
 from xgboost import Booster
-from xgboost.sklearn import (
-    XGBModel, XGBClassifier, XGBRegressor,
-    _objective_decorator, _wrap_evaluation_matrices, _convert_ntree_limit,
-    _is_cudf_df, _is_cudf_ser, _is_cupy_array, _cls_predict_proba)
+from xgboost.sklearn import (XGBModel, XGBClassifier, XGBRegressor,
+                             _objective_decorator, _wrap_evaluation_matrices,
+                             _convert_ntree_limit, _is_cudf_df, _is_cudf_ser,
+                             _is_cupy_array, _cls_predict_proba)
 
 # avoiding exception in xgboost==0.9.0
 try:
     from xgboost.sklearn import _deprecate_positional_args
 except ImportError:
+
     def _deprecate_positional_args(f):
         """Dummy decorator, does nothing"""
+
         @functools.wraps(f)
         def inner_f(*args, **kwargs):
             return f(*args, **kwargs)
 
         return inner_f
+
 
 from xgboost.compat import XGBoostLabelEncoder
 
@@ -37,14 +40,17 @@ _RAY_PARAMS_DOC = """
 
 """
 
-_N_JOBS_DOC_REPLACE = ("""    n_jobs : int
+_N_JOBS_DOC_REPLACE = (
+    """    n_jobs : int
         Number of parallel threads used to run xgboost.  When used with other Scikit-Learn
         algorithms like grid search, you may choose which algorithm to parallelize and
         balance the threads.  Creating thread contention will significantly slow down both
-        algorithms.""", """    n_jobs : int
+        algorithms.""",  # noqa: E501, W291
+    """    n_jobs : int
         Number of Ray actors used to run xgboost in parallel.
         In order to set number of threads per actor, pass a ``RayParams`` object to the 
-        relevant method as a ``ray_params`` argument.""")
+        relevant method as a ``ray_params`` argument.""",  # noqa: E501, W291
+)
 
 
 def _treat_estimator_doc(doc: str) -> str:
@@ -252,11 +258,11 @@ class RayXGBClassifier(XGBClassifier):
             "The label must consist of integer "
             "labels of form 0, 1, 2, ..., [num_class - 1].")
         label_encoder_deprecation_msg = (
-            "The use of label encoder in XGBClassifier is deprecated and will be "
-            "removed in a future release. To remove this warning, do the "
-            "following: 1) Pass option use_label_encoder=False when constructing "
-            "XGBClassifier object; and 2) Encode your labels (y) as integers "
-            "starting with 0, i.e. 0, 1, 2, ..., [num_class - 1].")
+            "The use of label encoder in XGBClassifier is deprecated and will "
+            "be removed in a future release. To remove this warning, do the "
+            "following: 1) Pass option use_label_encoder=False when "
+            "constructing XGBClassifier object; and 2) Encode your labels (y) "
+            "as integers starting with 0, i.e. 0, 1, 2, ..., [num_class - 1].")
 
         evals_result = {}
         if _is_cudf_df(y) or _is_cudf_ser(y):
@@ -301,22 +307,18 @@ class RayXGBClassifier(XGBClassifier):
             params["objective"] = "multi:softprob"
             params["num_class"] = self.n_classes_
 
-        def identity_transform(x):
-            return x
-
         if self.use_label_encoder:
             if not can_use_label_encoder:
                 raise ValueError(
-                    "The option use_label_encoder=True is incompatible with inputs "
-                    +
-                    "of type cuDF or cuPy. Please set use_label_encoder=False when "
-                    + "constructing XGBClassifier object. NOTE: " +
-                    label_encoder_deprecation_msg)
+                    "The option use_label_encoder=True is incompatible with "
+                    "inputs of type cuDF or cuPy. Please set "
+                    "use_label_encoder=False when  constructing XGBClassifier "
+                    "object. NOTE:" + label_encoder_deprecation_msg)
             warnings.warn(label_encoder_deprecation_msg, UserWarning)
             self._le = XGBoostLabelEncoder().fit(y)
             label_transform = self._le.transform
         else:
-            label_transform = identity_transform
+            label_transform = lambda x: x  # noqa: E731
 
         model, feval, params = self._configure_fit(xgb_model, eval_metric,
                                                    params)
@@ -451,11 +453,7 @@ class RayXGBClassifier(XGBClassifier):
                       iteration_range: Optional[Tuple[int, int]] = None,
                       ray_params: Union[None, RayParams, Dict] = None,
                       _remote: Optional[bool] = None) -> np.ndarray:
-        # custom obj:      Do nothing as we don't know what to do.
-        # softprob:        Do nothing, output is proba.
-        # softmax:         Use output margin to remove the argmax in PredTransform.
-        # binary:logistic: Expand the prob vector into 2-class matrix after predict.
-        # binary:logitraw: Unsupported by predict_proba()
+
         class_probs = _predict(
             self,
             X=X,
@@ -476,7 +474,8 @@ class RayXGBClassifier(XGBClassifier):
             self._Booster = Booster()
         return super().load_model(fname)
 
-    predict_proba.__doc__ = XGBClassifier.predict_proba.__doc__ + _RAY_PARAMS_DOC
+    predict_proba.__doc__ = (
+        XGBClassifier.predict_proba.__doc__ + _RAY_PARAMS_DOC)
 
 
 RayXGBClassifier.__doc__ = _treat_estimator_doc(XGBClassifier.__doc__)
