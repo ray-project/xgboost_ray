@@ -1,3 +1,6 @@
+"""scikit-learn API for xgboost-ray. Based on xgboost 1.4.0 sklearn interface,
+with some provisions made for 1.5.0 and legacy versions"""
+
 from typing import Tuple, Dict, Optional, Union
 
 import numpy as np
@@ -7,6 +10,7 @@ import functools
 
 from xgboost import Booster
 from xgboost.sklearn import (XGBModel, XGBClassifier, XGBRegressor,
+                             XGBRFClassifier, XGBRFRegressor, XGBRanker,
                              _objective_decorator, _wrap_evaluation_matrices,
                              _convert_ntree_limit, _is_cudf_df, _is_cudf_ser,
                              _is_cupy_array, _cls_predict_proba)
@@ -56,9 +60,20 @@ _N_JOBS_DOC_REPLACE = (
 def _treat_estimator_doc(doc: str) -> str:
     """Helper function to make nececssary changes in estimator docstrings"""
     doc = doc.replace(*_N_JOBS_DOC_REPLACE).replace(
-        "Implementation of the scikit-learn API for XGBoost",
-        "Implementation of the scikit-learn API for Ray-distributed XGBoost")
+        "scikit-learn API for XGBoost",
+        "scikit-learn API for Ray-distributed XGBoost")
     return doc
+
+
+def _set_ray_params_n_jobs(ray_params, n_jobs) -> RayParams:
+    """Helper function to set num_actors in ray_params if not
+    set by the user"""
+    if ray_params is None:
+        # TODO warning here?
+        if not n_jobs or n_jobs < 1:
+            n_jobs = 1
+        ray_params = RayParams(num_actors=n_jobs)
+    return ray_params
 
 
 # would normally use a mixin class but it breaks xgb's get_params
@@ -77,12 +92,7 @@ def _predict(
                                            iteration_range)
     iteration_range = model._get_iteration_range(iteration_range)
 
-    if ray_params is None:
-        # TODO warning here?
-        n_jobs = model.n_jobs
-        if not n_jobs or n_jobs < 1:
-            n_jobs = 1
-        ray_params = RayParams(num_actors=n_jobs)
+    ray_params = _set_ray_params_n_jobs(ray_params, model.n_jobs)
 
     test = RayDMatrix(X, base_margin=base_margin, missing=model.missing)
     return predict(
@@ -171,12 +181,7 @@ class RayXGBRegressor(XGBRegressor):
         params.pop("n_jobs", None)
         params.pop("nthread", None)
 
-        if ray_params is None:
-            # TODO warning here?
-            n_jobs = self.n_jobs
-            if not n_jobs or n_jobs < 1:
-                n_jobs = 1
-            ray_params = RayParams(num_actors=n_jobs)
+        ray_params = _set_ray_params_n_jobs(ray_params, self.n_jobs)
 
         self._Booster = train(
             params,
@@ -231,6 +236,34 @@ class RayXGBRegressor(XGBRegressor):
 
 
 RayXGBRegressor.__doc__ = _treat_estimator_doc(XGBRegressor.__doc__)
+
+
+class RayXGBRFRegressor(RayXGBRegressor):
+    @_deprecate_positional_args
+    def __init__(self,
+                 *,
+                 learning_rate=1,
+                 subsample=0.8,
+                 colsample_bynode=0.8,
+                 reg_lambda=1e-5,
+                 **kwargs):
+        super().__init__(
+            learning_rate=learning_rate,
+            subsample=subsample,
+            colsample_bynode=colsample_bynode,
+            reg_lambda=reg_lambda,
+            **kwargs)
+
+    def get_xgb_params(self):
+        params = super().get_xgb_params()
+        params["num_parallel_tree"] = self.n_estimators
+        return params
+
+    def get_num_boosting_rounds(self):
+        return 1
+
+
+RayXGBRFRegressor.__doc__ = _treat_estimator_doc(XGBRFRegressor.__doc__)
 
 
 class RayXGBClassifier(XGBClassifier):
@@ -373,12 +406,7 @@ class RayXGBClassifier(XGBClassifier):
         params.pop("n_jobs", None)
         params.pop("nthread", None)
 
-        if ray_params is None:
-            # TODO warning here?
-            n_jobs = self.n_jobs
-            if not n_jobs or n_jobs < 1:
-                n_jobs = 1
-            ray_params = RayParams(num_actors=n_jobs)
+        ray_params = _set_ray_params_n_jobs(ray_params, self.n_jobs)
 
         self._Booster = train(
             params,
@@ -479,3 +507,176 @@ class RayXGBClassifier(XGBClassifier):
 
 
 RayXGBClassifier.__doc__ = _treat_estimator_doc(XGBClassifier.__doc__)
+
+
+class RayXGBRFClassifier(RayXGBClassifier):
+    @_deprecate_positional_args
+    def __init__(self,
+                 *,
+                 learning_rate=1,
+                 subsample=0.8,
+                 colsample_bynode=0.8,
+                 reg_lambda=1e-5,
+                 use_label_encoder=True,
+                 **kwargs):
+        super().__init__(
+            learning_rate=learning_rate,
+            subsample=subsample,
+            colsample_bynode=colsample_bynode,
+            reg_lambda=reg_lambda,
+            use_label_encoder=use_label_encoder,
+            **kwargs)
+
+    def get_xgb_params(self):
+        params = super().get_xgb_params()
+        params["num_parallel_tree"] = self.n_estimators
+        return params
+
+    def get_num_boosting_rounds(self):
+        return 1
+
+
+RayXGBRFClassifier.__doc__ = _treat_estimator_doc(XGBRFClassifier.__doc__)
+
+
+class RayXGBRanker(XGBRanker):
+    @_deprecate_positional_args
+    def fit(self,
+            X,
+            y,
+            *,
+            group=None,
+            qid=None,
+            sample_weight=None,
+            base_margin=None,
+            eval_set=None,
+            eval_group=None,
+            eval_qid=None,
+            eval_metric=None,
+            early_stopping_rounds=None,
+            verbose=False,
+            xgb_model: Optional[Union[Booster, str, XGBModel]] = None,
+            sample_weight_eval_set=None,
+            base_margin_eval_set=None,
+            feature_weights=None,
+            callbacks=None,
+            ray_params: Union[None, RayParams, Dict] = None,
+            _remote: Optional[bool] = None):
+
+        # check if group information is provided
+        if group is None and qid is None:
+            raise ValueError("group or qid is required for ranking task")
+
+        if eval_set is not None:
+            if eval_group is None and eval_qid is None:
+                raise ValueError("eval_group or eval_qid is required if"
+                                 " eval_set is not None")
+
+        # enable_categorical param has been added in xgboost 1.5.0
+        try:
+            train_dmatrix, evals = _wrap_evaluation_matrices(
+                missing=self.missing,
+                X=X,
+                y=y,
+                group=group,
+                qid=qid,
+                sample_weight=sample_weight,
+                base_margin=base_margin,
+                feature_weights=feature_weights,
+                eval_set=eval_set,
+                sample_weight_eval_set=sample_weight_eval_set,
+                base_margin_eval_set=base_margin_eval_set,
+                eval_group=eval_group,
+                eval_qid=eval_qid,
+                create_dmatrix=lambda **kwargs: RayDMatrix(**kwargs),
+                enable_categorical=self.enable_categorical,
+            )
+        except AttributeError as e:
+            if "enable_categorical" not in str(e):
+                raise e
+            train_dmatrix, evals = _wrap_evaluation_matrices(
+                missing=self.missing,
+                X=X,
+                y=y,
+                group=group,
+                qid=qid,
+                sample_weight=sample_weight,
+                base_margin=base_margin,
+                feature_weights=feature_weights,
+                eval_set=eval_set,
+                sample_weight_eval_set=sample_weight_eval_set,
+                base_margin_eval_set=base_margin_eval_set,
+                eval_group=eval_group,
+                eval_qid=eval_qid,
+                create_dmatrix=lambda **kwargs: RayDMatrix(**kwargs),
+            )
+
+        evals_result = {}
+        params = self.get_xgb_params()
+
+        model, feval, params = self._configure_fit(xgb_model, eval_metric,
+                                                   params)
+        if callable(feval):
+            raise ValueError(
+                "Custom evaluation metric is not yet supported for XGBRanker.")
+
+        # remove those as they will be set in RayXGBoostActor
+        params.pop("n_jobs", None)
+        params.pop("nthread", None)
+
+        ray_params = _set_ray_params_n_jobs(ray_params, self.n_jobs)
+
+        self._Booster = train(
+            params,
+            train_dmatrix,
+            self.n_estimators,
+            early_stopping_rounds=early_stopping_rounds,
+            evals=evals,
+            evals_result=evals_result,
+            feval=feval,
+            verbose_eval=verbose,
+            xgb_model=model,
+            callbacks=callbacks,
+            ray_params=ray_params,
+            _remote=_remote,
+        )
+
+        self.objective = params["objective"]
+
+        self._set_evaluation_result(evals_result)
+        return self
+
+    fit.__doc__ = XGBRanker.fit.__doc__ + _RAY_PARAMS_DOC
+
+    def _can_use_inplace_predict(self) -> bool:
+        return False
+
+    def predict(self,
+                X,
+                output_margin=False,
+                ntree_limit=None,
+                validate_features=True,
+                base_margin=None,
+                iteration_range=None,
+                ray_params: Union[None, RayParams, Dict] = None,
+                _remote: Optional[bool] = None):
+        return _predict(
+            self,
+            X,
+            output_margin=output_margin,
+            ntree_limit=ntree_limit,
+            validate_features=validate_features,
+            base_margin=base_margin,
+            iteration_range=iteration_range,
+            ray_params=ray_params,
+            _remote=_remote)
+
+    predict.__doc__ = XGBRanker.predict.__doc__ + _RAY_PARAMS_DOC
+
+    def load_model(self, fname):
+        if not hasattr(self, "_Booster"):
+            self._Booster = Booster()
+        return super().load_model(fname)
+
+
+RayXGBRanker.__doc__ = _treat_estimator_doc(XGBRanker.__doc__)

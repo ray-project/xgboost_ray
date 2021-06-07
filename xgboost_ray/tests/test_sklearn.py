@@ -18,7 +18,9 @@ import json
 
 import ray
 
-from xgboost_ray.sklearn import RayXGBClassifier, RayXGBRegressor
+from xgboost_ray.sklearn import (RayXGBClassifier, RayXGBRegressor,
+                                 RayXGBRFClassifier, RayXGBRFRegressor,
+                                 RayXGBRanker)
 
 
 def softmax(x):
@@ -83,7 +85,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         y = digits["target"]
         X = digits["data"]
         kf = KFold(n_splits=2, shuffle=True, random_state=self.rng)
-        for cls in (RayXGBClassifier, ):
+        for cls in (RayXGBClassifier, RayXGBRFClassifier):
             for train_index, test_index in kf.split(X, y):
                 clf = cls(random_state=42)
                 xgb_model = clf.fit(
@@ -262,7 +264,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         dump = bst.get_booster().get_dump(dump_format="json")
         assert len(dump) == 16
 
-        reg = xgb.XGBRFRegressor(n_estimators=4)
+        reg = RayXGBRFRegressor(n_estimators=4)
         bst = reg.fit(X=boston["data"], y=boston["target"])
         dump = bst.get_booster().get_dump(dump_format="json")
         assert len(dump) == 4
@@ -308,7 +310,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         X, y = load_boston(return_X_y=True)
         kf = KFold(n_splits=2, shuffle=True, random_state=self.rng)
         for train_index, test_index in kf.split(X, y):
-            xgb_model = xgb.XGBRFRegressor(
+            xgb_model = RayXGBRFRegressor(
                 random_state=42, tree_method=tree_method).fit(
                     X[train_index], y[train_index])
             preds = xgb_model.predict(X[test_index])
@@ -520,7 +522,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         self._init_ray()
 
         params = {"updater": "grow_gpu_hist", "subsample": 0.5, "n_jobs": -1}
-        with pytest.raises(TypeError):
+        with self.assertRaises(TypeError):
             clf = RayXGBClassifier(n_jobs=1000, **params)
             assert isinstance(clf, RayXGBClassifier)
 
@@ -623,7 +625,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         assert all((logloss_with_weights[i] != logloss_without_weights[i]
                     for i in [0, 1]))
 
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             # length of eval set and sample weight doesn't match.
             clf.fit(
                 X_train,
@@ -633,7 +635,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
                 sample_weight_eval_set=[weights_train],
             )
 
-        with pytest.raises(ValueError):
+        with self.assertRaises(ValueError):
             cls = RayXGBClassifier()
             cls.fit(
                 X_train,
@@ -733,7 +735,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
                 xgb.DMatrix(X[test_index]), output_margin=True)
             assert np.allclose(preds, predt_1)
 
-            with pytest.raises(TypeError):
+            with self.assertRaises(TypeError):
                 xgb_model = xgb.XGBModel()
                 xgb_model.load_model(model_path)
 
@@ -938,36 +940,36 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
         X, y = load_digits(return_X_y=True, n_class=2)
         w = y
-        with pytest.warns(FutureWarning):
+        with self.assertWarns(FutureWarning):
             RayXGBRegressor(3, learning_rate=0.1)
         model = RayXGBRegressor(n_estimators=1)
-        with pytest.warns(FutureWarning):
+        with self.assertWarns(FutureWarning):
             model.fit(X, y, w)
 
-        with pytest.warns(FutureWarning):
+        with self.assertWarns(FutureWarning):
             RayXGBClassifier(1, use_label_encoder=False)
         model = RayXGBClassifier(n_estimators=1, use_label_encoder=False)
-        with pytest.warns(FutureWarning):
+        with self.assertWarns(FutureWarning):
             model.fit(X, y, w)
 
-        # with pytest.warns(FutureWarning):
-        #     xgb.XGBRanker('rank:ndcg', learning_rate=0.1)
-        # model = xgb.XGBRanker(n_estimators=1)
-        # group = np.repeat(1, X.shape[0])
-        # with pytest.warns(FutureWarning):
-        #     model.fit(X, y, group)
+        with self.assertWarns(FutureWarning):
+            RayXGBRanker("rank:ndcg", learning_rate=0.1)
+        model = RayXGBRanker(n_estimators=1)
+        group = np.repeat(1, X.shape[0])
+        with self.assertWarns(FutureWarning):
+            model.fit(X, y, group)
 
-        # with pytest.warns(FutureWarning):
-        #     xgb.XGBRFRegressor(1, learning_rate=0.1)
-        # model = xgb.XGBRFRegressor(n_estimators=1)
-        # with pytest.warns(FutureWarning):
-        #     model.fit(X, y, w)
+        with self.assertWarns(FutureWarning):
+            RayXGBRFRegressor(1, learning_rate=0.1)
+        model = RayXGBRFRegressor(n_estimators=1)
+        with self.assertWarns(FutureWarning):
+            model.fit(X, y, w)
 
-        # with pytest.warns(FutureWarning):
-        #     xgb.XGBRFClassifier(1, use_label_encoder=True)
-        # model = xgb.XGBRFClassifier(n_estimators=1)
-        # with pytest.warns(FutureWarning):
-        #     model.fit(X, y, w)
+        with self.assertWarns(FutureWarning):
+            RayXGBRFClassifier(1, use_label_encoder=True)
+        model = RayXGBRFClassifier(n_estimators=1)
+        with self.assertWarns(FutureWarning):
+            model.fit(X, y, w)
 
     def test_pandas_input(self):
         self._init_ray()
@@ -1117,10 +1119,10 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         self._init_ray()
 
         assert RayXGBClassifier._estimator_type == "classifier"
-        # assert xgb.XGBRFClassifier._estimator_type == "classifier"
+        assert RayXGBRFClassifier._estimator_type == "classifier"
         assert RayXGBRegressor._estimator_type == "regressor"
-        # assert xgb.XGBRFRegressor._estimator_type == "regressor"
-        # assert xgb.XGBRanker._estimator_type == "ranker"
+        assert RayXGBRFRegressor._estimator_type == "regressor"
+        assert RayXGBRanker._estimator_type == "ranker"
 
         from sklearn.datasets import load_digits
 
@@ -1131,7 +1133,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             cls.save_model(path)
 
             reg = RayXGBRegressor()
-            with pytest.raises(TypeError):
+            with self.assertRaises(TypeError):
                 reg.load_model(path)
 
             cls = RayXGBClassifier()
