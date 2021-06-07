@@ -2,8 +2,12 @@ from xgboost_ray.main import RayParams, train, predict
 from xgboost_ray.matrix import RayDMatrix, RayDeviceQuantileDMatrix,\
     RayFileType, RayShardingMode, \
     Data, combine_data
-from xgboost_ray.sklearn import RayXGBClassifier, RayXGBRegressor, \
-    RayXGBRFClassifier, RayXGBRFRegressor, RayXGBRanker
+# workaround for legacy xgboost==0.9.0
+try:
+    from xgboost_ray.sklearn import RayXGBClassifier, RayXGBRegressor, \
+        RayXGBRFClassifier, RayXGBRFRegressor, RayXGBRanker
+except ImportError:
+    pass
 
 __version__ = "0.1.1"
 
