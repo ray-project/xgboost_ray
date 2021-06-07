@@ -475,13 +475,14 @@ class RayXGBoostActor:
                 # bytearray type gets lost in remote actor call
                 kwargs["xgb_model"] = bytearray(kwargs["xgb_model"])
 
-        if "nthread" not in local_params:
+        if "nthread" not in local_params and "n_jobs" not in local_params:
             if num_threads > 0:
                 local_params["num_threads"] = num_threads
             else:
                 local_params["nthread"] = sum(
                     num
                     for _, num in ray.worker.get_resource_ids().get("CPU", []))
+                local_params["n_jobs"] = local_params["nthread"]
 
         if dtrain not in self._data:
             self.load_data(dtrain)
