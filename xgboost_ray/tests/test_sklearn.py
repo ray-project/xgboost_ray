@@ -782,70 +782,70 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             predt_1 = cls.predict(X)
             assert np.allclose(predt_0, predt_1)
 
-    # forcing it to be last as it's the longest test by far
-    def test_zzzzzzz_RFECV(self):
-        self._init_ray()
+    # # forcing it to be last as it's the longest test by far
+    # def test_zzzzzzz_RFECV(self):
+    #     self._init_ray()
 
-        from sklearn.datasets import load_boston
-        from sklearn.datasets import load_breast_cancer
-        from sklearn.datasets import load_iris
-        from sklearn.feature_selection import RFECV
+    #     from sklearn.datasets import load_boston
+    #     from sklearn.datasets import load_breast_cancer
+    #     from sklearn.datasets import load_iris
+    #     from sklearn.feature_selection import RFECV
 
-        # Regression
-        X, y = load_boston(return_X_y=True)
-        bst = RayXGBRegressor(
-            booster="gblinear",
-            learning_rate=0.1,
-            n_estimators=10,
-            objective="reg:squarederror",
-            random_state=0,
-            verbosity=0,
-        )
-        rfecv = RFECV(
-            estimator=bst, step=1, cv=3, scoring="neg_mean_squared_error")
-        rfecv.fit(X, y)
+    #     # Regression
+    #     X, y = load_boston(return_X_y=True)
+    #     bst = RayXGBRegressor(
+    #         booster="gblinear",
+    #         learning_rate=0.1,
+    #         n_estimators=10,
+    #         objective="reg:squarederror",
+    #         random_state=0,
+    #         verbosity=0,
+    #     )
+    #     rfecv = RFECV(
+    #         estimator=bst, step=1, cv=3, scoring="neg_mean_squared_error")
+    #     rfecv.fit(X, y)
 
-        # Binary classification
-        X, y = load_breast_cancer(return_X_y=True)
-        bst = RayXGBClassifier(
-            booster="gblinear",
-            learning_rate=0.1,
-            n_estimators=10,
-            objective="binary:logistic",
-            random_state=0,
-            verbosity=0,
-            use_label_encoder=False,
-        )
-        rfecv = RFECV(estimator=bst, step=1, cv=3, scoring="roc_auc")
-        rfecv.fit(X, y)
+    #     # Binary classification
+    #     X, y = load_breast_cancer(return_X_y=True)
+    #     bst = RayXGBClassifier(
+    #         booster="gblinear",
+    #         learning_rate=0.1,
+    #         n_estimators=10,
+    #         objective="binary:logistic",
+    #         random_state=0,
+    #         verbosity=0,
+    #         use_label_encoder=False,
+    #     )
+    #     rfecv = RFECV(estimator=bst, step=1, cv=3, scoring="roc_auc")
+    #     rfecv.fit(X, y)
 
-        # Multi-class classification
-        X, y = load_iris(return_X_y=True)
-        bst = RayXGBClassifier(
-            base_score=0.4,
-            booster="gblinear",
-            learning_rate=0.1,
-            n_estimators=10,
-            objective="multi:softprob",
-            random_state=0,
-            reg_alpha=0.001,
-            reg_lambda=0.01,
-            scale_pos_weight=0.5,
-            verbosity=0,
-            use_label_encoder=False,
-        )
-        rfecv = RFECV(estimator=bst, step=1, cv=3, scoring="neg_log_loss")
-        rfecv.fit(X, y)
+    #     # Multi-class classification
+    #     X, y = load_iris(return_X_y=True)
+    #     bst = RayXGBClassifier(
+    #         base_score=0.4,
+    #         booster="gblinear",
+    #         learning_rate=0.1,
+    #         n_estimators=10,
+    #         objective="multi:softprob",
+    #         random_state=0,
+    #         reg_alpha=0.001,
+    #         reg_lambda=0.01,
+    #         scale_pos_weight=0.5,
+    #         verbosity=0,
+    #         use_label_encoder=False,
+    #     )
+    #     rfecv = RFECV(estimator=bst, step=1, cv=3, scoring="neg_log_loss")
+    #     rfecv.fit(X, y)
 
-        X[0:4, :] = np.nan  # verify scikit_learn doesn't throw with nan
-        reg = RayXGBRegressor()
-        rfecv = RFECV(estimator=reg)
-        rfecv.fit(X, y)
+    #     X[0:4, :] = np.nan  # verify scikit_learn doesn't throw with nan
+    #     reg = RayXGBRegressor()
+    #     rfecv = RFECV(estimator=reg)
+    #     rfecv.fit(X, y)
 
-        cls = RayXGBClassifier(use_label_encoder=False)
-        rfecv = RFECV(
-            estimator=cls, step=1, cv=3, scoring="neg_mean_squared_error")
-        rfecv.fit(X, y)
+    #     cls = RayXGBClassifier(use_label_encoder=False)
+    #     rfecv = RFECV(
+    #         estimator=cls, step=1, cv=3, scoring="neg_mean_squared_error")
+    #     rfecv.fit(X, y)
 
     def test_XGBClassifier_resume(self):
         self._init_ray()
