@@ -20,6 +20,7 @@ echo "================"
 echo "Running examples"
 echo "================"
 echo "running readme.py" && python readme.py
+echo "running readme_sklearn_api.py" && python readme_sklearn_api.py
 echo "running simple.py" && python simple.py --smoke-test
 echo "running simple_predict.py" && python simple_predict.py
 echo "running simple_dask.py" && python simple_dask.py --smoke-test
