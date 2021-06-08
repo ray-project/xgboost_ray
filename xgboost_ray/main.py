@@ -7,6 +7,7 @@ import pickle
 import time
 import threading
 import warnings
+import re
 
 import numpy as np
 import pandas as pd
@@ -67,6 +68,17 @@ ELASTIC_RESTART_RESOURCE_CHECK_S = int(
 ELASTIC_RESTART_GRACE_PERIOD_S = int(
     os.getenv("RXGB_ELASTIC_RESTART_GRACE_PERIOD_S", 10))
 
+LEGACY_WARNING = (
+    f"You are using `xgboost_ray` with a legacy XGBoost version "
+    f"(version {xgb.__version__}). While we try to support "
+    f"older XGBoost versions, please note that this library is only "
+    f"fully tested and supported for XGBoost >= 1.4. Please consider "
+    f"upgrading your XGBoost version (`pip install -U xgboost`).")
+
+# XGBoost version as an int tuple for comparisions
+XGBOOST_VERSION_TUPLE = tuple(
+    [int(x) for x in re.sub(r"[^\.0-9]", "", xgb.__version__).split(".")])
+
 
 class RayXGBoostTrainingError(RuntimeError):
     """Raised from RayXGBoostActor.train() when the local xgb.train function
@@ -95,12 +107,7 @@ def _assert_ray_support():
 
 def _maybe_print_legacy_warning():
     if LEGACY_MATRIX or LEGACY_CALLBACK:
-        logger.warning(
-            f"You are using `xgboost_ray` with a legacy XGBoost version "
-            f"(version {xgb.__version__}). While we try to support "
-            f"older XGBoost versions, please note that this library is only "
-            f"fully tested and supported for XGBoost >= 1.4. Please consider "
-            f"upgrading your XGBoost version (`pip install -U xgboost`).")
+        logger.warning(LEGACY_WARNING)
 
 
 def _is_client_connected() -> bool:

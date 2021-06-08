@@ -32,6 +32,10 @@ import warnings
 import functools
 import inspect
 
+from xgboost_ray.main import (RayParams, train, predict, XGBOOST_VERSION_TUPLE,
+                              LEGACY_WARNING)
+from xgboost_ray.matrix import RayDMatrix
+
 from xgboost import Booster, __version__ as xgboost_version
 from xgboost.sklearn import (XGBModel, XGBClassifier, XGBRegressor,
                              XGBRFClassifier, XGBRFRegressor, XGBRanker,
@@ -174,9 +178,6 @@ try:
 except ImportError:
     from sklearn.preprocessing import LabelEncoder as XGBoostLabelEncoder
 
-from xgboost_ray.main import RayParams, train, predict
-from xgboost_ray.matrix import RayDMatrix
-
 _RAY_PARAMS_DOC = """
     ray_params (Union[None, RayParams, Dict]): Parameters to configure
         Ray-specific behavior. See :class:`RayParams` for a list of valid
@@ -216,6 +217,18 @@ def _set_ray_params_n_jobs(ray_params: Optional[Union[RayParams, dict]],
             n_jobs = 1
         ray_params = RayParams(num_actors=n_jobs)
     return ray_params
+
+
+def _xgboost_version_warn(f):
+    """Decorator to warn when xgboost version is < 1.4.0"""
+
+    @functools.wraps(f)
+    def inner_f(*args, **kwargs):
+        if XGBOOST_VERSION_TUPLE < (1, 4, 0):
+            warnings.warn(LEGACY_WARNING)
+        return f(*args, **kwargs)
+
+    return inner_f
 
 
 class RayXGBMixin:
@@ -299,6 +312,8 @@ class RayXGBMixin:
 
 
 class RayXGBRegressor(XGBRegressor, RayXGBMixin):
+    __init__ = _xgboost_version_warn(XGBRegressor.__init__)
+
     @_deprecate_positional_args
     def fit(self,
             X,
@@ -415,15 +430,17 @@ RayXGBRegressor.__doc__ = _treat_estimator_doc(XGBRegressor.__doc__)
 
 
 class RayXGBRFRegressor(RayXGBRegressor):
+
     # too much work to make this compatible with 0.90
     if xgboost_version == "0.90":
 
         def __init__(self, *args, **kwargs):
             raise ValueError(
-                "RayXGBRFRegressor not available with xgboost<=1.0.0")
+                "RayXGBRFRegressor not available with xgboost<1.0.0")
     else:
 
         @_deprecate_positional_args
+        @_xgboost_version_warn
         def __init__(self,
                      *,
                      learning_rate=1,
@@ -451,6 +468,8 @@ RayXGBRFRegressor.__doc__ = _treat_estimator_doc(XGBRFRegressor.__doc__)
 
 
 class RayXGBClassifier(XGBClassifier, RayXGBMixin):
+    __init__ = _xgboost_version_warn(XGBClassifier.__init__)
+
     @_deprecate_positional_args
     def fit(self,
             X,
@@ -694,14 +713,15 @@ class RayXGBRFClassifier(RayXGBClassifier):
 
         def __init__(self, *args, **kwargs):
             raise ValueError(
-                "RayXGBRFClassifier not available with xgboost<=1.0.0")
+                "RayXGBRFClassifier not available with xgboost<1.0.0")
 
     # use_label_encoder added in xgboost commit
-    # c8ec62103a36f1717d032b1ddff2bf9e0642508a
+    # c8ec62103a36f1717d032b1ddff2bf9e0642508a (1.3.0)
     elif "use_label_encoder" in inspect.signature(
             XGBRFClassifier.__init__).parameters:
 
         @_deprecate_positional_args
+        @_xgboost_version_warn
         def __init__(self,
                      *,
                      learning_rate=1,
@@ -720,6 +740,7 @@ class RayXGBRFClassifier(RayXGBClassifier):
     else:
 
         @_deprecate_positional_args
+        @_xgboost_version_warn
         def __init__(self,
                      *,
                      learning_rate=1,
@@ -747,6 +768,8 @@ RayXGBRFClassifier.__doc__ = _treat_estimator_doc(XGBRFClassifier.__doc__)
 
 
 class RayXGBRanker(XGBRanker, RayXGBMixin):
+    __init__ = _xgboost_version_warn(XGBRanker.__init__)
+
     @_deprecate_positional_args
     def fit(self,
             X,
