@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Dict, Sequence, TYPE_CHECKING, Any
+from typing import Dict, Sequence, TYPE_CHECKING, Any, Union
 
 import os
 import pandas as pd
@@ -46,7 +46,8 @@ class DistributedCallback(ABC):
         pass
 
     def after_predict(self, actor: "RayXGBoostActor",
-                      predictions: pd.DataFrame, *args, **kwargs):
+                      predictions: Union[pd.Series, pd.DataFrame], *args,
+                      **kwargs):
         pass
 
 
@@ -82,7 +83,8 @@ class DistributedCallbackContainer:
             callback.before_predict(actor, *args, **kwargs)
 
     def after_predict(self, actor: "RayXGBoostActor",
-                      predictions: pd.DataFrame, *args, **kwargs):
+                      predictions: Union[pd.Series, pd.DataFrame], *args,
+                      **kwargs):
         for callback in self.callbacks:
             callback.after_predict(actor, predictions, *args, **kwargs)
 
