@@ -6,6 +6,7 @@ echo "$i"
 case "$i" in
     --no-tune)
     TUNE=0
+    ;;
     *)
     echo "unknown arg, $i"
     exit 1
