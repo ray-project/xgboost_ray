@@ -221,7 +221,7 @@ jobs:
         ./xgboost_ray/tests/env_info.sh
     - name: Run tests
       run: |
-        bash ./run_ci_tests.sh
+        bash ./run_ci_tests.sh --legacy
     - name: Run examples
       run: |
         bash ./run_ci_examples.sh

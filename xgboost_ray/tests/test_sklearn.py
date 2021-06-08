@@ -3,6 +3,26 @@ in order to ensure 1:1 coverage, with minimal modifications.
 Some tests were disabled due to not being applicable for a
 distributed setting."""  # noqa: E501
 
+# Copyright 2021 by XGBoost Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# File based on:
+# https://github.com/dmlc/xgboost/blob/a5c852660b1056204aa2e0cbfcd5b4ecfbf31adf/tests/python/test_with_sklearn.py
+
+# License:
+# https://github.com/dmlc/xgboost/blob/a5c852660b1056204aa2e0cbfcd5b4ecfbf31adf/LICENSE
+
 # import collections
 # import importlib.util
 import numpy as np
@@ -85,7 +105,12 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         y = digits["target"]
         X = digits["data"]
         kf = KFold(n_splits=2, shuffle=True, random_state=self.rng)
-        for cls in (RayXGBClassifier, RayXGBRFClassifier):
+        # ray: added for legacy CI test
+        if xgb.__version__ == "0.90":
+            cls_to_check = (RayXGBClassifier, )
+        else:
+            cls_to_check = (RayXGBClassifier, RayXGBRFClassifier)
+        for cls in cls_to_check:
             for train_index, test_index in kf.split(X, y):
                 clf = cls(random_state=42)
                 xgb_model = clf.fit(
@@ -122,8 +147,9 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         kf = KFold(n_splits=2, shuffle=True, random_state=self.rng)
         for train_index, test_index in kf.split(X, y):
             xgb_model = RayXGBClassifier().fit(X[train_index], y[train_index])
-            assert (xgb_model.get_booster().num_boosted_rounds() ==
-                    xgb_model.n_estimators)
+            if hasattr(xgb_model.get_booster(), "num_boosted_rounds"):
+                assert (xgb_model.get_booster().num_boosted_rounds() ==
+                        xgb_model.n_estimators)
             preds = xgb_model.predict(X[test_index])
             # test other params in XGBClassifier().fit
             preds2 = xgb_model.predict(
