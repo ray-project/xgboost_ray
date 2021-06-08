@@ -225,6 +225,20 @@ def _xgboost_version_warn(f):
 class RayXGBMixin:
     """Mixin class to provide xgboost-ray functionality"""
 
+    def _ray_set_ray_params_n_jobs(
+            self, ray_params: Optional[Union[RayParams, dict]],
+            n_jobs: int) -> RayParams:
+        """Helper function to set num_actors in ray_params if not
+        set by the user"""
+        if ray_params is None:
+            if not n_jobs or n_jobs < 1:
+                n_jobs = 1
+            ray_params = RayParams(num_actors=n_jobs)
+        else:
+            warnings.warn("`ray_params` is not `None` and will override "
+                          "the `n_jobs` attribute.")
+        return ray_params
+
     def _ray_predict(
             self: "XGBModel",
             X,
@@ -248,7 +262,7 @@ class RayXGBMixin:
                 ntree_limit = getattr(self, "best_ntree_limit", 0)
             compat_predict_kwargs["ntree_limit"] = ntree_limit
 
-        ray_params = self._set_ray_params_n_jobs(ray_params, self.n_jobs)
+        ray_params = self._ray_set_ray_params_n_jobs(ray_params, self.n_jobs)
 
         test = RayDMatrix(X, base_margin=base_margin, missing=self.missing)
         return predict(
@@ -260,20 +274,6 @@ class RayXGBMixin:
             _remote=_remote,
             **compat_predict_kwargs,
         )
-
-    def _ray_set_ray_params_n_jobs(
-            self, ray_params: Optional[Union[RayParams, dict]],
-            n_jobs: int) -> RayParams:
-        """Helper function to set num_actors in ray_params if not
-        set by the user"""
-        if ray_params is None:
-            if not n_jobs or n_jobs < 1:
-                n_jobs = 1
-            ray_params = RayParams(num_actors=n_jobs)
-        else:
-            warnings.warn("`ray_params` is not `None` and will override "
-                          "the `n_jobs` attribute.")
-        return ray_params
 
     def _ray_get_wrap_evaluation_matrices_compat_kwargs(self) -> dict:
         if hasattr(self, "enable_categorical"):
