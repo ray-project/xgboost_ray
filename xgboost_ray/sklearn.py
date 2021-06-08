@@ -178,12 +178,12 @@ try:
 except ImportError:
     from sklearn.preprocessing import LabelEncoder as XGBoostLabelEncoder
 
-_RAY_PARAMS_DOC = """
-    ray_params (Union[None, RayParams, Dict]): Parameters to configure
-        Ray-specific behavior. See :class:`RayParams` for a list of valid
-        configuration parameters.
-    _remote (bool): Whether to run the driver process in a remote
-        function. This is enabled by default in Ray client mode.
+_RAY_PARAMS_DOC = """ray_params (Union[None, RayParams, Dict]): Parameters to configure
+            Ray-specific behavior. See :class:`RayParams` for a list of valid
+            configuration parameters. Will override ``n_jobs`` attribute
+            with own ``num_actors`` parameter.
+        _remote (bool): Whether to run the driver process in a remote
+            function. This is enabled by default in Ray client mode.
 
 """
 
@@ -195,8 +195,10 @@ _N_JOBS_DOC_REPLACE = (
         algorithms.""",  # noqa: E501, W291
     """    n_jobs : int
         Number of Ray actors used to run xgboost in parallel.
-        In order to set number of threads per actor, pass a ``RayParams`` object to the 
-        relevant method as a ``ray_params`` argument.""",  # noqa: E501, W291
+        In order to set number of threads per actor, pass a :class:`RayParams`
+        object to the relevant method as a ``ray_params`` argument. Will be
+        overriden by the ``num_actors`` parameter of ``ray_params`` argument
+        should it be passed to a method.""",  # noqa: E501, W291
 )
 
 
@@ -206,17 +208,6 @@ def _treat_estimator_doc(doc: str) -> str:
         "scikit-learn API for XGBoost",
         "scikit-learn API for Ray-distributed XGBoost")
     return doc
-
-
-def _set_ray_params_n_jobs(ray_params: Optional[Union[RayParams, dict]],
-                           n_jobs: int) -> RayParams:
-    """Helper function to set num_actors in ray_params if not
-    set by the user"""
-    if ray_params is None:
-        if not n_jobs or n_jobs < 1:
-            n_jobs = 1
-        ray_params = RayParams(num_actors=n_jobs)
-    return ray_params
 
 
 def _xgboost_version_warn(f):
@@ -257,7 +248,7 @@ class RayXGBMixin:
                 ntree_limit = getattr(self, "best_ntree_limit", 0)
             compat_predict_kwargs["ntree_limit"] = ntree_limit
 
-        ray_params = _set_ray_params_n_jobs(ray_params, self.n_jobs)
+        ray_params = self._set_ray_params_n_jobs(ray_params, self.n_jobs)
 
         test = RayDMatrix(X, base_margin=base_margin, missing=self.missing)
         return predict(
@@ -269,6 +260,20 @@ class RayXGBMixin:
             _remote=_remote,
             **compat_predict_kwargs,
         )
+
+    def _ray_set_ray_params_n_jobs(
+            self, ray_params: Optional[Union[RayParams, dict]],
+            n_jobs: int) -> RayParams:
+        """Helper function to set num_actors in ray_params if not
+        set by the user"""
+        if ray_params is None:
+            if not n_jobs or n_jobs < 1:
+                n_jobs = 1
+            ray_params = RayParams(num_actors=n_jobs)
+        else:
+            warnings.warn("`ray_params` is not `None` and will override "
+                          "the `n_jobs` attribute.")
+        return ray_params
 
     def _ray_get_wrap_evaluation_matrices_compat_kwargs(self) -> dict:
         if hasattr(self, "enable_categorical"):
@@ -367,7 +372,7 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
         params.pop("n_jobs", None)
         params.pop("nthread", None)
 
-        ray_params = _set_ray_params_n_jobs(ray_params, self.n_jobs)
+        ray_params = self._ray_set_ray_params_n_jobs(ray_params, self.n_jobs)
 
         additional_results = {}
 
@@ -539,7 +544,7 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
         params.pop("n_jobs", None)
         params.pop("nthread", None)
 
-        ray_params = _set_ray_params_n_jobs(ray_params, self.n_jobs)
+        ray_params = self._ray_set_ray_params_n_jobs(ray_params, self.n_jobs)
 
         additional_results = {}
 
@@ -833,7 +838,7 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
         params.pop("n_jobs", None)
         params.pop("nthread", None)
 
-        ray_params = _set_ray_params_n_jobs(ray_params, self.n_jobs)
+        ray_params = self._ray_set_ray_params_n_jobs(ray_params, self.n_jobs)
 
         additional_results = {}
 
