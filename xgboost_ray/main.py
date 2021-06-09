@@ -343,7 +343,7 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
             f"but it was {type(ray_params)}."
             f"\nFIX THIS preferably by passing a `RayParams` instance as "
             f"the `ray_params` parameter.")
-    if ray_params.num_actors <= 2:
+    if ray_params.num_actors < 2:
         warnings.warn(
             f"`num_actors` in `ray_params` is smaller than 2 "
             f"({ray_params.num_actors}). XGBoost will NOT be distributed!")
