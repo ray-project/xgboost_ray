@@ -1,6 +1,7 @@
 import argparse
 import os
 
+import xgboost_ray
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
 import xgboost as xgb
@@ -39,13 +40,6 @@ def train_breast_cancer(config, ray_params):
         evals_result["eval"]["error"][-1]))
 
 
-def load_best_model(checkpoint_dir):
-    """Loads the XGBoost model."""
-    best_bst = xgb.Booster()
-    best_bst.load_model(os.path.join(checkpoint_dir, "tuned.xgb"))
-    return best_bst
-
-
 def main(cpus_per_actor, num_actors, num_samples):
     # Set XGBoost config.
     config = {
@@ -72,15 +66,9 @@ def main(cpus_per_actor, num_actors, num_samples):
         metric="eval-error",
         mode="min")
 
-    # Load the best model checkpoint
-    if ray.util.client.ray.is_connected():
-        # If using Ray Client, the best model is saved on the server.
-        # So we have to wrap the model loading in a ray task.
-        remote_load = ray.remote(load_best_model)
-        remote_load = force_on_current_node(remote_load)
-        best_bst = ray.get(remote_load.remote(analysis.best_logdir))
-    else:
-        best_bst = load_best_model(analysis.best_logdir)
+    # Load the best model checkpoint.
+    best_bst = xgboost_ray.tune.load_model(os.path.join(
+        analysis.best_logdir, "tuned.xgb"))
 
     best_bst.save_model("best_model.xgb")
 

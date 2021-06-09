@@ -167,6 +167,9 @@ def get_current_node_resource_key() -> str:
 def force_on_current_node(task_or_actor):
     """Given a task or actor, place it on the current node.
 
+    If the task or actor that is passed in already has custom resource
+    requirements, then they will be overridden.
+
     If using Ray Client, the current node is the client server node.
     """
     node_resource_key = get_current_node_resource_key()
