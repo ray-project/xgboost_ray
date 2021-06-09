@@ -153,8 +153,8 @@ so will override the value of `n_jobs` with the value of
 to the [Resources](#resources) section below.
 - By default `n_jobs` is set to `1`, which means the training
 will **not** be distributed. Make sure to either set `n_jobs`
-to a higher value or pass a `RayParams` as outlined above in
-order to take advantage of XGBoost-Ray's functionality.
+to a higher value or pass a `RayParams` object as outlined above
+in order to take advantage of XGBoost-Ray's functionality.
 - After calling `fit`, additional evaluation results (e.g. training time,
 number of rows, callback results) will be available under
 `additional_results_` attribute.
