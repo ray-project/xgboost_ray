@@ -234,7 +234,7 @@ class RayXGBMixin:
             if not n_jobs or n_jobs < 1:
                 n_jobs = 1
             ray_params = RayParams(num_actors=n_jobs)
-        else:
+        elif n_jobs:
             warnings.warn("`ray_params` is not `None` and will override "
                           "the `n_jobs` attribute.")
         return ray_params
