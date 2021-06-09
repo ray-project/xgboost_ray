@@ -155,10 +155,9 @@ to the [Resources](#resources) section below.
 will **not** be distributed. Make sure to either set `n_jobs`
 to a higher value or pass a `RayParams` as outlined above in
 order to take advantage of XGBoost-Ray's functionality.
-- Aside from `ray_params`, `fit`/`predict`/`predict_proba`
-methods also posses the `_remote` argument.
-- After calling `fit`, additional evaluation results will
-be available under `additional_results_` attribute.
+- After calling `fit`, additional evaluation results (e.g. training time,
+number of rows, callback results) will be available under
+`additional_results_` attribute.
 - XGBoost-Ray's scikit-learn API is based on XGBoost 1.4.
 While we try to support older XGBoost versions, please note that
 this library is only fully tested and supported for XGBoost >= 1.4.
