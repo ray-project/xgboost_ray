@@ -578,8 +578,12 @@ class RayXGBoostActor:
             self.load_data(data)
         local_data = self._data[data]
 
-        predictions = pd.Series(model.predict(local_data, **kwargs))
-        self._distributed_callbacks.after_predict(self, predictions)
+        predictions = model.predict(local_data, **kwargs)
+        if predictions.ndim == 1:
+            callback_predictions = pd.Series(predictions)
+        else:
+            callback_predictions = pd.DataFrame(predictions)
+        self._distributed_callbacks.after_predict(self, callback_predictions)
         return predictions
 
 
