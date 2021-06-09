@@ -4,13 +4,11 @@ import os
 import xgboost_ray
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
-import xgboost as xgb
 
 import ray
 from ray import tune
 
 from xgboost_ray import train, RayDMatrix, RayParams
-from xgboost_ray.util import force_on_current_node
 
 
 def train_breast_cancer(config, ray_params):
@@ -67,8 +65,8 @@ def main(cpus_per_actor, num_actors, num_samples):
         mode="min")
 
     # Load the best model checkpoint.
-    best_bst = xgboost_ray.tune.load_model(os.path.join(
-        analysis.best_logdir, "tuned.xgb"))
+    best_bst = xgboost_ray.tune.load_model(
+        os.path.join(analysis.best_logdir, "tuned.xgb"))
 
     best_bst.save_model("best_model.xgb")
 

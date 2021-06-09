@@ -246,6 +246,7 @@ def load_model(model_path):
         xgb.Booster object of the model stored in the provided model_path
 
     """
+
     def load_model_fn(model_path):
         best_bst = xgb.Booster()
         best_bst.load_model(model_path)
