@@ -81,6 +81,7 @@ class DelayedLoadingCallback(DistributedCallback):
         print(f"Rank {actor.rank} - after load")
         while ray.get(self.ft_manager.should_sleep.remote(actor.rank)):
             time.sleep(self.sleep_time)
+        print(f"Rank {actor.rank} - returning now")
 
 
 class DieCallback(TrainingCallback):
