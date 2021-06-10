@@ -573,7 +573,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         self.assertIn(15, global_steps)
         self.assertNotIn(17, global_steps)
         self.assertNotIn(67, global_steps)
-        self.assertIn(70, global_steps)
+        self.assertIn(75, global_steps)
 
 
 if __name__ == "__main__":
