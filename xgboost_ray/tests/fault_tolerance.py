@@ -6,9 +6,8 @@ from typing import Dict, Tuple, Set
 import ray
 from ray.actor import ActorHandle
 
-from xgboost.callback import TrainingCallback
-
 from xgboost_ray.callback import DistributedCallback
+from xgboost_ray.compat import TrainingCallback
 from xgboost_ray.session import get_actor_rank
 
 
