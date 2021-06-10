@@ -47,10 +47,13 @@ class FaultToleranceManager:
 
     def should_die(self, rank: int):
         """Returns True if the actor should terminate the training job now."""
-        if rank in self.scheduled_kill[self.global_boost_round]:
-            self.scheduled_kill[self.global_boost_round].remove(rank)
-            return True
-        return False
+        die = False
+        for round in range(self.global_boost_round + 1):
+            # Loop through all rounds until now to deal with race conditions
+            if rank in self.scheduled_kill[round]:
+                self.scheduled_kill[round].remove(rank)
+                die = True
+        return die
 
     def should_sleep(self, rank: int):
         """Returns True if the actor should not finish data loading, yet."""
