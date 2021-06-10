@@ -33,7 +33,7 @@ else
   echo "skipping tune tests"
 fi
 
-echo "running smoke test on benchmark_cpu_gpu.py" && if python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test; then END_STATUS=1; fi
+echo "running smoke test on benchmark_cpu_gpu.py" && if ! python release/benchmark_cpu_gpu.py 2 10 20 --smoke-test; then END_STATUS=1; fi
 popd || exit 1
 
 if [ "$END_STATUS" = "1" ]; then
