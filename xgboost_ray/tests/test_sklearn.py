@@ -478,7 +478,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         tr_d, te_d, tr_l, te_l = train_test_split(
             iris.data, iris.target, train_size=120, test_size=0.2)
 
-        classifier = RayXGBClassifier(booster="gbtree", n_estimators=10)
+        classifier = RayXGBClassifier(
+            booster="gbtree", n_estimators=10, random_state=self.seed)
         classifier.fit(tr_d, tr_l)
 
         preds = classifier.predict(te_d)
@@ -497,7 +498,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         tr_d, te_d, tr_l, te_l = train_test_split(
             iris.data, iris.target, train_size=120)
 
-        classifier = RayXGBClassifier(booster="gblinear", n_estimators=100)
+        classifier = RayXGBClassifier(
+            booster="gblinear", n_estimators=100, random_state=self.seed)
         classifier.fit(tr_d, tr_l)
 
         preds = classifier.predict(te_d)
