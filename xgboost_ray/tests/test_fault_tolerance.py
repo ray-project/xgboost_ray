@@ -286,22 +286,29 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
     def testTrainingStopElastic(self):
         """This should now stop training after one actor died."""
         # The `train()` function raises a RuntimeError
+        ft_manager = FaultToleranceManager.remote()
+
+        ft_manager.schedule_kill.remote(rank=0, boost_round=3)
+        ft_manager.schedule_kill.remote(rank=1, boost_round=6)
+        ft_manager.delay_return.remote(
+            rank=0, start_boost_round=4, end_boost_round=5)
+
+        delay_callback = DelayedLoadingCallback(
+            ft_manager, reload_data=True, sleep_time=0.1)
+        die_callback = DieCallback(ft_manager, training_delay=0.25)
+
         with self.assertRaises(RuntimeError):
             train(
                 self.params,
                 RayDMatrix(self.x, self.y),
-                callbacks=[
-                    _kill_callback(
-                        self.die_lock_file, actor_rank=0, fail_iteration=3),
-                    _kill_callback(
-                        self.die_lock_file_2, actor_rank=1, fail_iteration=6)
-                ],
+                callbacks=[die_callback],
                 num_boost_round=20,
                 ray_params=RayParams(
                     elastic_training=True,
                     max_failed_actors=1,
                     max_actor_restarts=1,
-                    num_actors=2))
+                    num_actors=2,
+                    distributed_callbacks=[delay_callback]))
 
     def testCheckpointContinuationValidity(self):
         """Test that checkpoints are stored and loaded correctly"""

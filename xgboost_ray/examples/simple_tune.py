@@ -1,9 +1,9 @@
 import argparse
 import os
 
+import xgboost_ray
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
-import xgboost as xgb
 
 import ray
 from ray import tune
@@ -64,9 +64,12 @@ def main(cpus_per_actor, num_actors, num_samples):
         metric="eval-error",
         mode="min")
 
-    # Load the best model checkpoint
-    best_bst = xgb.Booster()
-    best_bst.load_model(os.path.join(analysis.best_logdir, "tuned.xgb"))
+    # Load the best model checkpoint.
+    best_bst = xgboost_ray.tune.load_model(
+        os.path.join(analysis.best_logdir, "tuned.xgb"))
+
+    best_bst.save_model("best_model.xgb")
+
     accuracy = 1. - analysis.best_result["eval-error"]
     print(f"Best model parameters: {analysis.best_config}")
     print(f"Best model total accuracy: {accuracy:.4f}")
@@ -79,6 +82,11 @@ if __name__ == "__main__":
         required=False,
         type=str,
         help="the address to use for Ray")
+    parser.add_argument(
+        "--server-address",
+        required=False,
+        type=str,
+        help="Address of the remote server if using Ray Client.")
     parser.add_argument(
         "--cpus-per-actor",
         type=int,
@@ -94,13 +102,14 @@ if __name__ == "__main__":
         type=int,
         default=4,
         help="Number of samples to use for Tune.")
-    parser.add_argument(
-        "--smoke-test", action="store_true", default=False, help="gpu")
+    parser.add_argument("--smoke-test", action="store_true", default=False)
 
     args, _ = parser.parse_known_args()
 
     if args.smoke_test:
         ray.init(num_cpus=args.num_actors * args.num_samples)
+    elif args.server_address:
+        ray.util.connect(args.server_address)
     else:
         ray.init(address=args.address)
 

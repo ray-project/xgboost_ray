@@ -145,3 +145,33 @@ class MultiActorTask:
                     self._ready_futures.append(obj)
 
         return not bool(self._pending_futures)
+
+
+def get_current_node_resource_key() -> str:
+    """Get the Ray resource key for current node.
+    It can be used for actor placement.
+    If using Ray Client, this will return the resource key for the node that
+    is running the client server.
+    """
+    current_node_id = ray.get_runtime_context().node_id.hex()
+    for node in ray.nodes():
+        if node["NodeID"] == current_node_id:
+            # Found the node.
+            for key in node["Resources"].keys():
+                if key.startswith("node:"):
+                    return key
+    else:
+        raise ValueError("Cannot found the node dictionary for current node.")
+
+
+def force_on_current_node(task_or_actor):
+    """Given a task or actor, place it on the current node.
+
+    If the task or actor that is passed in already has custom resource
+    requirements, then they will be overridden.
+
+    If using Ray Client, the current node is the client server node.
+    """
+    node_resource_key = get_current_node_resource_key()
+    options = {"resources": {node_resource_key: 0.01}}
+    return task_or_actor.options(**options)

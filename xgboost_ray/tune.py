@@ -2,6 +2,8 @@
 import os
 from typing import Dict, Union, List, Optional
 
+import ray
+
 try:
     from typing import OrderedDict
 except ImportError:
@@ -9,9 +11,11 @@ except ImportError:
 
 import logging
 
+import xgboost as xgb
+
 from xgboost_ray.compat import TrainingCallback
 from xgboost_ray.session import put_queue, get_rabit_rank
-from xgboost_ray.util import Unavailable
+from xgboost_ray.util import Unavailable, force_on_current_node
 
 try:
     from ray import tune
@@ -230,3 +234,32 @@ def _get_tune_resources(num_actors: int, cpus_per_actor: int,
         raise RuntimeError("Tune is not installed, so `get_tune_resources` is "
                            "not supported. You can install Ray Tune via `pip "
                            "install ray[tune]`.")
+
+
+def load_model(model_path):
+    """Loads the model stored in the provided model_path.
+
+    If using Ray Client, this will automatically handle loading the path on
+    the server by using a Ray task.
+
+    Returns:
+        xgb.Booster object of the model stored in the provided model_path
+
+    """
+
+    def load_model_fn(model_path):
+        best_bst = xgb.Booster()
+        best_bst.load_model(model_path)
+        return best_bst
+
+    # Load the model checkpoint.
+    if ray.util.client.ray.is_connected():
+        # If using Ray Client, the best model is saved on the server.
+        # So we have to wrap the model loading in a ray task.
+        remote_load = ray.remote(load_model_fn)
+        remote_load = force_on_current_node(remote_load)
+        bst = ray.get(remote_load.remote(model_path))
+    else:
+        bst = load_model_fn(model_path)
+
+    return bst

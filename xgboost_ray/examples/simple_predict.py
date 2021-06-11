@@ -10,9 +10,9 @@ import numpy as np
 
 def main():
     if not os.path.exists("simple.xgb"):
-        raise ValueError(f"Model file not found: `simple.xgb`"
-                         f"\nFIX THIS by running `python `simple.py` first to "
-                         f"train the model.")
+        raise ValueError("Model file not found: `simple.xgb`"
+                         "\nFIX THIS by running `python `simple.py` first to "
+                         "train the model.")
 
     # Load dataset
     data, labels = datasets.load_breast_cancer(return_X_y=True)

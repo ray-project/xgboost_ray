@@ -1,25 +1,44 @@
 import argparse
 
-from sklearn import datasets
-from sklearn.model_selection import train_test_split
+import numpy as np
+import pandas as pd
 
 import ray
 
 from xgboost_ray import RayDMatrix, train, RayParams
+from xgboost_ray.data_sources.modin import MODIN_INSTALLED
 
 
 def main(cpus_per_actor, num_actors):
-    # Load dataset
-    data, labels = datasets.load_breast_cancer(return_X_y=True)
-    # Split into train and test set
-    train_x, test_x, train_y, test_y = train_test_split(
-        data, labels, test_size=0.25)
+    if not MODIN_INSTALLED:
+        print("Modin is not installed or installed in a version that is not "
+              "compatible with xgboost_ray (< 0.9.0).")
+        return
 
-    train_set = RayDMatrix(train_x, train_y)
-    test_set = RayDMatrix(test_x, test_y)
+    # Import modin after initializing Ray
+    from modin.distributed.dataframe.pandas import from_partitions
+
+    # Generate dataset
+    x = np.repeat(range(8), 16).reshape((32, 4))
+    # Even numbers --> 0, odd numbers --> 1
+    y = np.tile(np.repeat(range(2), 4), 4)
+
+    # Flip some bits to reduce max accuracy
+    bits_to_flip = np.random.choice(32, size=6, replace=False)
+    y[bits_to_flip] = 1 - y[bits_to_flip]
+
+    data = pd.DataFrame(x)
+    data["label"] = y
+
+    # Split into 4 partitions
+    partitions = [ray.put(part) for part in np.split(data, 4)]
+
+    # Create modin df here
+    modin_df = from_partitions(partitions, axis=0)
+
+    train_set = RayDMatrix(modin_df, "label")
 
     evals_result = {}
-
     # Set XGBoost config.
     xgboost_params = {
         "tree_method": "approx",
@@ -31,7 +50,7 @@ def main(cpus_per_actor, num_actors):
     bst = train(
         params=xgboost_params,
         dtrain=train_set,
-        evals=[(test_set, "eval")],
+        evals=[(train_set, "train")],
         evals_result=evals_result,
         ray_params=RayParams(
             max_actor_restarts=0,
@@ -41,10 +60,10 @@ def main(cpus_per_actor, num_actors):
         verbose_eval=False,
         num_boost_round=10)
 
-    model_path = "simple.xgb"
+    model_path = "modin.xgb"
     bst.save_model(model_path)
-    print("Final validation error: {:.4f}".format(
-        evals_result["eval"]["error"][-1]))
+    print("Final training error: {:.4f}".format(
+        evals_result["train"]["error"][-1]))
 
 
 if __name__ == "__main__":
@@ -54,6 +73,11 @@ if __name__ == "__main__":
         required=False,
         type=str,
         help="the address to use for Ray")
+    parser.add_argument(
+        "--server-address",
+        required=False,
+        type=str,
+        help="Address of the remote server if using Ray Client.")
     parser.add_argument(
         "--cpus-per-actor",
         type=int,
@@ -70,7 +94,9 @@ if __name__ == "__main__":
     args, _ = parser.parse_known_args()
 
     if args.smoke_test:
-        ray.init(num_cpus=args.num_actors)
+        ray.init(num_cpus=args.num_actors + 1)
+    elif args.server_address:
+        ray.util.connect(args.server_address)
     else:
         ray.init(address=args.address)
 

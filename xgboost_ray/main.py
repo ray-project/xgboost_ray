@@ -29,7 +29,8 @@ try:
     from ray.util.placement_group import PlacementGroup, \
         remove_placement_group, get_current_placement_group
 
-    from xgboost_ray.util import Event, Queue, MultiActorTask
+    from xgboost_ray.util import Event, Queue, MultiActorTask, \
+        force_on_current_node
 
     RAY_INSTALLED = True
 except ImportError:
@@ -1115,7 +1116,7 @@ def train(
         ray.init()
 
     if _remote:
-        # Run this function as a remote function to support Ray client mode
+        # Run this function as a remote function to support Ray client mode.
         @ray.remote(num_cpus=0)
         def _wrapped(*args, **kwargs):
             _evals_result = {}
@@ -1127,6 +1128,9 @@ def train(
                 additional_results=_additional_results,
                 **kwargs)
             return bst, _evals_result, _additional_results
+
+        # Make sure that train is called on the server node.
+        _wrapped = force_on_current_node(_wrapped)
 
         bst, train_evals_result, train_additional_results = ray.get(
             _wrapped.remote(
