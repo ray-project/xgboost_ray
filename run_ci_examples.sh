@@ -1,3 +1,5 @@
+set -e
+
 TUNE=1
 
 for i in "$@"

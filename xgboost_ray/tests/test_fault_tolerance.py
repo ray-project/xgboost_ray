@@ -16,7 +16,7 @@ from xgboost_ray.main import RayXGBoostActorAvailable
 from xgboost_ray.tests.fault_tolerance import FaultToleranceManager, \
     DelayedLoadingCallback, DieCallback
 from xgboost_ray.tests.utils import flatten_obj, _checkpoint_callback, \
-    _fail_callback, tree_obj, _kill_callback, _sleep_callback, get_num_trees
+    _fail_callback, tree_obj, _kill_callback, get_num_trees
 
 
 class _FakeTask(MagicMock):
@@ -153,6 +153,16 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         """This should continue after one actor died and restart it."""
         logging.getLogger().setLevel(10)
 
+        ft_manager = FaultToleranceManager.remote()
+
+        ft_manager.schedule_kill.remote(rank=0, boost_round=6)
+        ft_manager.delay_return.remote(
+            rank=1, start_boost_round=12, end_boost_round=21)
+
+        delay_callback = DelayedLoadingCallback(
+            ft_manager, reload_data=True, sleep_time=0.1)
+        die_callback = DieCallback(ft_manager, training_delay=0.25)
+
         additional_results = {}
         keep_actors = {}
 
@@ -165,17 +175,14 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             bst = train(
                 self.params,
                 RayDMatrix(self.x, self.y),
-                callbacks=[
-                    _kill_callback(self.die_lock_file, fail_iteration=6),
-                    _sleep_callback(sleep_iteration=7, sleep_seconds=15),
-                    _sleep_callback(sleep_iteration=9, sleep_seconds=5)
-                ],
+                callbacks=[die_callback],
                 num_boost_round=20,
                 ray_params=RayParams(
                     max_actor_restarts=1,
                     num_actors=2,
                     elastic_training=True,
-                    max_failed_actors=1),
+                    max_failed_actors=1,
+                    distributed_callbacks=[delay_callback]),
                 additional_results=additional_results)
 
         self.assertEqual(20, get_num_trees(bst))
@@ -573,7 +580,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         self.assertIn(15, global_steps)
         self.assertNotIn(17, global_steps)
         self.assertNotIn(67, global_steps)
-        self.assertIn(70, global_steps)
+        self.assertIn(75, global_steps)
 
 
 if __name__ == "__main__":

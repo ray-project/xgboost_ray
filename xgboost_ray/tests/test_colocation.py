@@ -110,7 +110,7 @@ class TestColocation(unittest.TestCase):
                 finally:
                     assert len(_training_state.actors) == 2
                     if not any(a is None for a in _training_state.actors):
-                        actor_infos = ray.actors()
+                        actor_infos = ray.state.actors()
                         actor_nodes = []
                         for a in _training_state.actors:
                             actor_info = actor_infos.get(a._actor_id.hex())
@@ -151,7 +151,7 @@ class TestColocation(unittest.TestCase):
                 finally:
                     assert len(_training_state.actors) == num_actors
                     if not any(a is None for a in _training_state.actors):
-                        actor_infos = ray.actors()
+                        actor_infos = ray.state.actors()
                         actor_nodes = []
                         for a in _training_state.actors:
                             actor_info = actor_infos.get(a._actor_id.hex())

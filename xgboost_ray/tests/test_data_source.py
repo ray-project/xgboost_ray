@@ -15,6 +15,7 @@ from xgboost_ray.data_sources.modin import MODIN_INSTALLED
 from xgboost_ray.data_sources.dask import DASK_INSTALLED
 
 
+@unittest.skip("Abstract test")
 class _DistributedDataSourceTest(unittest.TestCase):
     def setUp(self):
         repeat = 8  # Repeat data a couple of times for stability

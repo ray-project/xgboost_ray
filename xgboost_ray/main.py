@@ -447,9 +447,13 @@ class RayXGBoostActor:
                 try:
                     if this._stop_event.is_set() or \
                             this._get_stop_event() is not initial_stop_event:
+                        if LEGACY_CALLBACK:
+                            raise EarlyStopException(epoch)
                         # Returning True stops training
                         return True
                 except RayActorError:
+                    if LEGACY_CALLBACK:
+                        raise EarlyStopException(epoch)
                     return True
 
         return _StopCallback()
