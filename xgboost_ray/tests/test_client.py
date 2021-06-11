@@ -26,7 +26,8 @@ def test_simple_train(start_client_server_4_cpus):
     main(num_actors=4, cpus_per_actor=1)
 
 
-@pytest.mark.skipif(os.environ.get("TUNE", "0") != "1")
+@pytest.mark.skipif(
+    os.environ.get("TUNE", "0") != "1", reason="Sipping Tune tests")
 def test_simple_tune(start_client_server_4_cpus):
     assert ray.util.client.ray.is_connected()
     from xgboost_ray.examples.simple_tune import main
