@@ -132,10 +132,7 @@ class _RabitTracker(RabitTracker):
         multiprocessing.set_start_method("fork", force=True)
 
         def run():
-            try:
-                self.accept_slaves(nslave)
-            except AssertionError as exc:
-                logger.exception(exc)
+            self.accept_slaves(nslave)
 
         self.thread = multiprocessing.Process(target=run, args=())
         self.thread.start()
