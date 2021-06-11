@@ -896,19 +896,41 @@ def _get_sharding_indices(sharding: RayShardingMode, rank: int,
 
 
 def combine_data(sharding: RayShardingMode, data: Iterable) -> np.ndarray:
-    if sharding == RayShardingMode.BATCH:
-        np.ravel(data)
-    elif sharding == RayShardingMode.INTERLEAVED:
-        # Sometimes the lengths are off by 1 for uneven divisions
-        min_len = min(len(d) for d in data)
-        res = np.ravel(np.column_stack([d[0:min_len] for d in data]))
-        # Append these here
-        res = np.concatenate([res] +
-                             [d[min_len:] for d in data if len(d) > min_len])
-        return res
-    else:
+    if sharding not in (RayShardingMode.BATCH, RayShardingMode.INTERLEAVED):
         raise ValueError(f"Invalid value for `sharding` parameter: "
                          f"{sharding}"
                          f"\nFIX THIS by passing any item of the "
                          f"`RayShardingMode` enum, for instance "
                          f"`RayShardingMode.BATCH`.")
+
+    # discard empty arrays that show up with BATCH
+    data = [d for d in data if len(d)]
+
+    if data[0].ndim == 1:
+        # most common case
+        if sharding == RayShardingMode.BATCH:
+            res = np.ravel(data)
+        elif sharding == RayShardingMode.INTERLEAVED:
+            # Sometimes the lengths are off by 1 for uneven divisions
+            min_len = min(len(d) for d in data)
+            res = np.ravel(np.column_stack([d[0:min_len] for d in data]))
+            # Append these here
+            res = np.concatenate(
+                [res] + [d[min_len:] for d in data if len(d) > min_len])
+    else:
+        # objective="multi:softprob" returns n-dimensional arrays that
+        # need to be handled differently
+        if sharding == RayShardingMode.BATCH:
+            res = np.vstack(data)
+        elif sharding == RayShardingMode.INTERLEAVED:
+            # Sometimes the lengths are off by 1 for uneven divisions
+            min_len = min(len(d) for d in data)
+            # the number of classes will be constant, though
+            class_len = data[0].shape[1]
+            min_len_data = [d[0:min_len] for d in data]
+            res = np.hstack(min_len_data).reshape(
+                len(min_len_data) * min_len, class_len)
+            # Append these here
+            res = np.concatenate(
+                [res] + [d[min_len:] for d in data if len(d) > min_len])
+    return res

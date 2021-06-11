@@ -6,6 +6,8 @@ import os
 import pickle
 import time
 import threading
+import warnings
+import re
 
 import numpy as np
 import pandas as pd
@@ -67,6 +69,17 @@ ELASTIC_RESTART_RESOURCE_CHECK_S = int(
 ELASTIC_RESTART_GRACE_PERIOD_S = int(
     os.getenv("RXGB_ELASTIC_RESTART_GRACE_PERIOD_S", 10))
 
+LEGACY_WARNING = (
+    f"You are using `xgboost_ray` with a legacy XGBoost version "
+    f"(version {xgb.__version__}). While we try to support "
+    f"older XGBoost versions, please note that this library is only "
+    f"fully tested and supported for XGBoost >= 1.4. Please consider "
+    f"upgrading your XGBoost version (`pip install -U xgboost`).")
+
+# XGBoost version as an int tuple for comparisions
+XGBOOST_VERSION_TUPLE = tuple(
+    [int(x) for x in re.sub(r"[^\.0-9]", "", xgb.__version__).split(".")])
+
 
 class RayXGBoostTrainingError(RuntimeError):
     """Raised from RayXGBoostActor.train() when the local xgb.train function
@@ -95,12 +108,7 @@ def _assert_ray_support():
 
 def _maybe_print_legacy_warning():
     if LEGACY_MATRIX or LEGACY_CALLBACK:
-        logger.warning(
-            f"You are using `xgboost_ray` with a legacy XGBoost version "
-            f"(version {xgb.__version__}). While we try to support "
-            f"older XGBoost versions, please note that this library is only "
-            f"fully tested and supported for XGBoost >= 1.4. Please consider "
-            f"upgrading your XGBoost version (`pip install -U xgboost`).")
+        logger.warning(LEGACY_WARNING)
 
 
 def _is_client_connected() -> bool:
@@ -336,6 +344,10 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
             f"but it was {type(ray_params)}."
             f"\nFIX THIS preferably by passing a `RayParams` instance as "
             f"the `ray_params` parameter.")
+    if ray_params.num_actors < 2:
+        warnings.warn(
+            f"`num_actors` in `ray_params` is smaller than 2 "
+            f"({ray_params.num_actors}). XGBoost will NOT be distributed!")
     return ray_params
 
 
@@ -436,9 +448,13 @@ class RayXGBoostActor:
                 try:
                     if this._stop_event.is_set() or \
                             this._get_stop_event() is not initial_stop_event:
+                        if LEGACY_CALLBACK:
+                            raise EarlyStopException(epoch)
                         # Returning True stops training
                         return True
                 except RayActorError:
+                    if LEGACY_CALLBACK:
+                        raise EarlyStopException(epoch)
                     return True
 
         return _StopCallback()
@@ -476,13 +492,14 @@ class RayXGBoostActor:
                 # bytearray type gets lost in remote actor call
                 kwargs["xgb_model"] = bytearray(kwargs["xgb_model"])
 
-        if "nthread" not in local_params:
+        if "nthread" not in local_params and "n_jobs" not in local_params:
             if num_threads > 0:
                 local_params["num_threads"] = num_threads
             else:
                 local_params["nthread"] = sum(
                     num
                     for _, num in ray.worker.get_resource_ids().get("CPU", []))
+                local_params["n_jobs"] = local_params["nthread"]
 
         if dtrain not in self._data:
             self.load_data(dtrain)
@@ -579,8 +596,12 @@ class RayXGBoostActor:
             self.load_data(data)
         local_data = self._data[data]
 
-        predictions = pd.Series(model.predict(local_data, **kwargs))
-        self._distributed_callbacks.after_predict(self, predictions)
+        predictions = model.predict(local_data, **kwargs)
+        if predictions.ndim == 1:
+            callback_predictions = pd.Series(predictions)
+        else:
+            callback_predictions = pd.DataFrame(predictions)
+        self._distributed_callbacks.after_predict(self, callback_predictions)
         return predictions
 
 
@@ -1161,9 +1182,20 @@ def train(
         cpus_per_actor, gpus_per_actor = _autodetect_resources(
             ray_params=ray_params,
             use_tree_method="tree_method" in params
+            and params["tree_method"] is not None
             and params["tree_method"].startswith("gpu"))
 
-    tree_method = params.get("tree_method", "auto")
+    tree_method = params.get("tree_method", "auto") or "auto"
+
+    # preemptively raise exceptions with bad params
+    if tree_method == "exact":
+        raise ValueError(
+            "`exact` tree method doesn't support distributed training.")
+
+    if params.get("updater", None) == "grow_colmaker":
+        raise ValueError(
+            "`grow_colmaker` updater doesn't support distributed training.")
+
     if gpus_per_actor > 0 and not tree_method.startswith("gpu_"):
         logger.warning(
             f"GPUs have been assigned to the actors, but the current XGBoost "
