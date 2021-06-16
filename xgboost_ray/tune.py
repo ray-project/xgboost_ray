@@ -206,7 +206,7 @@ def _get_tune_resources(num_actors: int, cpus_per_actor: int,
                 else resources_per_actor
             extra_custom_resources = {
                 k: v * num_actors
-                for k, v in resources_per_actor
+                for k, v in resources_per_actor.items()
             }
             return dict(
                 cpu=1,
