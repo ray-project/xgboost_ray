@@ -494,7 +494,8 @@ class RayXGBoostActor:
 
         if "nthread" not in local_params and "n_jobs" not in local_params:
             if num_threads > 0:
-                local_params["num_threads"] = num_threads
+                local_params["nthread"] = num_threads
+                local_params["n_jobs"] = num_threads
             else:
                 local_params["nthread"] = sum(
                     num
