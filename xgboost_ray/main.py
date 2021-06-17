@@ -351,8 +351,7 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
     return ray_params
 
 
-@ray.remote
-class RayXGBoostActor:
+class _RayXGBoostActor:
     """Remote Ray XGBoost actor class.
 
     This remote actor handles local training and prediction of one data
@@ -603,6 +602,11 @@ class RayXGBoostActor:
             callback_predictions = pd.DataFrame(predictions)
         self._distributed_callbacks.after_predict(self, callback_predictions)
         return predictions
+
+
+@ray.remote
+class RayXGBoostActor(_RayXGBoostActor):
+    pass
 
 
 class _PrepareActorTask(MultiActorTask):
