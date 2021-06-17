@@ -830,12 +830,8 @@ def _train(params: Dict,
     _training_state.restart_training_at = None
 
     if "nthread" in params or "n_jobs" in params:
-        if "nthread" in params and params["nthread"] > cpus_per_actor:
-            raise ValueError(
-                "Specified number of threads greater than number of CPUs. "
-                "\nFIX THIS by passing a lower value for the `nthread` "
-                "parameter or a higher number for `cpus_per_actor`.")
-        if "n_jobs" in params and params["n_jobs"] > cpus_per_actor:
+        if ("nthread" in params and params["nthread"] > cpus_per_actor) or (
+                "n_jobs" in params and params["n_jobs"] > cpus_per_actor):
             raise ValueError(
                 "Specified number of threads greater than number of CPUs. "
                 "\nFIX THIS by passing a lower value for the `nthread` "
