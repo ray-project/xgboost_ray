@@ -39,6 +39,7 @@ def test_simple_dask(start_client_server_5_cpus):
     from xgboost_ray.examples.simple_dask import main
     main(cpus_per_actor=1, num_actors=4)
 
+
 def test_simple_modin(start_client_server_5_cpus):
     assert ray.util.client.ray.is_connected()
     from xgboost_ray.examples.simple_modin import main

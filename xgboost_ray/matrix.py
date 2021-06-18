@@ -283,8 +283,8 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 "file, path, consider passing the `filetype` argument to "
                 "specify the type of the source. Use the `RayFileType` "
                 "enum for that. If using Modin, Dask, or Petastorm, "
-                "make sure the library is installed.".format(type(
-                    self.data), self.filetype))
+                "make sure the library is installed.".format(
+                    type(self.data), self.filetype))
 
         if self.label is not None and not isinstance(self.label, str) and \
                 not type(self.data) != type(self.label):  # noqa: E721:
@@ -361,7 +361,6 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
     """Load each shard individually."""
 
     def get_data_source(self) -> Type[DataSource]:
-        import pdb; pdb.set_trace()
         if self.data_source:
             return self.data_source
 
