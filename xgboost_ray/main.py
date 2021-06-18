@@ -358,7 +358,6 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
     return ray_params
 
 
-@ray.remote
 class RayXGBoostActor:
     """Remote Ray XGBoost actor class.
 
@@ -613,6 +612,11 @@ class RayXGBoostActor:
         return predictions
 
 
+@ray.remote
+class _RemoteRayXGBoostActor(RayXGBoostActor):
+    pass
+
+
 class _PrepareActorTask(MultiActorTask):
     def __init__(self, actor: ActorHandle, queue: Queue, stop_event: Event,
                  load_data: List[RayDMatrix]):
@@ -663,7 +667,7 @@ def _create_actor(
     # Send DEFAULT_PG here, which changed in Ray > 1.4.0
     # If we send `None`, this will ignore the parent placement group and
     # lead to errors e.g. when used within Ray Tune
-    return RayXGBoostActor.options(
+    return _RemoteRayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
         resources=resources_per_actor,
