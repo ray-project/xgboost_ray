@@ -15,7 +15,7 @@ def start_client_server_4_cpus():
 
 @pytest.fixture
 def start_client_server_5_cpus():
-    ray.init(num_cpus=4)
+    ray.init(num_cpus=5)
     with ray_start_client_server() as client:
         yield client
 
@@ -37,6 +37,11 @@ def test_simple_tune(start_client_server_4_cpus):
 def test_simple_dask(start_client_server_5_cpus):
     assert ray.util.client.ray.is_connected()
     from xgboost_ray.examples.simple_dask import main
+    main(cpus_per_actor=1, num_actors=4)
+
+def test_simple_modin(start_client_server_5_cpus):
+    assert ray.util.client.ray.is_connected()
+    from xgboost_ray.examples.simple_modin import main
     main(cpus_per_actor=1, num_actors=4)
 
 

@@ -14,7 +14,8 @@ from xgboost_ray.data_sources.object_store import ObjectStore
 
 try:
     import modin  # noqa: F401
-    MODIN_INSTALLED = modin.__version__ >= "0.9.0"
+    from distutils.version import LooseVersion
+    MODIN_INSTALLED = LooseVersion(modin.__version__) >= LooseVersion("0.9.0")
 except (ImportError, AttributeError):
     MODIN_INSTALLED = False
 
