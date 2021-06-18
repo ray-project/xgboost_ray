@@ -15,7 +15,7 @@ from xgboost_ray.data_sources.modin import MODIN_INSTALLED
 from xgboost_ray.data_sources.dask import DASK_INSTALLED
 
 
-class _DistributedDataSourceTest(unittest.TestCase):
+class _DistributedDataSourceTest:
     def setUp(self):
         repeat = 8  # Repeat data a couple of times for stability
         self.x = np.repeat(range(8), 16).reshape((32, 4))
@@ -181,7 +181,7 @@ class _DistributedDataSourceTest(unittest.TestCase):
 @unittest.skipIf(
     not MODIN_INSTALLED,
     reason="Modin is not installed in a supported version.")
-class ModinDataSourceTest(_DistributedDataSourceTest):
+class ModinDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
     """This test suite validates core RayDMatrix functionality."""
 
     def _testAssignPartitions(self, part_nodes, actor_nodes,
@@ -301,7 +301,7 @@ class ModinDataSourceTest(_DistributedDataSourceTest):
 
 @unittest.skipIf(
     not DASK_INSTALLED, reason="Dask is not installed in a supported version.")
-class DaskDataSourceTest(_DistributedDataSourceTest):
+class DaskDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
     """This test suite validates core RayDMatrix functionality."""
 
     def _testAssignPartitions(self, part_nodes, actor_nodes,
