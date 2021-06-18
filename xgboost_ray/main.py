@@ -501,7 +501,8 @@ class RayXGBoostActor:
 
         if "nthread" not in local_params and "n_jobs" not in local_params:
             if num_threads > 0:
-                local_params["num_threads"] = num_threads
+                local_params["nthread"] = num_threads
+                local_params["n_jobs"] = num_threads
             else:
                 local_params["nthread"] = sum(
                     num
@@ -838,14 +839,16 @@ def _train(params: Dict,
     # Un-schedule possible scheduled restarts
     _training_state.restart_training_at = None
 
-    if "nthread" in params:
-        if params["nthread"] > cpus_per_actor:
+    if "nthread" in params or "n_jobs" in params:
+        if ("nthread" in params and params["nthread"] > cpus_per_actor) or (
+                "n_jobs" in params and params["n_jobs"] > cpus_per_actor):
             raise ValueError(
                 "Specified number of threads greater than number of CPUs. "
                 "\nFIX THIS by passing a lower value for the `nthread` "
                 "parameter or a higher number for `cpus_per_actor`.")
     else:
         params["nthread"] = cpus_per_actor
+        params["n_jobs"] = cpus_per_actor
 
     # This is a callback that handles actor failures.
     # We identify the rank of the failed actor, add this to a set of
