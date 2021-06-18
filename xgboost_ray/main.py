@@ -647,7 +647,7 @@ def _create_actor(
         num_cpus_per_actor: int,
         num_gpus_per_actor: int,
         resources_per_actor: Optional[Dict] = None,
-        placement_group: Optional[PlacementGroup] = None,
+        placement_group: Optional[PlacementGroup] = "default",
         queue: Optional[Queue] = None,
         checkpoint_frequency: int = 5,
         distributed_callbacks: Optional[Sequence[DistributedCallback]] = None
@@ -1270,7 +1270,7 @@ def train(
                                      ray_params.resources_per_actor,
                                      ray_params.num_actors, placement_strategy)
     else:
-        pg = None
+        pg = "default"
 
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
 
