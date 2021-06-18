@@ -418,7 +418,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     @patch("xgboost_ray.main._PrepareActorTask", _FakeTask)
     @patch("xgboost_ray.elastic._PrepareActorTask", _FakeTask)
-    @patch("xgboost_ray.main.RayXGBoostActor", MagicMock)
+    @patch("xgboost_ray.main._RemoteRayXGBoostActor", MagicMock)
     @patch("xgboost_ray.main.ELASTIC_RESTART_GRACE_PERIOD_S", 30)
     @patch("xgboost_ray.elastic.ELASTIC_RESTART_GRACE_PERIOD_S", 30)
     def testMaybeScheduleNewActors(self):

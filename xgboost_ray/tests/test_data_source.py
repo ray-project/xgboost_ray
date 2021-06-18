@@ -9,7 +9,7 @@ import ray
 from ray import ObjectRef
 
 from xgboost_ray.data_sources import Modin, Dask
-from xgboost_ray.main import RayXGBoostActor
+from xgboost_ray.main import _RemoteRayXGBoostActor
 
 from xgboost_ray.data_sources.modin import MODIN_INSTALLED
 from xgboost_ray.data_sources.dask import DASK_INSTALLED
@@ -280,7 +280,7 @@ class ModinDataSourceTest(_DistributedDataSourceTest):
 
         # Create ray actors
         actors = [
-            RayXGBoostActor.options(resources={
+            _RemoteRayXGBoostActor.options(resources={
                 f"node:{nip}": 0.1
             }).remote(rank=rank, num_actors=len(actor_nodes))
             for rank, nip in enumerate(actor_node_ips)
@@ -415,7 +415,7 @@ class DaskDataSourceTest(_DistributedDataSourceTest):
 
         # Create ray actors
         actors = [
-            RayXGBoostActor.options(resources={
+            _RemoteRayXGBoostActor.options(resources={
                 f"node:{nip}": 0.1
             }).remote(rank=rank, num_actors=len(actor_nodes))
             for rank, nip in enumerate(actor_node_ips)

@@ -351,7 +351,7 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
     return ray_params
 
 
-class _RayXGBoostActor:
+class RayXGBoostActor:
     """Remote Ray XGBoost actor class.
 
     This remote actor handles local training and prediction of one data
@@ -605,7 +605,7 @@ class _RayXGBoostActor:
 
 
 @ray.remote
-class RayXGBoostActor(_RayXGBoostActor):
+class _RemoteRayXGBoostActor(RayXGBoostActor):
     pass
 
 
@@ -656,7 +656,7 @@ def _create_actor(
         checkpoint_frequency: int = 5,
         distributed_callbacks: Optional[Sequence[DistributedCallback]] = None
 ) -> ActorHandle:
-    return RayXGBoostActor.options(
+    return _RemoteRayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
         resources=resources_per_actor,
