@@ -1,5 +1,6 @@
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union, Sequence
 from dataclasses import dataclass, field
+from distutils.version import LooseVersion
 
 import multiprocessing
 import os
@@ -32,7 +33,7 @@ try:
     from xgboost_ray.util import Event, Queue, MultiActorTask, \
         force_on_current_node
 
-    if ray.__version__ > "1.4.0":
+    if LooseVersion(ray.__version__) > LooseVersion("1.4.0"):
         # https://github.com/ray-project/ray/pull/16437
         DEFAULT_PG = "default"
     else:
