@@ -887,8 +887,7 @@ def _get_sharding_indices(sharding: RayShardingMode, rank: int,
     if sharding == RayShardingMode.BATCH:
         start_index = int(rank * math.ceil(n / num_actors))
         end_index = int((rank + 1) * math.ceil(n / num_actors))
-        if end_index > n:
-            end_index -= 1
+        end_index = min(end_index, n)
         indices = list(range(start_index, end_index))
     elif sharding == RayShardingMode.INTERLEAVED:
         indices = list(range(rank, n, num_actors))
