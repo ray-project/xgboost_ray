@@ -282,7 +282,9 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 "np.ndarray, and CSV/Parquet file paths. If you specify a "
                 "file, path, consider passing the `filetype` argument to "
                 "specify the type of the source. Use the `RayFileType` "
-                "enum for that.".format(type(self.data), self.filetype))
+                "enum for that. If using Modin, Dask, or Petastorm, "
+                "make sure the library is installed.".format(
+                    type(self.data), self.filetype))
 
         if self.label is not None and not isinstance(self.label, str) and \
                 not type(self.data) != type(self.label):  # noqa: E721:
@@ -419,7 +421,9 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 f"with FileType: {self.filetype} for a distributed dataset."
                 "\nFIX THIS by passing a supported data type. Supported "
                 "data types for distributed datasets are a list of "
-                "CSV or Parquet sources as well as Ray MLDatasets.")
+                "CSV or Parquet sources as well as Ray MLDatasets. If using "
+                "Modin, Dask, or Petastorm, make sure the library is "
+                "installed.")
 
         self.data_source = data_source
         self._cached_n = data_source.get_n(self.data)
