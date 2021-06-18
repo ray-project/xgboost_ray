@@ -9,7 +9,7 @@ import xgboost as xgb
 import ray
 from ray.exceptions import RayActorError, RayTaskError
 
-from xgboost_ray import RayParams, train, RayDMatrix, predict
+from xgboost_ray import RayParams, train, RayDMatrix, predict, RayShardingMode
 from xgboost_ray.main import RayXGBoostTrainingError
 from xgboost_ray.callback import DistributedCallback
 from xgboost_ray.tests.utils import get_num_trees
@@ -134,19 +134,57 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         pred_test = bst.predict(test_X)
         self.assertSequenceEqual(test_y_second, list(pred_test))
 
-    def testJointTraining(self):
+    def _testJointTraining(self,
+                           sharding=RayShardingMode.INTERLEAVED,
+                           softprob=False):
         """Train with Ray. The data will be split, but the trees
         should be combined together and find the true model."""
-        ray.init(num_cpus=2, num_gpus=0)
+        params = self.params.copy()
+        if softprob:
+            params["objective"] = "multi:softprob"
 
         bst = train(
-            self.params,
-            RayDMatrix(self.x, self.y),
+            params,
+            RayDMatrix(self.x, self.y, sharding=sharding),
             ray_params=RayParams(num_actors=2))
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
+        if softprob:
+            pred_y = np.argmax(pred_y, axis=1)
+        pred_y = pred_y.astype(int)
         self.assertSequenceEqual(list(self.y), list(pred_y))
+
+        x_mat = RayDMatrix(self.x, sharding=sharding)
+        pred_y = predict(bst, x_mat, ray_params=RayParams(num_actors=2))
+        if softprob:
+            pred_y = np.argmax(pred_y, axis=1)
+        pred_y = pred_y.astype(int)
+        self.assertSequenceEqual(list(self.y), list(pred_y))
+
+        # try on an odd number of rows
+        bst = train(
+            params,
+            RayDMatrix(self.x[:-1], self.y[:-1], sharding=sharding),
+            ray_params=RayParams(num_actors=2))
+
+        x_mat = RayDMatrix(self.x[:-1], sharding=sharding)
+        pred_y = predict(bst, x_mat, ray_params=RayParams(num_actors=2))
+        if softprob:
+            pred_y = np.argmax(pred_y, axis=1)
+        pred_y = pred_y.astype(int)
+        self.assertSequenceEqual(list(self.y[:-1]), list(pred_y))
+
+    def testJointTrainingInterleaved(self):
+        ray.init(num_cpus=2, num_gpus=0)
+        self._testJointTraining(sharding=RayShardingMode.INTERLEAVED)
+        self._testJointTraining(
+            sharding=RayShardingMode.INTERLEAVED, softprob=True)
+
+    def testJointTrainingBatch(self):
+        ray.init(num_cpus=2, num_gpus=0)
+        self._testJointTraining(sharding=RayShardingMode.BATCH)
+        self._testJointTraining(sharding=RayShardingMode.BATCH, softprob=True)
 
     def testTrainPredict(self,
                          init=True,
