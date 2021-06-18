@@ -32,6 +32,12 @@ try:
     from xgboost_ray.util import Event, Queue, MultiActorTask, \
         force_on_current_node
 
+    if ray.__version__ > "1.4.0":
+        # https://github.com/ray-project/ray/pull/16437
+        DEFAULT_PG = "default"
+    else:
+        DEFAULT_PG = None
+
     RAY_INSTALLED = True
 except ImportError:
     ray = get_node_ip_address = Queue = Event = ActorHandle = logger = None
@@ -647,16 +653,19 @@ def _create_actor(
         num_cpus_per_actor: int,
         num_gpus_per_actor: int,
         resources_per_actor: Optional[Dict] = None,
-        placement_group: Optional[PlacementGroup] = "default",
+        placement_group: Optional[PlacementGroup] = None,
         queue: Optional[Queue] = None,
         checkpoint_frequency: int = 5,
         distributed_callbacks: Optional[Sequence[DistributedCallback]] = None
 ) -> ActorHandle:
+    # Send DEFAULT_PG here, which changed in Ray > 1.4.0
+    # If we send `None`, this will ignore the parent placement group and
+    # lead to errors e.g. when used within Ray Tune
     return RayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
         resources=resources_per_actor,
-        placement_group=placement_group).remote(
+        placement_group=placement_group or DEFAULT_PG).remote(
             rank=rank,
             num_actors=num_actors,
             queue=queue,
@@ -1270,7 +1279,7 @@ def train(
                                      ray_params.resources_per_actor,
                                      ray_params.num_actors, placement_strategy)
     else:
-        pg = "default"
+        pg = None
 
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
 
