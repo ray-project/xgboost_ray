@@ -67,7 +67,7 @@ class Petastorm(DataSource):
         with petastorm.make_batch_reader(data) as reader:
             shards = [
                 pd.DataFrame(batch._asdict()) for i, batch in enumerate(reader)
-                if i in indices
+                if not indices or i in indices
             ]
 
         local_df = pd.concat(shards, copy=False)
