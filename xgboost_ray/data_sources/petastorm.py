@@ -65,7 +65,10 @@ class Petastorm(DataSource):
                   **kwargs) -> pd.DataFrame:
         _assert_petastorm_installed()
         with petastorm.make_batch_reader(data) as reader:
-            shards = [pd.DataFrame(batch._asdict()) for batch in reader]
+            shards = [
+                pd.DataFrame(batch._asdict()) for i, batch in enumerate(reader)
+                if not indices or i in indices
+            ]
 
         local_df = pd.concat(shards, copy=False)
 

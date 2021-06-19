@@ -885,8 +885,9 @@ def _get_sharding_indices(sharding: RayShardingMode, rank: int,
                           num_actors: int, n: int):
     """Return indices that belong to worker with rank `rank`"""
     if sharding == RayShardingMode.BATCH:
-        start_index = int(math.floor(rank / num_actors) * n)
-        end_index = int(math.floor(rank + 1 / num_actors) * n)
+        start_index = int(rank * math.ceil(n / num_actors))
+        end_index = int((rank + 1) * math.ceil(n / num_actors))
+        end_index = min(end_index, n)
         indices = list(range(start_index, end_index))
     elif sharding == RayShardingMode.INTERLEAVED:
         indices = list(range(rank, n, num_actors))
@@ -913,7 +914,7 @@ def combine_data(sharding: RayShardingMode, data: Iterable) -> np.ndarray:
     if data[0].ndim == 1:
         # most common case
         if sharding == RayShardingMode.BATCH:
-            res = np.ravel(data)
+            res = np.concatenate(data)
         elif sharding == RayShardingMode.INTERLEAVED:
             # Sometimes the lengths are off by 1 for uneven divisions
             min_len = min(len(d) for d in data)
