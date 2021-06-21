@@ -26,6 +26,7 @@ if ! python -m pytest -v --durations=0 -x "test_xgboost_api.py" ; then END_STATU
 if ! python -m pytest -v --durations=0 -x "test_fault_tolerance.py" ; then END_STATUS=1; fi
 if ! python -m pytest -v --durations=0 -x "test_end_to_end.py" ; then END_STATUS=1; fi
 if ! python -m pytest -v --durations=0 -x "test_sklearn.py" ; then END_STATUS=1; fi
+if ! python -m pytest -v --durations=0 -x "test_sklearn_matrix.py" ; then END_STATUS=1; fi
 
 if [ "$TUNE" = "1" ]; then
   if ! python -m pytest -v --durations=0 -x "test_tune.py" ; then END_STATUS=1; fi
