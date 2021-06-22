@@ -567,7 +567,11 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
             base_margin_eval_set)
 
         if train_dmatrix is not None:
-            if getattr(self, "use_label_encoder", True):
+            if not hasattr(self, "use_label_encoder"):
+                warnings.warn("If X is a RayDMatrix, no label encoding"
+                              " will be performed. Ensure the labels are"
+                              " encoded.")
+            elif self.use_label_encoder:
                 raise ValueError(
                     "X cannot be a RayDMatrix if `use_label_encoder` "
                     "is set to True")
