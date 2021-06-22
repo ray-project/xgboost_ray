@@ -232,6 +232,47 @@ def _xgboost_version_warn(f):
     return inner_f
 
 
+def _check_if_params_are_ray_dmatrix(X, sample_weight, base_margin, eval_set,
+                                     sample_weight_eval_set,
+                                     base_margin_eval_set):
+    train_dmatrix = None
+    evals = ()
+    eval_set = eval_set or ()
+    if isinstance(X, RayDMatrix):
+        params_to_warn_about = ["y"]
+        if sample_weight is not None:
+            params_to_warn_about.append("sample_weight")
+        if base_margin is not None:
+            params_to_warn_about.append("base_margin")
+        warnings.warn(f"X is a RayDMatrix, {', '.join(params_to_warn_about)}"
+                      " will be ignored!")
+        train_dmatrix = X
+        if eval_set:
+            if any(not isinstance(eval_data, RayDMatrix)
+                   or not isinstance(eval_name, str)
+                   for eval_data, eval_name in eval_set):
+                raise ValueError("If X is a RayDMatrix, all elements of "
+                                 "`eval_set` must be (RayDMatrix, str) "
+                                 "tuples.")
+        params_to_warn_about = []
+        if sample_weight_eval_set is not None:
+            params_to_warn_about.append("sample_weight_eval_set")
+        if base_margin_eval_set is not None:
+            params_to_warn_about.append("base_margin_eval_set")
+        if params_to_warn_about:
+            warnings.warn(
+                "`eval_set` is composed of RayDMatrix tuples, "
+                f"{', '.join(params_to_warn_about)} will be ignored!")
+        evals = eval_set or ()
+    elif any(
+            isinstance(eval_x, RayDMatrix) or isinstance(eval_y, RayDMatrix)
+            for eval_x, eval_y in eval_set):
+        raise ValueError("If X is not a RayDMatrix, all `eval_set` "
+                         "elements must be (array_like, array_like)"
+                         " tuples.")
+    return train_dmatrix, evals
+
+
 class RayXGBMixin:
     """Mixin class to provide xgboost-ray functionality"""
 
@@ -331,48 +372,6 @@ class RayXGBMixin:
                     evals_result_key]
             self.evals_result_ = evals_result
 
-    def _check_if_params_are_ray_dmatrix(self, X, sample_weight, base_margin,
-                                         eval_set, sample_weight_eval_set,
-                                         base_margin_eval_set):
-        train_dmatrix = None
-        evals = ()
-        eval_set = eval_set or ()
-        if isinstance(X, RayDMatrix):
-            params_to_warn_about = ["y"]
-            if sample_weight is not None:
-                params_to_warn_about.append("sample_weight")
-            if base_margin is not None:
-                params_to_warn_about.append("base_margin")
-            warnings.warn(
-                f"X is a RayDMatrix, {', '.join(params_to_warn_about)}"
-                " will be ignored!")
-            train_dmatrix = X
-            if eval_set:
-                if any(not isinstance(eval_data, RayDMatrix)
-                       or not isinstance(eval_name, str)
-                       for eval_data, eval_name in eval_set):
-                    raise ValueError("If X is a RayDMatrix, all elements of "
-                                     "`eval_set` must be (RayDMatrix, str) "
-                                     "tuples.")
-            params_to_warn_about = []
-            if sample_weight_eval_set is not None:
-                params_to_warn_about.append("sample_weight_eval_set")
-            if base_margin_eval_set is not None:
-                params_to_warn_about.append("base_margin_eval_set")
-            if params_to_warn_about:
-                warnings.warn(
-                    "`eval_set` is composed of RayDMatrix tuples, "
-                    f"{', '.join(params_to_warn_about)} will be ignored!")
-            evals = eval_set or ()
-        elif any(
-                isinstance(eval_x, RayDMatrix)
-                or isinstance(eval_y, RayDMatrix)
-                for eval_x, eval_y in eval_set):
-            raise ValueError("If X is not a RayDMatrix, all `eval_set` "
-                             "elements must be (array_like, array_like)"
-                             " tuples.")
-        return train_dmatrix, evals
-
 
 class RayXGBRegressor(XGBRegressor, RayXGBMixin):
     __init__ = _xgboost_version_warn(XGBRegressor.__init__)
@@ -397,7 +396,7 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
             _remote: Optional[bool] = None):
         evals_result = {}
 
-        train_dmatrix, evals = self._check_if_params_are_ray_dmatrix(
+        train_dmatrix, evals = _check_if_params_are_ray_dmatrix(
             X, sample_weight, base_margin, eval_set, sample_weight_eval_set,
             base_margin_eval_set)
 
@@ -562,7 +561,7 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
 
         params = self.get_xgb_params()
 
-        train_dmatrix, evals = self._check_if_params_are_ray_dmatrix(
+        train_dmatrix, evals = _check_if_params_are_ray_dmatrix(
             X, sample_weight, base_margin, eval_set, sample_weight_eval_set,
             base_margin_eval_set)
 
@@ -897,7 +896,7 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
                 raise ValueError("eval_group or eval_qid is required if"
                                  " eval_set is not None")
 
-        train_dmatrix, evals = self._check_if_params_are_ray_dmatrix(
+        train_dmatrix, evals = _check_if_params_are_ray_dmatrix(
             X, sample_weight, base_margin, eval_set, sample_weight_eval_set,
             base_margin_eval_set)
 
