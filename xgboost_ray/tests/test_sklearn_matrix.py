@@ -2,11 +2,14 @@ import numpy as np
 import unittest
 
 import ray
+import xgboost as xgb
 
 from sklearn.model_selection import train_test_split
 
 from xgboost_ray.sklearn import (RayXGBClassifier, RayXGBRegressor)
 from xgboost_ray.main import RayDMatrix
+
+from xgboost_ray.main import XGBOOST_VERSION_TUPLE
 
 
 class XGBoostRaySklearnMatrixTest(unittest.TestCase):
@@ -23,6 +26,8 @@ class XGBoostRaySklearnMatrixTest(unittest.TestCase):
         if not ray.is_initialized():
             ray.init(num_cpus=4)
 
+    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 0, 0),
+                     f"not supported in xgb version {xgb.__version__}")
     def testClassifier(self, n_class=2):
         self._init_ray()
 
@@ -70,8 +75,55 @@ class XGBoostRaySklearnMatrixTest(unittest.TestCase):
         clf.predict(test_matrix)
         clf.predict_proba(test_matrix)
 
+    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 0, 0),
+                     f"not supported in xgb version {xgb.__version__}")
     def testClassifierMulticlass(self):
         self.testClassifier(n_class=3)
+
+    @unittest.skipIf(XGBOOST_VERSION_TUPLE >= (1, 0, 0),
+                     f"not supported in xgb version {xgb.__version__}")
+    def testClassifierLegacy(self, n_class=2):
+        self._init_ray()
+
+        from sklearn.datasets import load_digits
+
+        digits = load_digits(n_class=n_class)
+        y = digits["target"]
+        X = digits["data"]
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.5)
+
+        train_matrix = RayDMatrix(X_train, y_train)
+        test_matrix = RayDMatrix(X_test, y_test)
+
+        with self.assertRaisesRegex(ValueError, "num_class"):
+            RayXGBClassifier(**self.params).fit(train_matrix, None)
+
+        with self.assertRaisesRegex(ValueError,
+                                    r"must be \(RayDMatrix, str\)"):
+            RayXGBClassifier(**self.params).fit(
+                train_matrix, None, eval_set=[(X_test, y_test)])
+
+        with self.assertRaisesRegex(ValueError,
+                                    r"must be \(array_like, array_like\)"):
+            RayXGBClassifier(**self.params).fit(
+                X_train, y_train, eval_set=[(test_matrix, "eval")])
+
+        RayXGBClassifier(
+            num_class=n_class, **self.params).fit(train_matrix, None)
+
+        clf = RayXGBClassifier(
+            num_class=n_class, **self.params).fit(
+                train_matrix, None, eval_set=[(test_matrix, "eval")])
+
+        clf.predict(test_matrix)
+        clf.predict_proba(test_matrix)
+
+    @unittest.skipIf(XGBOOST_VERSION_TUPLE >= (1, 0, 0),
+                     f"not supported in xgb version {xgb.__version__}")
+    def testClassifierMulticlassLegacy(self):
+        self.testClassifierLegacy(n_class=3)
 
     def testRegressor(self):
         self._init_ray()
