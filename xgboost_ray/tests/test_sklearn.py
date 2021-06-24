@@ -43,6 +43,7 @@ from xgboost_ray.sklearn import (RayXGBClassifier, RayXGBRegressor,
                                  RayXGBRanker)
 
 from xgboost_ray.main import XGBOOST_VERSION_TUPLE
+from xgboost_ray.matrix import RayShardingMode
 
 
 def softmax(x):
@@ -97,7 +98,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         if not ray.is_initialized():
             ray.init(num_cpus=4)
 
-    def run_binary_classification(self, cls):
+    def run_binary_classification(self, cls, ray_dmatrix_params=None):
         self._init_ray()
 
         from sklearn.datasets import load_digits
@@ -114,8 +115,10 @@ class XGBoostRaySklearnTest(unittest.TestCase):
                 X[train_index],
                 y[train_index],
                 eval_metric=["auc", "logloss"],
+                ray_dmatrix_params=ray_dmatrix_params,
             )
-            preds = xgb_model.predict(X[test_index])
+            preds = xgb_model.predict(
+                X[test_index], ray_dmatrix_params=ray_dmatrix_params)
             labels = y[test_index]
             err = sum(1 for i in range(len(preds))
                       if int(preds[i] > 0.5) != labels[i]) / float(len(preds))
@@ -123,6 +126,11 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
     def test_binary_classification(self):
         self.run_binary_classification(RayXGBClassifier)
+
+    def test_binary_classification_dmatrix_params(self):
+        self.run_binary_classification(
+            RayXGBClassifier,
+            ray_dmatrix_params={"sharding": RayShardingMode.BATCH})
 
     # ray: added for legacy CI test
     @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 0, 0),
