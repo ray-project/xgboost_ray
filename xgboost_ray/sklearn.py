@@ -184,6 +184,9 @@ _RAY_PARAMS_DOC = """ray_params (Union[None, RayParams, Dict]): Parameters to co
             with own ``num_actors`` parameter.
         _remote (bool): Whether to run the driver process in a remote
             function. This is enabled by default in Ray client mode.
+        ray_dmatrix_params (Optional[Dict]): Dict of parameters
+            (such as sharding mode) passed to the internal RayDMatrix
+            initialization.
 
 """
 
@@ -300,6 +303,7 @@ class RayXGBMixin:
             iteration_range=None,
             ray_params: Union[None, RayParams, Dict] = None,
             _remote: Optional[bool] = None,
+            ray_dmatrix_params: Optional[Dict] = None,
     ):
         """Distributed predict via Ray"""
         compat_predict_kwargs = {}
@@ -314,14 +318,20 @@ class RayXGBMixin:
             compat_predict_kwargs["ntree_limit"] = ntree_limit
 
         ray_params = self._ray_set_ray_params_n_jobs(ray_params, self.n_jobs)
+        ray_dmatrix_params = ray_dmatrix_params or {}
 
         if not isinstance(X, RayDMatrix):
-            test = RayDMatrix(X, base_margin=base_margin, missing=self.missing)
+            test = RayDMatrix(
+                X,
+                base_margin=base_margin,
+                missing=self.missing,
+                **ray_dmatrix_params)
         else:
             test = X
             if base_margin is not None:
                 warnings.warn(
                     "X is a RayDMatrix, base_margin will be ignored!")
+
         return predict(
             self.get_booster(),
             data=test,
@@ -377,7 +387,8 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
     __init__ = _xgboost_version_warn(XGBRegressor.__init__)
 
     @_deprecate_positional_args
-    def fit(self,
+    def fit(
+            self,
             X,
             y,
             *,
@@ -393,8 +404,11 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
             feature_weights=None,
             callbacks=None,
             ray_params: Union[None, RayParams, Dict] = None,
-            _remote: Optional[bool] = None):
+            _remote: Optional[bool] = None,
+            ray_dmatrix_params: Optional[Dict] = None,
+    ):
         evals_result = {}
+        ray_dmatrix_params = ray_dmatrix_params or {}
 
         train_dmatrix, evals = _check_if_params_are_ray_dmatrix(
             X, sample_weight, base_margin, eval_set, sample_weight_eval_set,
@@ -416,7 +430,10 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
                 eval_group=None,
                 eval_qid=None,
                 # changed in xgboost-ray:
-                create_dmatrix=lambda **kwargs: RayDMatrix(**kwargs),
+                create_dmatrix=lambda **kwargs: RayDMatrix(**{
+                    **kwargs,
+                    **ray_dmatrix_params
+                }),
                 **self._ray_get_wrap_evaluation_matrices_compat_kwargs())
 
         params = self.get_xgb_params()
@@ -466,15 +483,18 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
     def _can_use_inplace_predict(self) -> bool:
         return False
 
-    def predict(self,
-                X,
-                output_margin=False,
-                ntree_limit=None,
-                validate_features=True,
-                base_margin=None,
-                iteration_range=None,
-                ray_params: Union[None, RayParams, Dict] = None,
-                _remote: Optional[bool] = None):
+    def predict(
+            self,
+            X,
+            output_margin=False,
+            ntree_limit=None,
+            validate_features=True,
+            base_margin=None,
+            iteration_range=None,
+            ray_params: Union[None, RayParams, Dict] = None,
+            _remote: Optional[bool] = None,
+            ray_dmatrix_params: Optional[Dict] = None,
+    ):
         return self._ray_predict(
             X,
             output_margin=output_margin,
@@ -483,7 +503,8 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
             base_margin=base_margin,
             iteration_range=iteration_range,
             ray_params=ray_params,
-            _remote=_remote)
+            _remote=_remote,
+            ray_dmatrix_params=ray_dmatrix_params)
 
     predict.__doc__ = _treat_X_doc(
         XGBRegressor.predict.__doc__) + _RAY_PARAMS_DOC
@@ -539,7 +560,8 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
     __init__ = _xgboost_version_warn(XGBClassifier.__init__)
 
     @_deprecate_positional_args
-    def fit(self,
+    def fit(
+            self,
             X,
             y,
             *,
@@ -555,9 +577,12 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
             feature_weights=None,
             callbacks=None,
             ray_params: Union[None, RayParams, Dict] = None,
-            _remote: Optional[bool] = None):
+            _remote: Optional[bool] = None,
+            ray_dmatrix_params: Optional[Dict] = None,
+    ):
 
         evals_result = {}
+        ray_dmatrix_params = ray_dmatrix_params or {}
 
         params = self.get_xgb_params()
 
@@ -626,7 +651,10 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
                 eval_qid=None,
                 label_transform=label_transform,
                 # changed in xgboost-ray:
-                create_dmatrix=lambda **kwargs: RayDMatrix(**kwargs),
+                create_dmatrix=lambda **kwargs: RayDMatrix(**{
+                    **kwargs,
+                    **ray_dmatrix_params
+                }),
                 **self._ray_get_wrap_evaluation_matrices_compat_kwargs())
 
         # remove those as they will be set in RayXGBoostActor
@@ -729,15 +757,18 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
     def _can_use_inplace_predict(self) -> bool:
         return False
 
-    def predict(self,
-                X,
-                output_margin=False,
-                ntree_limit=None,
-                validate_features=True,
-                base_margin=None,
-                iteration_range: Optional[Tuple[int, int]] = None,
-                ray_params: Union[None, RayParams, Dict] = None,
-                _remote: Optional[bool] = None):
+    def predict(
+            self,
+            X,
+            output_margin=False,
+            ntree_limit=None,
+            validate_features=True,
+            base_margin=None,
+            iteration_range: Optional[Tuple[int, int]] = None,
+            ray_params: Union[None, RayParams, Dict] = None,
+            _remote: Optional[bool] = None,
+            ray_dmatrix_params: Optional[Dict] = None,
+    ):
         class_probs = self._ray_predict(
             X=X,
             output_margin=output_margin,
@@ -747,7 +778,7 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
             iteration_range=iteration_range,
             ray_params=ray_params,
             _remote=_remote,
-        )
+            ray_dmatrix_params=ray_dmatrix_params)
         if output_margin:
             # If output_margin is active, simply return the scores
             return class_probs
@@ -766,14 +797,17 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
 
     predict.__doc__ = _treat_X_doc(XGBModel.predict.__doc__) + _RAY_PARAMS_DOC
 
-    def predict_proba(self,
-                      X,
-                      ntree_limit=None,
-                      validate_features=False,
-                      base_margin=None,
-                      iteration_range: Optional[Tuple[int, int]] = None,
-                      ray_params: Union[None, RayParams, Dict] = None,
-                      _remote: Optional[bool] = None) -> np.ndarray:
+    def predict_proba(
+            self,
+            X,
+            ntree_limit=None,
+            validate_features=False,
+            base_margin=None,
+            iteration_range: Optional[Tuple[int, int]] = None,
+            ray_params: Union[None, RayParams, Dict] = None,
+            _remote: Optional[bool] = None,
+            ray_dmatrix_params: Optional[Dict] = None,
+    ) -> np.ndarray:
 
         class_probs = self._ray_predict(
             X=X,
@@ -784,7 +818,7 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
             iteration_range=iteration_range,
             ray_params=ray_params,
             _remote=_remote,
-        )
+            ray_dmatrix_params=ray_dmatrix_params)
         # If model is loaded from a raw booster there's no `n_classes_`
         return _cls_predict_proba(
             getattr(self, "n_classes_", None), class_probs, np.vstack)
@@ -865,7 +899,8 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
     __init__ = _xgboost_version_warn(XGBRanker.__init__)
 
     @_deprecate_positional_args
-    def fit(self,
+    def fit(
+            self,
             X,
             y,
             *,
@@ -885,7 +920,9 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
             feature_weights=None,
             callbacks=None,
             ray_params: Union[None, RayParams, Dict] = None,
-            _remote: Optional[bool] = None):
+            _remote: Optional[bool] = None,
+            ray_dmatrix_params: Optional[Dict] = None,
+    ):
 
         # check if group information is provided
         if group is None and qid is None:
@@ -916,7 +953,10 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
                 eval_group=eval_group,
                 eval_qid=eval_qid,
                 # changed in xgboost-ray:
-                create_dmatrix=lambda **kwargs: RayDMatrix(**kwargs),
+                create_dmatrix=lambda **kwargs: RayDMatrix(**{
+                    **kwargs,
+                    **ray_dmatrix_params
+                }),
                 **self._ray_get_wrap_evaluation_matrices_compat_kwargs())
 
         evals_result = {}
@@ -965,15 +1005,18 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
     def _can_use_inplace_predict(self) -> bool:
         return False
 
-    def predict(self,
-                X,
-                output_margin=False,
-                ntree_limit=None,
-                validate_features=True,
-                base_margin=None,
-                iteration_range=None,
-                ray_params: Union[None, RayParams, Dict] = None,
-                _remote: Optional[bool] = None):
+    def predict(
+            self,
+            X,
+            output_margin=False,
+            ntree_limit=None,
+            validate_features=True,
+            base_margin=None,
+            iteration_range=None,
+            ray_params: Union[None, RayParams, Dict] = None,
+            _remote: Optional[bool] = None,
+            ray_dmatrix_params: Optional[Dict] = None,
+    ):
         return self._ray_predict(
             X,
             output_margin=output_margin,
@@ -982,7 +1025,8 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
             base_margin=base_margin,
             iteration_range=iteration_range,
             ray_params=ray_params,
-            _remote=_remote)
+            _remote=_remote,
+            ray_dmatrix_params=ray_dmatrix_params)
 
     predict.__doc__ = _treat_X_doc(XGBRanker.predict.__doc__) + _RAY_PARAMS_DOC
 
