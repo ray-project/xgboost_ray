@@ -122,7 +122,9 @@ clf = RayXGBClassifier(
 )
 
 # scikit-learn API will automatically conver the data
-# to RayDMatrix format as needed
+# to RayDMatrix format as needed.
+# You can also pass X as a RayDMatrix, in which case
+# y will be ignored.
 
 clf.fit(X_train, y_train)
 

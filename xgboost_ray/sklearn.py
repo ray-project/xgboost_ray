@@ -213,6 +213,16 @@ def _treat_estimator_doc(doc: str) -> str:
     return doc
 
 
+def _treat_X_doc(doc: str) -> str:
+    doc = doc.replace("Data to predict with.",
+                      "Data to predict with. Can also be a ``RayDMatrix``.")
+    doc = doc.replace("Feature matrix.",
+                      "Feature matrix. Can also be a ``RayDMatrix``.")
+    doc = doc.replace("Feature matrix",
+                      "Feature matrix. Can also be a ``RayDMatrix``.")
+    return doc
+
+
 def _xgboost_version_warn(f):
     """Decorator to warn when xgboost version is < 1.4.0"""
 
@@ -223,6 +233,47 @@ def _xgboost_version_warn(f):
         return f(*args, **kwargs)
 
     return inner_f
+
+
+def _check_if_params_are_ray_dmatrix(X, sample_weight, base_margin, eval_set,
+                                     sample_weight_eval_set,
+                                     base_margin_eval_set):
+    train_dmatrix = None
+    evals = ()
+    eval_set = eval_set or ()
+    if isinstance(X, RayDMatrix):
+        params_to_warn_about = ["y"]
+        if sample_weight is not None:
+            params_to_warn_about.append("sample_weight")
+        if base_margin is not None:
+            params_to_warn_about.append("base_margin")
+        warnings.warn(f"X is a RayDMatrix, {', '.join(params_to_warn_about)}"
+                      " will be ignored!")
+        train_dmatrix = X
+        if eval_set:
+            if any(not isinstance(eval_data, RayDMatrix)
+                   or not isinstance(eval_name, str)
+                   for eval_data, eval_name in eval_set):
+                raise ValueError("If X is a RayDMatrix, all elements of "
+                                 "`eval_set` must be (RayDMatrix, str) "
+                                 "tuples.")
+        params_to_warn_about = []
+        if sample_weight_eval_set is not None:
+            params_to_warn_about.append("sample_weight_eval_set")
+        if base_margin_eval_set is not None:
+            params_to_warn_about.append("base_margin_eval_set")
+        if params_to_warn_about:
+            warnings.warn(
+                "`eval_set` is composed of RayDMatrix tuples, "
+                f"{', '.join(params_to_warn_about)} will be ignored!")
+        evals = eval_set or ()
+    elif any(
+            isinstance(eval_x, RayDMatrix) or isinstance(eval_y, RayDMatrix)
+            for eval_x, eval_y in eval_set):
+        raise ValueError("If X is not a RayDMatrix, all `eval_set` "
+                         "elements must be (array_like, array_like)"
+                         " tuples.")
+    return train_dmatrix, evals
 
 
 class RayXGBMixin:
@@ -269,11 +320,18 @@ class RayXGBMixin:
         ray_params = self._ray_set_ray_params_n_jobs(ray_params, self.n_jobs)
         ray_dmatrix_params = ray_dmatrix_params or {}
 
-        test = RayDMatrix(
-            X,
-            base_margin=base_margin,
-            missing=self.missing,
-            **ray_dmatrix_params)
+        if not isinstance(X, RayDMatrix):
+            test = RayDMatrix(
+                X,
+                base_margin=base_margin,
+                missing=self.missing,
+                **ray_dmatrix_params)
+        else:
+            test = X
+            if base_margin is not None:
+                warnings.warn(
+                    "X is a RayDMatrix, base_margin will be ignored!")
+
         return predict(
             self.get_booster(),
             data=test,
@@ -352,26 +410,31 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
         evals_result = {}
         ray_dmatrix_params = ray_dmatrix_params or {}
 
-        train_dmatrix, evals = _wrap_evaluation_matrices(
-            missing=self.missing,
-            X=X,
-            y=y,
-            group=None,
-            qid=None,
-            sample_weight=sample_weight,
-            base_margin=base_margin,
-            feature_weights=feature_weights,
-            eval_set=eval_set,
-            sample_weight_eval_set=sample_weight_eval_set,
-            base_margin_eval_set=base_margin_eval_set,
-            eval_group=None,
-            eval_qid=None,
-            # changed in xgboost-ray:
-            create_dmatrix=lambda **kwargs: RayDMatrix(**{
-                **kwargs,
-                **ray_dmatrix_params
-            }),
-            **self._ray_get_wrap_evaluation_matrices_compat_kwargs())
+        train_dmatrix, evals = _check_if_params_are_ray_dmatrix(
+            X, sample_weight, base_margin, eval_set, sample_weight_eval_set,
+            base_margin_eval_set)
+
+        if train_dmatrix is None:
+            train_dmatrix, evals = _wrap_evaluation_matrices(
+                missing=self.missing,
+                X=X,
+                y=y,
+                group=None,
+                qid=None,
+                sample_weight=sample_weight,
+                base_margin=base_margin,
+                feature_weights=feature_weights,
+                eval_set=eval_set,
+                sample_weight_eval_set=sample_weight_eval_set,
+                base_margin_eval_set=base_margin_eval_set,
+                eval_group=None,
+                eval_qid=None,
+                # changed in xgboost-ray:
+                create_dmatrix=lambda **kwargs: RayDMatrix(**{
+                    **kwargs,
+                    **ray_dmatrix_params
+                }),
+                **self._ray_get_wrap_evaluation_matrices_compat_kwargs())
 
         params = self.get_xgb_params()
 
@@ -415,7 +478,7 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
         self._set_evaluation_result(evals_result)
         return self
 
-    fit.__doc__ = XGBRegressor.fit.__doc__ + _RAY_PARAMS_DOC
+    fit.__doc__ = _treat_X_doc(XGBRegressor.fit.__doc__) + _RAY_PARAMS_DOC
 
     def _can_use_inplace_predict(self) -> bool:
         return False
@@ -443,7 +506,8 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
             _remote=_remote,
             ray_dmatrix_params=ray_dmatrix_params)
 
-    predict.__doc__ = XGBRegressor.predict.__doc__ + _RAY_PARAMS_DOC
+    predict.__doc__ = _treat_X_doc(
+        XGBRegressor.predict.__doc__) + _RAY_PARAMS_DOC
 
     def load_model(self, fname):
         if not hasattr(self, "_Booster"):
@@ -520,9 +584,39 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
         evals_result = {}
         ray_dmatrix_params = ray_dmatrix_params or {}
 
-        label_transform = self._ray_fit_preprocess(y)
-
         params = self.get_xgb_params()
+
+        train_dmatrix, evals = _check_if_params_are_ray_dmatrix(
+            X, sample_weight, base_margin, eval_set, sample_weight_eval_set,
+            base_margin_eval_set)
+
+        if train_dmatrix is not None:
+            if not hasattr(self, "use_label_encoder"):
+                warnings.warn("If X is a RayDMatrix, no label encoding"
+                              " will be performed. Ensure the labels are"
+                              " encoded.")
+            elif self.use_label_encoder:
+                raise ValueError(
+                    "X cannot be a RayDMatrix if `use_label_encoder` "
+                    "is set to True")
+            if "num_class" not in params:
+                raise ValueError(
+                    "`num_class` must be set during initalization if X"
+                    " is a RayDMatrix")
+            self.classes_ = list(range(0, params["num_class"]))
+            self.n_classes_ = params["num_class"]
+            if self.n_classes_ <= 2:
+                params.pop("num_class")
+            label_transform = lambda x: x  # noqa: E731
+        else:
+            if len(X.shape) != 2:
+                # Simply raise an error here since there might be many
+                # different ways of reshaping
+                raise ValueError(
+                    "Please reshape the input data X into 2-dimensional "
+                    "matrix.")
+
+            label_transform = self._ray_fit_preprocess(y)
 
         if callable(self.objective):
             obj = _objective_decorator(self.objective)
@@ -539,33 +633,29 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
 
         model, feval, params = self._configure_fit(xgb_model, eval_metric,
                                                    params)
-        if len(X.shape) != 2:
-            # Simply raise an error here since there might be many
-            # different ways of reshaping
-            raise ValueError(
-                "Please reshape the input data X into 2-dimensional matrix.")
 
-        train_dmatrix, evals = _wrap_evaluation_matrices(
-            missing=self.missing,
-            X=X,
-            y=y,
-            group=None,
-            qid=None,
-            sample_weight=sample_weight,
-            base_margin=base_margin,
-            feature_weights=feature_weights,
-            eval_set=eval_set,
-            sample_weight_eval_set=sample_weight_eval_set,
-            base_margin_eval_set=base_margin_eval_set,
-            eval_group=None,
-            eval_qid=None,
-            label_transform=label_transform,
-            # changed in xgboost-ray:
-            create_dmatrix=lambda **kwargs: RayDMatrix(**{
-                **kwargs,
-                **ray_dmatrix_params
-            }),
-            **self._ray_get_wrap_evaluation_matrices_compat_kwargs())
+        if train_dmatrix is None:
+            train_dmatrix, evals = _wrap_evaluation_matrices(
+                missing=self.missing,
+                X=X,
+                y=y,
+                group=None,
+                qid=None,
+                sample_weight=sample_weight,
+                base_margin=base_margin,
+                feature_weights=feature_weights,
+                eval_set=eval_set,
+                sample_weight_eval_set=sample_weight_eval_set,
+                base_margin_eval_set=base_margin_eval_set,
+                eval_group=None,
+                eval_qid=None,
+                label_transform=label_transform,
+                # changed in xgboost-ray:
+                create_dmatrix=lambda **kwargs: RayDMatrix(**{
+                    **kwargs,
+                    **ray_dmatrix_params
+                }),
+                **self._ray_get_wrap_evaluation_matrices_compat_kwargs())
 
         # remove those as they will be set in RayXGBoostActor
         params.pop("n_jobs", None)
@@ -601,7 +691,7 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
         self._set_evaluation_result(evals_result)
         return self
 
-    fit.__doc__ = XGBClassifier.fit.__doc__ + _RAY_PARAMS_DOC
+    fit.__doc__ = _treat_X_doc(XGBClassifier.fit.__doc__) + _RAY_PARAMS_DOC
 
     def _ray_fit_preprocess(self, y) -> Callable:
         """This has been separated out so that it can be easily overwritten
@@ -705,7 +795,7 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
             return self._le.inverse_transform(column_indexes)
         return column_indexes
 
-    predict.__doc__ = XGBModel.predict.__doc__ + _RAY_PARAMS_DOC
+    predict.__doc__ = _treat_X_doc(XGBModel.predict.__doc__) + _RAY_PARAMS_DOC
 
     def predict_proba(
             self,
@@ -739,7 +829,7 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
         return super().load_model(fname)
 
     predict_proba.__doc__ = (
-        XGBClassifier.predict_proba.__doc__ + _RAY_PARAMS_DOC)
+        _treat_X_doc(XGBClassifier.predict_proba.__doc__) + _RAY_PARAMS_DOC)
 
 
 RayXGBClassifier.__doc__ = _treat_estimator_doc(XGBClassifier.__doc__)
@@ -843,28 +933,31 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
                 raise ValueError("eval_group or eval_qid is required if"
                                  " eval_set is not None")
 
-        ray_dmatrix_params = ray_dmatrix_params or {}
+        train_dmatrix, evals = _check_if_params_are_ray_dmatrix(
+            X, sample_weight, base_margin, eval_set, sample_weight_eval_set,
+            base_margin_eval_set)
 
-        train_dmatrix, evals = _wrap_evaluation_matrices(
-            missing=self.missing,
-            X=X,
-            y=y,
-            group=group,
-            qid=qid,
-            sample_weight=sample_weight,
-            base_margin=base_margin,
-            feature_weights=feature_weights,
-            eval_set=eval_set,
-            sample_weight_eval_set=sample_weight_eval_set,
-            base_margin_eval_set=base_margin_eval_set,
-            eval_group=eval_group,
-            eval_qid=eval_qid,
-            # changed in xgboost-ray:
-            create_dmatrix=lambda **kwargs: RayDMatrix(**{
-                **kwargs,
-                **ray_dmatrix_params
-            }),
-            **self._ray_get_wrap_evaluation_matrices_compat_kwargs())
+        if train_dmatrix is None:
+            train_dmatrix, evals = _wrap_evaluation_matrices(
+                missing=self.missing,
+                X=X,
+                y=y,
+                group=group,
+                qid=qid,
+                sample_weight=sample_weight,
+                base_margin=base_margin,
+                feature_weights=feature_weights,
+                eval_set=eval_set,
+                sample_weight_eval_set=sample_weight_eval_set,
+                base_margin_eval_set=base_margin_eval_set,
+                eval_group=eval_group,
+                eval_qid=eval_qid,
+                # changed in xgboost-ray:
+                create_dmatrix=lambda **kwargs: RayDMatrix(**{
+                    **kwargs,
+                    **ray_dmatrix_params
+                }),
+                **self._ray_get_wrap_evaluation_matrices_compat_kwargs())
 
         evals_result = {}
         params = self.get_xgb_params()
@@ -907,7 +1000,7 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
         self._set_evaluation_result(evals_result)
         return self
 
-    fit.__doc__ = XGBRanker.fit.__doc__ + _RAY_PARAMS_DOC
+    fit.__doc__ = _treat_X_doc(XGBRanker.fit.__doc__) + _RAY_PARAMS_DOC
 
     def _can_use_inplace_predict(self) -> bool:
         return False
@@ -935,7 +1028,7 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
             _remote=_remote,
             ray_dmatrix_params=ray_dmatrix_params)
 
-    predict.__doc__ = XGBRanker.predict.__doc__ + _RAY_PARAMS_DOC
+    predict.__doc__ = _treat_X_doc(XGBRanker.predict.__doc__) + _RAY_PARAMS_DOC
 
     def load_model(self, fname):
         if not hasattr(self, "_Booster"):
