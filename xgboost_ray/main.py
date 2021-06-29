@@ -115,7 +115,7 @@ def _assert_ray_support():
 
 def _maybe_print_legacy_warning():
     if LEGACY_MATRIX or LEGACY_CALLBACK:
-        logger.warning(LEGACY_WARNING)
+        warnings.warn(LEGACY_WARNING)
 
 
 def _is_client_connected() -> bool:
@@ -1214,7 +1214,7 @@ def train(
             "`grow_colmaker` updater doesn't support distributed training.")
 
     if gpus_per_actor > 0 and not tree_method.startswith("gpu_"):
-        logger.warning(
+        warnings.warn(
             f"GPUs have been assigned to the actors, but the current XGBoost "
             f"tree method is set to `{tree_method}`. Thus, GPUs will "
             f"currently not be used. To enable GPUs usage, please set the "
