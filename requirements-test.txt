@@ -9,3 +9,6 @@ ray[tune]
 scikit-learn
 modin
 dask
+
+#workaround for now
+tensorboardX==2.2
