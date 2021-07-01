@@ -33,7 +33,7 @@ try:
     from xgboost_ray.util import Event, Queue, MultiActorTask, \
         force_on_current_node
 
-    if LooseVersion(ray.__version__) > LooseVersion("1.4.0"):
+    if LooseVersion(ray.__version__) >= LooseVersion("1.5.0"):
         # https://github.com/ray-project/ray/pull/16437
         DEFAULT_PG = "default"
     else:
@@ -664,7 +664,7 @@ def _create_actor(
         checkpoint_frequency: int = 5,
         distributed_callbacks: Optional[Sequence[DistributedCallback]] = None
 ) -> ActorHandle:
-    # Send DEFAULT_PG here, which changed in Ray > 1.4.0
+    # Send DEFAULT_PG here, which changed in Ray >= 1.5.0
     # If we send `None`, this will ignore the parent placement group and
     # lead to errors e.g. when used within Ray Tune
     return _RemoteRayXGBoostActor.options(
