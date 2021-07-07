@@ -887,9 +887,8 @@ def _get_sharding_indices(sharding: RayShardingMode, rank: int,
         # based on numpy.array_split
         # github.com/numpy/numpy/blob/v1.21.0/numpy/lib/shape_base.py
         n_per_actor, extras = divmod(n, num_actors)
-        section_sizes = ([0] + extras * [n_per_actor + 1] +
-                         (num_actors - extras) * [n_per_actor])
-        div_points = np.cumsum(section_sizes)
+        div_points = np.array([0] + extras * [n_per_actor + 1] +
+                              (num_actors - extras) * [n_per_actor]).cumsum()
         indices = list(range(div_points[rank], div_points[rank + 1]))
     elif sharding == RayShardingMode.INTERLEAVED:
         indices = list(range(rank, n, num_actors))
