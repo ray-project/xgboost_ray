@@ -354,7 +354,8 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
     def testBatchShardingAllActorsGetIndices(self):
         """Check if all actors get indices with batch mode"""
         for i in range(16):
-            self.assertTrue(_get_sharding_indices(RayShardingMode.BATCH, i, 16, 100))
+            self.assertTrue(
+                _get_sharding_indices(RayShardingMode.BATCH, i, 16, 100))
 
 
 if __name__ == "__main__":
