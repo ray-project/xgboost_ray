@@ -8,7 +8,8 @@ import pandas as pd
 import ray
 
 from xgboost_ray import RayDMatrix
-from xgboost_ray.matrix import concat_dataframes, RayShardingMode
+from xgboost_ray.matrix import (concat_dataframes, RayShardingMode,
+                                _get_sharding_indices)
 
 
 class XGBoostRayDMatrixTest(unittest.TestCase):
@@ -350,6 +351,12 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             RayDMatrix(data_df, num_actors=34, distributed=False)
+
+    def testBatchShardingAllActorsGetIndices(self):
+        """Check if all actors get indices with batch mode"""
+        for i in range(16):
+            self.assertTrue(
+                _get_sharding_indices(RayShardingMode.BATCH, i, 16, 100))
 
 
 if __name__ == "__main__":

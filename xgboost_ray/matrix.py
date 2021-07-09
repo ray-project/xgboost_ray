@@ -1,5 +1,4 @@
 import glob
-import math
 import uuid
 from enum import Enum
 from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence, \
@@ -885,10 +884,12 @@ def _get_sharding_indices(sharding: RayShardingMode, rank: int,
                           num_actors: int, n: int):
     """Return indices that belong to worker with rank `rank`"""
     if sharding == RayShardingMode.BATCH:
-        start_index = int(rank * math.ceil(n / num_actors))
-        end_index = int((rank + 1) * math.ceil(n / num_actors))
-        end_index = min(end_index, n)
-        indices = list(range(start_index, end_index))
+        # based on numpy.array_split
+        # github.com/numpy/numpy/blob/v1.21.0/numpy/lib/shape_base.py
+        n_per_actor, extras = divmod(n, num_actors)
+        div_points = np.array([0] + extras * [n_per_actor + 1] +
+                              (num_actors - extras) * [n_per_actor]).cumsum()
+        indices = list(range(div_points[rank], div_points[rank + 1]))
     elif sharding == RayShardingMode.INTERLEAVED:
         indices = list(range(rank, n, num_actors))
     else:
