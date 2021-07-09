@@ -8,7 +8,8 @@ import pandas as pd
 import ray
 
 from xgboost_ray import RayDMatrix
-from xgboost_ray.matrix import concat_dataframes, RayShardingMode, _get_sharding_indices
+from xgboost_ray.matrix import (concat_dataframes, RayShardingMode,
+                                _get_sharding_indices)
 
 
 class XGBoostRayDMatrixTest(unittest.TestCase):
