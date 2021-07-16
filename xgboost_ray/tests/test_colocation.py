@@ -176,6 +176,21 @@ class TestColocation(unittest.TestCase):
                 num_samples=1,
             )
 
+    def test_timeout(self):
+        """Checks that an error occurs when placement group setup times out."""
+        with self.ray_start_cluster() as cluster:
+            ray.init(address=cluster.address)
+
+            with pytest.raises(TimeoutError):
+                train(
+                    self.params,
+                    RayDMatrix(self.x, self.y),
+                    num_boost_round=2,
+                    ray_params=RayParams(
+                        max_actor_restarts=1,
+                        num_actors=2,
+                        resources_per_actor={"invalid": 1}))
+
 
 if __name__ == "__main__":
     import pytest  # noqa: F811
