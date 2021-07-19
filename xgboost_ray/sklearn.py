@@ -178,15 +178,17 @@ try:
 except ImportError:
     from sklearn.preprocessing import LabelEncoder as XGBoostLabelEncoder
 
-_RAY_PARAMS_DOC = """ray_params (Union[None, RayParams, Dict]): Parameters to configure
-            Ray-specific behavior. See :class:`RayParams` for a list of valid
+_RAY_PARAMS_DOC = """ray_params : None or RayParams or Dict
+            Parameters to configure Ray-specific behavior.
+            See :class:`RayParams` for a list of valid
             configuration parameters. Will override ``n_jobs`` attribute
             with own ``num_actors`` parameter.
-        _remote (bool): Whether to run the driver process in a remote
+        _remote : bool
+            Whether to run the driver process in a remote
             function. This is enabled by default in Ray client mode.
-        ray_dmatrix_params (Optional[Dict]): Dict of parameters
-            (such as sharding mode) passed to the internal RayDMatrix
-            initialization.
+        ray_dmatrix_params : dict
+            Dict of parameters (such as sharding mode) passed to the
+            internal RayDMatrix initialization.
 
 """
 
