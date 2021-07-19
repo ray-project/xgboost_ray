@@ -756,7 +756,7 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
     # Wait for placement group to get created.
     logger.debug("Waiting for placement group to start.")
     ready, _ = ray.wait([pg.ready()], timeout=PLACEMENT_GROUP_TIMEOUT_S)
-    if ready is not None:
+    if ready:
         logger.debug("Placement group has started.")
     else:
         raise TimeoutError("Placement group creation timed out. Make sure "
