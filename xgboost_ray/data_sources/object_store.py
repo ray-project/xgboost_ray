@@ -15,6 +15,8 @@ class ObjectStore(DataSource):
     @staticmethod
     def is_data_type(data: Any,
                      filetype: Optional[RayFileType] = None) -> bool:
+        if isinstance(data, Sequence):
+            return all(isinstance(d, ObjectRef) for d in data)
         return isinstance(data, ObjectRef)
 
     @staticmethod
