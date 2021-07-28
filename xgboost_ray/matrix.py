@@ -29,6 +29,14 @@ except ImportError:
     MLDataset = Unavailable
 
 try:
+    from ray.experimental.data import Dataset as RayDataset
+except (ImportError, ModuleNotFoundError):
+
+    class RayDataset:
+        pass
+
+
+try:
     from xgboost.core import DataIter
     LEGACY_MATRIX = False
 except ImportError:
@@ -381,7 +389,8 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
 
         # Todo (krfricke): It would be good to have a more general way to
         # check for compatibility here. Combine with test below?
-        if not isinstance(self.data, (Iterable, MLDataset)) or invalid_data:
+        if not isinstance(self.data,
+                          (Iterable, MLDataset, RayDataset)) or invalid_data:
             raise ValueError(
                 f"Distributed data loading only works with already "
                 f"distributed datasets. These should be specified through a "

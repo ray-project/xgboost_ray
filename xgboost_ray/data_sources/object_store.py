@@ -30,3 +30,11 @@ class ObjectStore(DataSource):
         local_df = ray.get(data)
 
         return Pandas.load_data(pd.concat(local_df, copy=False), ignore=ignore)
+
+    @staticmethod
+    def convert_to_series(data: Any) -> pd.Series:
+        if isinstance(data, ObjectRef):
+            data = ray.get(data)
+        else:
+            data = pd.concat(ray.get(data), copy=False)
+        return DataSource.convert_to_series(data)
