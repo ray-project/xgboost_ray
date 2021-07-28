@@ -51,7 +51,7 @@ def main(cpus_per_actor, num_actors):
         verbose_eval=False,
         num_boost_round=10)
 
-    model_path = "modin.xgb"
+    model_path = "ray_datasets.xgb"
     bst.save_model(model_path)
     print("Final training error: {:.4f}".format(
         evals_result["train"]["error"][-1]))

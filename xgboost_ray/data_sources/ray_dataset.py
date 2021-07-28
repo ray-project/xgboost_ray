@@ -31,8 +31,7 @@ def _assert_ray_data_available():
 
 
 class RayDataset(DataSource):
-    """Read from distributed Ray dataset.
-    """
+    """Read from distributed Ray dataset."""
     supports_central_loading = True
     supports_distributed_loading = True
 
@@ -46,7 +45,7 @@ class RayDataset(DataSource):
 
     @staticmethod
     def load_data(
-            data: Any,  # modin.pandas.DataFrame
+            data: Any,  # ray.experimental.data.Dataset
             ignore: Optional[Sequence[str]] = None,
             indices: Optional[Union[Sequence[int], Sequence[
                 ObjectRef]]] = None,
@@ -55,7 +54,7 @@ class RayDataset(DataSource):
 
         if indices is not None and len(indices) > 0 and isinstance(
                 indices[0], ObjectRef):
-            # We got a list of ObjectRefs belonging to Modin partitions
+            # We got a list of ObjectRefs belonging to Ray dataset partitions
             return ObjectStore.load_data(
                 data=indices, indices=None, ignore=ignore)
         obj_refs = data.to_pandas()
