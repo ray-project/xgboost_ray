@@ -46,6 +46,12 @@ def test_simple_modin(start_client_server_5_cpus):
     main(cpus_per_actor=1, num_actors=4)
 
 
+def test_simple_ray_dataset(start_client_server_5_cpus):
+    assert ray.util.client.ray.is_connected()
+    from xgboost_ray.examples.simple_ray_dataset import main
+    main(cpus_per_actor=1, num_actors=4)
+
+
 if __name__ == "__main__":
     import pytest  # noqa: F811
     import sys
