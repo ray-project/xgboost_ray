@@ -4,6 +4,7 @@ import pytest
 
 import ray
 from ray.util.client.ray_client_helpers import ray_start_client_server
+from xgboost_ray.data_sources.ray_dataset import RAY_DATASET_AVAILABLE
 
 
 @pytest.fixture
@@ -46,6 +47,9 @@ def test_simple_modin(start_client_server_5_cpus):
     main(cpus_per_actor=1, num_actors=4)
 
 
+@pytest.mark.skipif(
+    not RAY_DATASET_AVAILABLE,
+    reason="Ray datasets are not available in this version of Ray")
 def test_simple_ray_dataset(start_client_server_5_cpus):
     assert ray.util.client.ray.is_connected()
     from xgboost_ray.examples.simple_ray_dataset import main
