@@ -12,3 +12,4 @@ setup(
     install_requires=[
         "xgboost>=0.90", "ray", "numpy>=1.16,<1.20", "pandas", "pyarrow<5.0.0"
     ])
+    # pyarrow<5.0.0 pinned until petastorm is updated
