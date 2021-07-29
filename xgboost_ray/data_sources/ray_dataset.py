@@ -13,7 +13,7 @@ from xgboost_ray.data_sources.data_source import DataSource, RayFileType
 from xgboost_ray.data_sources.object_store import ObjectStore
 
 try:
-    import ray.experimental.data  # noqa: F401
+    import ray.experimental.data.dataset  # noqa: F401
     RAY_DATASET_AVAILABLE = True
 except (ImportError, AttributeError):
     RAY_DATASET_AVAILABLE = False
@@ -41,11 +41,11 @@ class RayDataset(DataSource):
         if not RAY_DATASET_AVAILABLE:
             return False
 
-        return isinstance(data, ray.experimental.data.Dataset)
+        return isinstance(data, ray.experimental.data.dataset.Dataset)
 
     @staticmethod
     def load_data(
-            data: Any,  # ray.experimental.data.Dataset
+            data: Any,  # ray.experimental.data.dataset.Dataset
             ignore: Optional[Sequence[str]] = None,
             indices: Optional[Union[Sequence[int], Sequence[
                 ObjectRef]]] = None,
@@ -70,7 +70,7 @@ class RayDataset(DataSource):
 
     @staticmethod
     def get_actor_shards(
-            data: Any,  # ray.experimental.data.Dataset
+            data: Any,  # ray.experimental.data.dataset.Dataset
             actors: Sequence[ActorHandle]) -> \
             Tuple[Any, Optional[Dict[int, Any]]]:
         _assert_ray_data_available()
