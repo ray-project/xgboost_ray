@@ -332,7 +332,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         lc1.load_model(last_checkpoint_1)
         self.assertEqual(last_checkpoint_1, last_checkpoint_other_rank_1)
         self.assertEqual(last_checkpoint_1, lc1.save_raw())
-        self.assertEqual(bst_1.save_raw(), lc1.save_raw())
+        self.assertEqual(bst_1.get_dump(), lc1.get_dump())
 
         # Start new training run, starting from existing model
         res_2 = {}
@@ -361,15 +361,15 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         # Sanity check
         self.assertEqual(first_checkpoint_2, first_checkpoint_other_actor_2)
         self.assertEqual(last_checkpoint_2, last_checkpoint_other_actor_2)
-        self.assertEqual(bst_2.save_raw(), lcp_bst.save_raw())
+        self.assertEqual(bst_2.get_dump(), lcp_bst.get_dump())
 
         # Training should not have proceeded for the first checkpoint,
         # so trees should be equal
-        self.assertEqual(last_checkpoint_1, fcp_bst.save_raw())
+        self.assertEqual(lc1.get_dump(), fcp_bst.get_dump())
 
         # Training should have proceeded for the last checkpoint,
         # so trees should not be equal
-        self.assertNotEqual(fcp_bst.save_raw(), lcp_bst.save_raw())
+        self.assertNotEqual(fcp_bst.get_dump(), lcp_bst.get_dump())
 
     def testSameResultWithAndWithoutError(self):
         """Get the same model with and without errors during training."""
