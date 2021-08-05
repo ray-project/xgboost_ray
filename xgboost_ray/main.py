@@ -671,6 +671,7 @@ def _create_actor(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
         resources=resources_per_actor,
+        placement_group_capture_child_tasks=True,
         placement_group=placement_group or DEFAULT_PG).remote(
             rank=rank,
             num_actors=num_actors,
