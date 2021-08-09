@@ -25,7 +25,7 @@ def main(cpus_per_actor, num_actors):
     partitions = [ray.put(part) for part in np.split(data, 4)]
 
     # Generate Ray dataset
-    ray_ds = ray.experimental.data.from_pandas(partitions)
+    ray_ds = ray.data.from_pandas(partitions)
 
     train_set = RayDMatrix(ray_ds, "label")
 
