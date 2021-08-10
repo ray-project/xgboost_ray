@@ -495,7 +495,7 @@ class RayDatasetSourceTest(_DistributedDataSourceTest, unittest.TestCase):
             mock_nodes.side_effect = node_map
             mock_ranks.side_effect = actor_ranks
 
-            data = ray.experimental.data.from_pandas(list(part_to_node.keys()))
+            data = ray.data.from_pandas(list(part_to_node.keys()))
 
             _, actor_to_parts = RayDataset.get_actor_shards(
                 data=data, actors=[])
@@ -528,7 +528,7 @@ class RayDatasetSourceTest(_DistributedDataSourceTest, unittest.TestCase):
         ])
 
         # Create Ray dataset from distributed partitions
-        ray_ds = ray.experimental.data.from_pandas(node_dfs)
+        ray_ds = ray.data.from_pandas(node_dfs)
 
         df_objs = ray_ds.to_pandas()
         ray.wait(df_objs)

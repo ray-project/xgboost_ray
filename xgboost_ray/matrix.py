@@ -29,7 +29,7 @@ except ImportError:
     MLDataset = Unavailable
 
 try:
-    from ray.experimental.data.dataset import Dataset as RayDataset
+    from ray.data.dataset import Dataset as RayDataset
 except (ImportError, ModuleNotFoundError):
 
     class RayDataset:
