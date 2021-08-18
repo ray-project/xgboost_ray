@@ -803,8 +803,8 @@ def _validate_kwargs_for_func(kwargs: Dict[str, Any], func: Callable, func_name:
     if invalid_kwargs:
         raise TypeError(
             f"Got invalid keyword arguments to be passed to `{func_name}`. "
-            f"Invalid keys: {invalid_kwargs}"
-        )
+            f"Invalid keys: {invalid_kwargs}")
+
 
 @dataclass
 class _TrainingState:
