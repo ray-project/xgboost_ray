@@ -85,7 +85,7 @@ LEGACY_WARNING = (
 
 # XGBoost version as an int tuple for comparisions
 XGBOOST_VERSION_TUPLE = tuple(
-    [int(x) for x in re.sub(r"[^\.0-9]", "", xgb.__version__).split(".")])
+    int(x) for x in re.sub(r"[^\.0-9]", "", xgb.__version__).split("."))
 
 
 class RayXGBoostTrainingError(RuntimeError):
@@ -218,8 +218,9 @@ def _ray_get_cluster_cpus():
 
 def _get_min_node_cpus():
     max_node_cpus = min(
-        node.get("Resources", {}).get("CPU", 0.0) for node in ray.nodes())
-    return max_node_cpus if max_node_cpus > 0.0 else _ray_get_cluster_cpus()
+        node.get("Resources", {}).get("CPU", 0.0) for node in ray.nodes()
+        if node.get("Alive", False))
+    return max_node_cpus if max_node_cpus > 0.0 else 1.0
 
 
 def _set_omp_num_threads():
@@ -307,7 +308,7 @@ class RayParams:
             to ``5`` (every 5th iteration).
     """
     # Actor scheduling
-    num_actors: int = 4
+    num_actors: int = 0
     cpus_per_actor: int = 0
     gpus_per_actor: int = -1
     resources_per_actor: Optional[Dict] = None
@@ -351,7 +352,13 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
             f"but it was {type(ray_params)}."
             f"\nFIX THIS preferably by passing a `RayParams` instance as "
             f"the `ray_params` parameter.")
-    if ray_params.num_actors < 2:
+    if ray_params.num_actors <= 0:
+        raise ValueError(
+            f"The `num_actors` parameter is set to 0. Please always specify "
+            f"the number of distributed actors you want to use."
+            f"\nFIX THIS by passing a `RayParams(num_actors=X)` argument "
+            f"to your call to xgboost_ray.")
+    elif ray_params.num_actors < 2:
         warnings.warn(
             f"`num_actors` in `ray_params` is smaller than 2 "
             f"({ray_params.num_actors}). XGBoost will NOT be distributed!")
