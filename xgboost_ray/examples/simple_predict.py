@@ -3,7 +3,7 @@ import os
 from sklearn import datasets
 
 import xgboost as xgb
-from xgboost_ray import RayDMatrix, predict
+from xgboost_ray import RayDMatrix, predict, RayParams
 
 import numpy as np
 
@@ -23,7 +23,7 @@ def main():
     bst = xgb.Booster(model_file="simple.xgb")
 
     pred_xgb = bst.predict(dmat_xgb)
-    pred_ray = predict(bst, dmat_ray)
+    pred_ray = predict(bst, dmat_ray, ray_params=RayParams(num_actors=2))
 
     np.testing.assert_array_equal(pred_xgb, pred_ray)
     print(pred_ray)
