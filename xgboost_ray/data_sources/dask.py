@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Any, Optional, Sequence, Dict, Union, Tuple
+from typing import Any, List, Optional, Sequence, Dict, Union, Tuple
 import wrapt
 
 import pandas as pd
@@ -29,8 +29,10 @@ def _assert_dask_installed():
             "https://github.com/ray-project/xgboost_ray as this part of "
             "the code should not have been reached.")
 
+
 @wrapt.decorator
-def ensure_ray_dask_initialized(func: Any, instance: Any, args: List[Any], kwargs: Any) -> Any:
+def ensure_ray_dask_initialized(func: Any, instance: Any, args: List[Any],
+                                kwargs: Any) -> Any:
     _assert_dask_installed()
     dask.config.set(scheduler=ray_dask_get)
     return func(*args, **kwargs)
