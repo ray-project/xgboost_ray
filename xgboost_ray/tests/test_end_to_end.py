@@ -323,6 +323,24 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             self.assertIn("label and prediction size not match",
                           str(exc.__cause__.__cause__))
 
+    def testKwargsValidation(self):
+        x = np.random.uniform(0, 1, size=(100, 4))
+        y = np.random.randint(0, 1, size=100)
+
+        train_set = RayDMatrix(x, y)
+
+        with self.assertRaisesRegex(TypeError, "totally_invalid_kwarg"):
+            train(
+                {
+                    "objective": "multi:softmax",
+                    "num_class": 2,
+                    "eval_metric": ["logloss", "error"]
+                },
+                train_set,
+                evals=[(train_set, "train")],
+                ray_params=RayParams(num_actors=1, max_actor_restarts=0),
+                totally_invalid_kwarg="")
+
 
 if __name__ == "__main__":
     import pytest

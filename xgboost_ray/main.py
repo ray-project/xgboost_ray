@@ -9,6 +9,7 @@ import time
 import threading
 import warnings
 import re
+import inspect
 
 import numpy as np
 import pandas as pd
@@ -802,6 +803,17 @@ def _create_communication_processes(added_tune_callback: bool = False):
     return queue, stop_event
 
 
+def _validate_kwargs_for_func(kwargs: Dict[str, Any], func: Callable,
+                              func_name: str):
+    """Raise exception if kwargs are not valid for a given function."""
+    valid_keys = inspect.getfullargspec(func)[0]
+    invalid_kwargs = [k for k in kwargs if k not in valid_keys]
+    if invalid_kwargs:
+        raise TypeError(
+            f"Got invalid keyword arguments to be passed to `{func_name}`. "
+            f"Invalid keys: {invalid_kwargs}")
+
+
 @dataclass
 class _TrainingState:
     actors: List[Optional[ActorHandle]]
@@ -1174,6 +1186,8 @@ def train(
         return bst
 
     _maybe_print_legacy_warning()
+    # may raise TypeError
+    _validate_kwargs_for_func(kwargs, xgb.train, "xgb.train()")
 
     start_time = time.time()
 
