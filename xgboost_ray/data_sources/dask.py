@@ -1,5 +1,6 @@
 from collections import defaultdict
-from typing import Any, Optional, Sequence, Dict, Union, Tuple
+from typing import Any, List, Optional, Sequence, Dict, Union, Tuple
+import wrapt
 
 import pandas as pd
 
@@ -29,6 +30,14 @@ def _assert_dask_installed():
             "the code should not have been reached.")
 
 
+@wrapt.decorator
+def ensure_ray_dask_initialized(func: Any, instance: Any, args: List[Any],
+                                kwargs: Any) -> Any:
+    _assert_dask_installed()
+    dask.config.set(scheduler=ray_dask_get)
+    return func(*args, **kwargs)
+
+
 class Dask(DataSource):
     """Read from distributed Dask dataframe.
 
@@ -41,6 +50,7 @@ class Dask(DataSource):
     supports_central_loading = True
     supports_distributed_loading = True
 
+    @ensure_ray_dask_initialized
     @staticmethod
     def is_data_type(data: Any,
                      filetype: Optional[RayFileType] = None) -> bool:
@@ -51,6 +61,7 @@ class Dask(DataSource):
 
         return isinstance(data, (DaskDataFrame, DaskSeries))
 
+    @ensure_ray_dask_initialized
     @staticmethod
     def load_data(
             data: Any,  # dask.pandas.DataFrame
@@ -79,6 +90,7 @@ class Dask(DataSource):
 
         return local_df
 
+    @ensure_ray_dask_initialized
     @staticmethod
     def convert_to_series(data: Any) -> pd.Series:
         _assert_dask_installed()
@@ -95,6 +107,7 @@ class Dask(DataSource):
 
         return DataSource.convert_to_series(data)
 
+    @ensure_ray_dask_initialized
     @staticmethod
     def get_actor_shards(
             data: Any,  # dask.dataframe.DataFrame
@@ -109,6 +122,7 @@ class Dask(DataSource):
 
         return data, assign_partitions_to_actors(ip_to_parts, actor_rank_ips)
 
+    @ensure_ray_dask_initialized
     @staticmethod
     def get_n(data: Any):
         """
