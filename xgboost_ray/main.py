@@ -1145,6 +1145,11 @@ def train(
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
+    if xgb is None:
+        raise ImportError(
+            "xgboost package is not installed. XGBoost-Ray WILL NOT WORK. "
+            "FIX THIS by running `pip install \"xgboost-ray[default]\"`.")
+
     if _remote is None:
         _remote = _is_client_connected() and \
                   not is_session_enabled()
@@ -1528,6 +1533,11 @@ def predict(model: xgb.Booster,
 
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
+
+    if xgb is None:
+        raise ImportError(
+            "xgboost package is not installed. XGBoost-Ray WILL NOT WORK. "
+            "FIX THIS by running `pip install \"xgboost-ray[default]\"`.")
 
     if _remote is None:
         _remote = _is_client_connected() and \
