@@ -77,16 +77,18 @@ ELASTIC_RESTART_RESOURCE_CHECK_S = int(
 ELASTIC_RESTART_GRACE_PERIOD_S = int(
     os.getenv("RXGB_ELASTIC_RESTART_GRACE_PERIOD_S", 10))
 
+xgboost_version = xgb.__version__ if xgb else "0.0.0"
+
 LEGACY_WARNING = (
     f"You are using `xgboost_ray` with a legacy XGBoost version "
-    f"(version {xgb.__version__}). While we try to support "
+    f"(version {xgboost_version}). While we try to support "
     f"older XGBoost versions, please note that this library is only "
     f"fully tested and supported for XGBoost >= 1.4. Please consider "
     f"upgrading your XGBoost version (`pip install -U xgboost`).")
 
 # XGBoost version as an int tuple for comparisions
 XGBOOST_VERSION_TUPLE = tuple(
-    int(x) for x in re.sub(r"[^\.0-9]", "", xgb.__version__).split("."))
+    int(x) for x in re.sub(r"[^\.0-9]", "", xgboost_version).split("."))
 
 
 class RayXGBoostTrainingError(RuntimeError):
@@ -1145,6 +1147,11 @@ def train(
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
+    if xgb is None:
+        raise ImportError(
+            "xgboost package is not installed. XGBoost-Ray WILL NOT WORK. "
+            "FIX THIS by running `pip install \"xgboost-ray[default]\"`.")
+
     if _remote is None:
         _remote = _is_client_connected() and \
                   not is_session_enabled()
@@ -1528,6 +1535,11 @@ def predict(model: xgb.Booster,
 
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
+
+    if xgb is None:
+        raise ImportError(
+            "xgboost package is not installed. XGBoost-Ray WILL NOT WORK. "
+            "FIX THIS by running `pip install \"xgboost-ray[default]\"`.")
 
     if _remote is None:
         _remote = _is_client_connected() and \

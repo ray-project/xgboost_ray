@@ -9,6 +9,7 @@ from xgboost_ray.data_sources.pandas import Pandas
 if TYPE_CHECKING:
     from xgboost_ray.xgb import xgboost as xgb
 
+
 class Numpy(DataSource):
     """Read from numpy arrays."""
 
