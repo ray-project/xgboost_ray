@@ -1,4 +1,7 @@
-import xgboost as xgb
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from xgboost_ray.xgb import xgboost as xgb
 
 try:
     from xgboost.callback import TrainingCallback
@@ -15,7 +18,7 @@ except ImportError:
                 self._before_iteration = getattr(self, "before_iteration")
                 self.__dict__["before_iteration"] = True
 
-        def __call__(self, callback_env: xgb.core.CallbackEnv):
+        def __call__(self, callback_env: "xgb.core.CallbackEnv"):
             if hasattr(self, "_before_iteration"):
                 self._before_iteration(
                     model=callback_env.model,

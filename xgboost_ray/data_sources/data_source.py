@@ -1,11 +1,13 @@
-from typing import Any, Optional, Sequence, Tuple, Dict, List
+from typing import Any, Optional, Sequence, Tuple, Dict, List, TYPE_CHECKING
 
 from enum import Enum
 
 import pandas as pd
-import xgboost as xgb
 
 from ray.actor import ActorHandle
+
+if TYPE_CHECKING:
+    from xgboost_ray.xgb import xgboost as xgb
 
 
 class RayFileType(Enum):
@@ -86,7 +88,7 @@ class DataSource:
         raise NotImplementedError
 
     @staticmethod
-    def update_feature_names(matrix: xgb.DMatrix,
+    def update_feature_names(matrix: "xgb.DMatrix",
                              feature_names: Optional[List[str]]):
         """Optionally update feature names before training/prediction
 

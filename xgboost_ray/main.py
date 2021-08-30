@@ -14,7 +14,7 @@ import inspect
 import numpy as np
 import pandas as pd
 
-import xgboost as xgb
+from xgboost_ray.xgb import xgboost as xgb
 from xgboost.core import XGBoostError, EarlyStopException
 
 from xgboost_ray.callback import DistributedCallback, \
