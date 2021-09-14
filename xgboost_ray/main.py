@@ -24,10 +24,9 @@ from xgboost_ray.compat import TrainingCallback, RabitTracker, LEGACY_CALLBACK
 try:
     import ray
     from ray import logger
-    from ray.services import get_node_ip_address
     from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
-    from ray.util import placement_group
+    from ray.util import get_node_ip_address, placement_group
     from ray.util.placement_group import PlacementGroup, \
         remove_placement_group, get_current_placement_group
 
