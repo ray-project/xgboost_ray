@@ -30,9 +30,9 @@ from xgboost_ray.compat import TrainingCallback
 import ray
 
 from ray import tune
-from ray.services import get_node_ip_address
 from ray.tune.session import get_trial_id
 from ray.tune.integration.docker import DockerSyncer
+from ray.util import get_node_ip_address
 
 from benchmark_cpu_gpu import train_ray
 from xgboost_ray import RayParams
