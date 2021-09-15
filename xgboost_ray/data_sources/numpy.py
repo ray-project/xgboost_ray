@@ -1,11 +1,13 @@
-from typing import Any, Optional, Sequence, List
+from typing import Any, Optional, Sequence, List, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-import xgboost as xgb
 
 from xgboost_ray.data_sources.data_source import DataSource, RayFileType
 from xgboost_ray.data_sources.pandas import Pandas
+
+if TYPE_CHECKING:
+    from xgboost_ray.xgb import xgboost as xgb
 
 
 class Numpy(DataSource):
@@ -17,7 +19,7 @@ class Numpy(DataSource):
         return isinstance(data, np.ndarray)
 
     @staticmethod
-    def update_feature_names(matrix: xgb.DMatrix,
+    def update_feature_names(matrix: "xgb.DMatrix",
                              feature_names: Optional[List[str]]):
         # Potentially unset feature names
         matrix.feature_names = feature_names

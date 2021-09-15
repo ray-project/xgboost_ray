@@ -11,7 +11,7 @@ except ImportError:
 
 import logging
 
-import xgboost as xgb
+from xgboost_ray.xgb import xgboost as xgb
 
 from xgboost_ray.compat import TrainingCallback
 from xgboost_ray.session import put_queue, get_rabit_rank

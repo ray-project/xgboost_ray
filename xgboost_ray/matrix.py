@@ -2,7 +2,7 @@ import glob
 import uuid
 from enum import Enum
 from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence, \
-    Callable, Type
+    Callable, Type, TYPE_CHECKING
 
 from ray.actor import ActorHandle
 
@@ -13,7 +13,6 @@ except ImportError:
 
 import numpy as np
 import pandas as pd
-import xgboost as xgb
 
 import os
 
@@ -42,6 +41,9 @@ try:
 except ImportError:
     DataIter = object
     LEGACY_MATRIX = True
+
+if TYPE_CHECKING:
+    from xgboost_ray.xgb import xgboost as xgb
 
 Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series, MLDataset]
 
@@ -194,7 +196,7 @@ class _RayDMatrixLoader:
         # Pass per default
         pass
 
-    def update_matrix_properties(self, matrix: xgb.DMatrix):
+    def update_matrix_properties(self, matrix: "xgb.DMatrix"):
         data_source = self.get_data_source()
         data_source.update_feature_names(matrix, self.feature_names)
 
@@ -780,7 +782,7 @@ class RayDMatrix:
                 del self.refs[rank][name]
         self.loaded = False
 
-    def update_matrix_properties(self, matrix: xgb.DMatrix):
+    def update_matrix_properties(self, matrix: "xgb.DMatrix"):
         self.loader.update_matrix_properties(matrix)
 
     def __hash__(self):
