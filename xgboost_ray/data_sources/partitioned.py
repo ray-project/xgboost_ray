@@ -1,17 +1,15 @@
-from typing import Any, Optional, Sequence, Dict, Union, Tuple
+from typing import Any, Optional, Sequence, Dict, Tuple
 
 from collections import defaultdict
 import pandas as pd
 import numpy as np
 
-import ray
 from ray import ObjectRef
 from ray.actor import ActorHandle
 
 from xgboost_ray.data_sources._distributed import \
     assign_partitions_to_actors, get_actor_rank_ips
 from xgboost_ray.data_sources.data_source import DataSource, RayFileType
-from xgboost_ray.data_sources.object_store import ObjectStore
 from xgboost_ray.data_sources.pandas import Pandas
 from xgboost_ray.data_sources.numpy import Numpy
 
@@ -51,7 +49,7 @@ class Partitioned(DataSource):
             pos_suffix = (0, ) * (ndims - 1)
             parts = data["partitions"]
             # get the full data, e.g. all shards/partitions
-            localdf = [
+            local_df = [
                 _get(parts[(i, ) + pos_suffix]["data"])
                 for i in range(tiling[0])
             ]
@@ -82,7 +80,7 @@ class Partitioned(DataSource):
         if ndims < 1 or ndims > 2 or any(tiling[x] != 1
                                          for x in range(1, ndims)):
             raise RuntimeError(
-                "Only row-wise partitionings of 1d or 2d structures supported (yet)."
+                "Only row-wise partitionings of 1d/2d structures supported."
             )
         # Now build a table mapping from IP to list of partitions
         ip_to_parts = defaultdict(lambda: [])

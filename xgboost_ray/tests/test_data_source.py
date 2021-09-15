@@ -614,7 +614,7 @@ class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
         startx = 0
         for i, pn in enumerate(part_to_node.items()):
             partref, node = pn
-            data['partitions'][(i, 0)] = {
+            data["partitions"][(i, 0)] = {
                 "start": (startx, 0),
                 "shape": shapes[partref],
                 "data": partref,
