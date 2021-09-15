@@ -12,8 +12,8 @@ from xgboost_ray.data_sources.ray_dataset import RayDataset
 from xgboost_ray.data_sources.partitioned import Partitioned
 
 data_sources = [
-    Numpy, Pandas, Partitioned, Modin, Dask, MLDataset, Petastorm, CSV, Parquet,
-    ObjectStore, RayDataset
+    Numpy, Pandas, Partitioned, Modin, Dask, MLDataset, Petastorm, CSV,
+    Parquet, ObjectStore, RayDataset
 ]
 
 __all__ = [

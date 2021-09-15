@@ -12,11 +12,13 @@ from xgboost_ray import RayDMatrix, train, RayParams
 
 nc = 31
 
+
 @ray.remote
 class AnActor:
     """We mimic a distributed DF by having several actors create
        data which form the global DF.
     """
+
     @ray.method(num_returns=2)
     def genData(self, rank, nranks, nrows):
         """Generate global dataset and cut out local piece.
@@ -25,19 +27,19 @@ class AnActor:
         # Load dataset
         data, labels = datasets.load_breast_cancer(return_X_y=True)
         # Split into train and test set
-        train_x, _, train_y, _ = train_test_split(
-            data, labels, test_size=0.25)
+        train_x, _, train_y, _ = train_test_split(data, labels, test_size=0.25)
         train_y = train_y.reshape((train_y.shape[0], 1))
         train = np.hstack([train_x, train_y])
         assert nrows <= train.shape[0]
         assert nc == train.shape[1]
-        sz = nrows//nranks
-        return train[sz*rank:sz*(rank+1)], ray.util.get_node_ip_address()
+        sz = nrows // nranks
+        return train[sz * rank:sz * (rank + 1)], ray.util.get_node_ip_address()
 
 
 class Parted:
     """Class exposing __partitioned__
     """
+
     def __init__(self, parted):
         self.__partitioned__ = parted
 
@@ -45,25 +47,25 @@ class Parted:
 def main(cpus_per_actor, num_actors):
     nr = 424
     actors = [AnActor.remote() for _ in range(num_actors)]
-    parts = [actors[i].genData.remote(i, num_actors, nr)
-             for i in range(num_actors)]
+    parts = [
+        actors[i].genData.remote(i, num_actors, nr) for i in range(num_actors)
+    ]
     rowsperpart = nr // num_actors
     nr = rowsperpart * num_actors
     parted = Parted({
-        "shape" : (nr, nc),
+        "shape": (nr, nc),
         "partition_tiling": (num_actors, 1),
         "get": lambda x: ray.get(x),
-        "partitions": {
-            (i, 0): {
-                "start": (i * rowsperpart, 0),
-                "shape": (rowsperpart, nc),
-                "data": parts[i][0],
-                "location": [ray.get(parts[i][1])],
-            }
-            for i in range(num_actors) }
+        "partitions": {(i, 0): {
+            "start": (i * rowsperpart, 0),
+            "shape": (rowsperpart, nc),
+            "data": parts[i][0],
+            "location": [ray.get(parts[i][1])],
+        }
+                       for i in range(num_actors)}
     })
 
-    yl = nc-1
+    yl = nc - 1
     # Let's create DMatrix from our __partitioned__ structure
     train_set = RayDMatrix(parted, f"f{yl}")
 

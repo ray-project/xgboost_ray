@@ -389,8 +389,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
 
         # Todo (krfricke): It would be good to have a more general way to
         # check for compatibility here. Combine with test below?
-        if not (isinstance(self.data,
-                           (Iterable, MLDataset, RayDataset))
+        if not (isinstance(self.data, (Iterable, MLDataset, RayDataset))
                 or hasattr(self.data, "__partitioned__")) or invalid_data:
             raise ValueError(
                 f"Distributed data loading only works with already "
@@ -415,7 +414,6 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             try:
                 if source.is_data_type(self.data, self.filetype):
                     data_source = source
-                    print("Using data source", data_source)
                     break
             except Exception as exc:
                 # If checking the data throws an exception, the data source

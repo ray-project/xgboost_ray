@@ -596,17 +596,17 @@ class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
                     msg=f"Assignment failed: Actor rank {actor_rank}, "
                     f"partition {i} is not partition with ID {part_id}.")
 
-
     def _mk_partitioned(self, part_to_node, nr, nc, shapes):
         class Parted:
             """Class exposing __partitioned__
             """
+
             def __init__(self, parted):
                 self.__partitioned__ = parted
 
         num_parts = len(part_to_node)
         data = {
-            "shape" : (nr, nc),
+            "shape": (nr, nc),
             "partition_tiling": (num_parts, 1),
             "get": lambda x: ray.get(x),
             "partitions": {}
@@ -624,20 +624,20 @@ class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
 
         return Parted(data)
 
-
     def _getActorToParts(self, actors_to_node, partitions, part_to_node,
                          part_nodes):
         def actor_ranks(actors):
             return actors_to_node
 
-        with patch(
-                "xgboost_ray.data_sources.partitioned.get_actor_rank_ips"
-        ) as mock_ranks:
+        with patch("xgboost_ray.data_sources.partitioned.get_actor_rank_ips"
+                   ) as mock_ranks:
             mock_ranks.side_effect = actor_ranks
 
             nr, nc = self.x.shape
-            data = self._mk_partitioned(part_to_node, nr, nc,
-                                        {p: ray.get(p).shape for p in partitions})
+            data = self._mk_partitioned(
+                part_to_node, nr, nc,
+                {p: ray.get(p).shape
+                 for p in partitions})
 
             _, actor_to_parts = Partitioned.get_actor_shards(
                 data=data, actors=[])
@@ -665,9 +665,10 @@ class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
         partitions = np.array_split(self.x, len(part_nodes))
         node_dfs, shapes = {}, {}
         for pid, pip in enumerate(part_node_ips):
-            pref = ray.get(create_remote_df.options(
-                resources={f"node:{pip}": 0.1}
-            ).remote(partitions[pid]))
+            pref = ray.get(
+                create_remote_df.options(resources={
+                    f"node:{pip}": 0.1
+                }).remote(partitions[pid]))
             node_dfs[pref] = pip
             shapes[pref] = partitions[pid].shape
 

@@ -22,6 +22,9 @@ class Partitioned(DataSource):
     __partitioned__ provides meta data about how the data is partitioned and
     distributed across several compute nodes, making supporting objects them
     suitable for distributed loading.
+
+    Also see the __partitioned__ spec:
+    https://github.com/IntelPython/DPPY-Spec/blob/draft/partitioned/Partitioned.md
     """
     supports_central_loading = True
     supports_distributed_loading = True
@@ -35,34 +38,32 @@ class Partitioned(DataSource):
     def load_data(
             data: Any,  # __partitioned__ dict
             ignore: Optional[Sequence[str]] = None,
-            indices = None,  # FIXME Optional[Union[Sequence[int], Sequence[ObjectRef]]] = None,
+            indices: Optional[Sequence[ObjectRef]] = None,
             **kwargs) -> pd.DataFrame:
 
         assert isinstance(data, dict), "Expected __partitioned__ dict"
-        assert len(indices) == 0 or not isinstance(indices[0], int)
         _get = data["get"]
 
         if indices is None or len(indices) == 0:
             tiling = data["partition_tiling"]
             ndims = len(tiling)
             # we need tuples to access partitions in the right order
-            pos_suffix = (0,) * (ndims-1)
+            pos_suffix = (0, ) * (ndims - 1)
             parts = data["partitions"]
             # get the full data, e.g. all shards/partitions
-            localdf = [_get(parts[(i,) + pos_suffix]["data"]) for i in range(tiling[0])]
+            localdf = [
+                _get(parts[(i, ) + pos_suffix]["data"])
+                for i in range(tiling[0])
+            ]
         else:
             # here we got a list of futures for partitions
             local_df = _get(indices)
 
         if isinstance(local_df[0], pd.DataFrame):
-            return Pandas.load_data(pd.concat(local_df, copy=False), ignore=ignore)
+            return Pandas.load_data(
+                pd.concat(local_df, copy=False), ignore=ignore)
         else:
             return Numpy.load_data(np.concatenate(local_df), ignore=ignore)
-
-    # @staticmethod
-    # def convert_to_series(data: Any) -> pd.Series:
-    #     # Presumably data is 'raw' data, e.g. something DataSource can work on
-    #     return DataSource.convert_to_series(data)
 
     @staticmethod
     def get_actor_shards(
@@ -78,14 +79,17 @@ class Partitioned(DataSource):
         parts = parted["partitions"]
         tiling = parted["partition_tiling"]
         ndims = len(tiling)
-        if ndims < 1 or ndims > 2 or any(tiling[x] != 1 for x in range(1, ndims)):
-            raise RuntimeError("Only row-wise partitionings of 1d or 2d structures supported (yet).")
+        if ndims < 1 or ndims > 2 or any(tiling[x] != 1
+                                         for x in range(1, ndims)):
+            raise RuntimeError(
+                "Only row-wise partitionings of 1d or 2d structures supported (yet)."
+            )
         # Now build a table mapping from IP to list of partitions
-        ip_to_parts = defaultdict(lambda:[])
+        ip_to_parts = defaultdict(lambda: [])
         # we need tuples to access partitions in the right order
-        pos_suffix = (0,) * (ndims-1)
+        pos_suffix = (0, ) * (ndims - 1)
         for i in range(tiling[0]):
-            part = parts[(i,) + pos_suffix]  # this works for 1d and 2d
+            part = parts[(i, ) + pos_suffix]  # this works for 1d and 2d
             ip_to_parts[part["location"][0]].append(part["data"])
         # __partitioned__ is serializable, so pass it here
         # as the first return value
