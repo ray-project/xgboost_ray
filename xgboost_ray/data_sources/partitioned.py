@@ -80,8 +80,8 @@ class Partitioned(DataSource):
         if ndims < 1 or ndims > 2 or any(tiling[x] != 1
                                          for x in range(1, ndims)):
             raise RuntimeError(
-                "Only row-wise partitionings of 1d/2d structures supported."
-            )
+                "Only row-wise partitionings of 1d/2d structures supported.")
+
         # Now build a table mapping from IP to list of partitions
         ip_to_parts = defaultdict(lambda: [])
         # we need tuples to access partitions in the right order
