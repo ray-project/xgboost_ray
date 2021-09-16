@@ -18,15 +18,13 @@
 # License:
 # https://github.com/dmlc/xgboost/blob/c6a0bdbb5a68232cd59ea556c981c633cc0646ca/LICENSE
 
-import warnings
 from typing import Callable, Tuple, Optional, Any, List
 
 import warnings
 import functools
 
-from xgboost_ray.main import (RayParams, train, predict, XGBOOST_VERSION_TUPLE,
-                              LEGACY_WARNING)
 from xgboost_ray.matrix import RayDMatrix
+
 
 def _check_if_params_are_ray_dmatrix(X, sample_weight, base_margin, eval_set,
                                      sample_weight_eval_set,
@@ -67,6 +65,7 @@ def _check_if_params_are_ray_dmatrix(X, sample_weight, base_margin, eval_set,
                          "elements must be (array_like, array_like)"
                          " tuples.")
     return train_dmatrix, evals
+
 
 # avoiding exception in xgboost==0.9.0
 try:

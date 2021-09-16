@@ -116,7 +116,7 @@ def _assert_ray_support():
 
 
 def _maybe_print_legacy_warning():
-    if LEGACY_MATRIX or LEGACY_CALLBACK:
+    if xgb and (LEGACY_MATRIX or LEGACY_CALLBACK):
         warnings.warn(LEGACY_WARNING)
 
 
