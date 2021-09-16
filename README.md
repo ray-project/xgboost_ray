@@ -28,7 +28,7 @@ pip install "xgboost_ray[default]"
 If you'd like to install the latest master, use this command instead:
 
 ```bash
-pip install "git+https://github.com/ray-project/xgboost_ray.git#xgboost_ray[default]"
+pip install "git+https://github.com/ray-project/xgboost_ray.git#egg=xgboost_ray[default]"
 ```
 
 Omitting `[default]` will cause `xgboost` to not be installed as a dependency.
