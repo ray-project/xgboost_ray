@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from xgboost_ray.xgb import xgboost as xgb
-from xgboost.core import XGBoostError, EarlyStopException
+from xgboost_ray.xgb import XGBoostError, EarlyStopException
 
 from xgboost_ray.callback import DistributedCallback, \
     DistributedCallbackContainer
@@ -235,7 +235,7 @@ def _set_omp_num_threads():
     return int(float(os.environ.get("OMP_NUM_THREADS", "0.0")))
 
 
-def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
+def _get_dmatrix(data: RayDMatrix, param: Dict) -> "xgb.DMatrix":
     if not LEGACY_MATRIX and isinstance(data, RayDeviceQuantileDMatrix):
         # If we only got a single data shard, create a list so we can
         # iterate over it
@@ -603,7 +603,7 @@ class RayXGBoostActor:
 
         return result_dict
 
-    def predict(self, model: xgb.Booster, data: RayDMatrix, **kwargs):
+    def predict(self, model: "xgb.Booster", data: RayDMatrix, **kwargs):
         self._distributed_callbacks.before_predict(self)
 
         _set_omp_num_threads()
@@ -845,7 +845,7 @@ def _train(params: Dict,
            cpus_per_actor: int,
            gpus_per_actor: int,
            _training_state: _TrainingState,
-           **kwargs) -> Tuple[xgb.Booster, Dict, Dict]:
+           **kwargs) -> Tuple["xgb.Booster", Dict, Dict]:
     """This is the local train function wrapped by :func:`train() <train>`.
 
     This function can be thought of one invocation of a multi-actor xgboost
@@ -1095,7 +1095,7 @@ def train(
         additional_results: Optional[Dict] = None,
         ray_params: Union[None, RayParams, Dict] = None,
         _remote: Optional[bool] = None,
-        **kwargs) -> xgb.Booster:
+        **kwargs) -> "xgb.Booster":
     """Distributed XGBoost training via Ray.
 
     This function will connect to a Ray cluster, create ``num_actors``
@@ -1454,7 +1454,7 @@ def train(
     return bst
 
 
-def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
+def _predict(model: "xgb.Booster", data: RayDMatrix, ray_params: RayParams,
              **kwargs):
     _assert_ray_support()
 
@@ -1507,7 +1507,7 @@ def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
     return combine_data(data.sharding, actor_results)
 
 
-def predict(model: xgb.Booster,
+def predict(model: "xgb.Booster",
             data: RayDMatrix,
             ray_params: Union[None, RayParams, Dict] = None,
             _remote: Optional[bool] = None,

@@ -36,6 +36,13 @@ from xgboost_ray.main import (RayParams, train, predict, XGBOOST_VERSION_TUPLE,
                               LEGACY_WARNING)
 from xgboost_ray.matrix import RayDMatrix
 
+try:
+    import xgboost  # noqa
+except ImportError as e:
+    raise ImportError(
+        "xgboost package is not installed. XGBoost-Ray WILL NOT WORK. "
+        "FIX THIS by running `pip install \"xgboost-ray[default]\"`.") from e
+
 from xgboost import Booster, __version__ as xgboost_version
 from xgboost.sklearn import (XGBModel, XGBClassifier, XGBRegressor,
                              XGBRFClassifier, XGBRFRegressor, XGBRanker,

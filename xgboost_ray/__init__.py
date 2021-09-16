@@ -6,8 +6,18 @@ from xgboost_ray.matrix import RayDMatrix, RayDeviceQuantileDMatrix,\
 try:
     from xgboost_ray.sklearn import RayXGBClassifier, RayXGBRegressor, \
         RayXGBRFClassifier, RayXGBRFRegressor, RayXGBRanker
-except ImportError:
-    pass
+except ImportError as e:
+    if "WILL NOT WORK" in str(e):
+
+        class ImportErrorOnInit:
+            def __init__(self, *args, **kwargs):
+                raise ImportError(
+                    "xgboost package is not installed. XGBoost-Ray WILL "
+                    "NOT WORK. FIX THIS by running `pip install "
+                    "\"xgboost-ray[default]\"`.")
+
+        RayXGBClassifier = RayXGBRegressor = RayXGBRFClassifier = \
+            RayXGBRFRegressor = RayXGBRanker = ImportErrorOnInit
 
 __version__ = "0.1.4"
 
