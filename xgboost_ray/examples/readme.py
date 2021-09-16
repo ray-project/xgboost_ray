@@ -98,5 +98,5 @@ if __name__ == "__main__":
     try:
         print("Readme: Ray Tune example")
         readme_tune()
-    except ImportError:
+    except (ImportError, RuntimeError):
         print("Ray Tune not installed.")
