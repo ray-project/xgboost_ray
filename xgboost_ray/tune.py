@@ -21,24 +21,27 @@ try:
     from ray import tune
     from ray.tune import is_session_enabled
     from ray.tune.utils import flatten_dict
-    from ray.tune.integration.xgboost import \
-        TuneReportCallback as OrigTuneReportCallback, \
-        _TuneCheckpointCallback as _OrigTuneCheckpointCallback, \
-        TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback
 
     TUNE_INSTALLED = True
 except ImportError:
     tune = None
-    TuneReportCallback = _TuneCheckpointCallback = \
-        TuneReportCheckpointCallback = Unavailable
-    OrigTuneReportCallback = _OrigTuneCheckpointCallback = \
-        OrigTuneReportCheckpointCallback = object
 
     def is_session_enabled():
         return False
 
     flatten_dict = is_session_enabled
     TUNE_INSTALLED = False
+
+try:
+    from ray.tune.integration.xgboost import \
+        TuneReportCallback as OrigTuneReportCallback, \
+        _TuneCheckpointCallback as _OrigTuneCheckpointCallback, \
+        TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback
+except ImportError:
+    TuneReportCallback = _TuneCheckpointCallback = \
+        TuneReportCheckpointCallback = Unavailable
+    OrigTuneReportCallback = _OrigTuneCheckpointCallback = \
+        OrigTuneReportCheckpointCallback = object
 
 # Todo(krfricke): Remove after next ray core release
 if not hasattr(OrigTuneReportCallback, "_get_report_dict") or not issubclass(
