@@ -38,10 +38,13 @@ try:
         _TuneCheckpointCallback as _OrigTuneCheckpointCallback, \
         TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback
 except ImportError:
+
+    class Dummy:
+        pass
     TuneReportCallback = _TuneCheckpointCallback = \
         TuneReportCheckpointCallback = Unavailable
     OrigTuneReportCallback = _OrigTuneCheckpointCallback = \
-        OrigTuneReportCheckpointCallback = object
+        OrigTuneReportCheckpointCallback = Dummy
 
 # Todo(krfricke): Remove after next ray core release
 if not hasattr(OrigTuneReportCallback, "_get_report_dict") or not issubclass(
