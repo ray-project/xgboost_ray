@@ -2,7 +2,7 @@ from typing import Any, Optional, Sequence, List
 
 import pandas as pd
 from ray.util.data import MLDataset as MLDatasetType
-from xgboost_ray.data_sources.data_source import DataSource, RayFileType
+from .data_source import DataSource, RayFileType
 
 
 class MLDataset(DataSource):

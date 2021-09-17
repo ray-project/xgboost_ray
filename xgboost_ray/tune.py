@@ -11,11 +11,11 @@ except ImportError:
 
 import logging
 
-from xgboost_ray.xgb import xgboost as xgb
+from .xgb import xgboost as xgb
 
-from xgboost_ray.compat import TrainingCallback
-from xgboost_ray.session import put_queue, get_rabit_rank
-from xgboost_ray.util import Unavailable, force_on_current_node
+from .compat import TrainingCallback
+from .session import put_queue, get_rabit_rank
+from .util import Unavailable, force_on_current_node
 
 try:
     from ray import tune

@@ -2,8 +2,8 @@ from typing import Any, Optional, Sequence, Iterable, Union
 
 import pandas as pd
 
-from xgboost_ray.data_sources.data_source import DataSource, RayFileType
-from xgboost_ray.data_sources.pandas import Pandas
+from .data_source import DataSource, RayFileType
+from .pandas import Pandas
 
 
 class Parquet(DataSource):

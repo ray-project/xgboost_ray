@@ -32,10 +32,10 @@ import warnings
 import functools
 import inspect
 
-from xgboost_ray.main import (RayParams, train, predict, XGBOOST_VERSION_TUPLE,
-                              LEGACY_WARNING)
-from xgboost_ray.matrix import RayDMatrix
-from xgboost_ray.sklearn_utils import (
+from .main import (RayParams, train, predict, XGBOOST_VERSION_TUPLE,
+                   LEGACY_WARNING)
+from .matrix import RayDMatrix
+from .sklearn_utils import (
     _check_if_params_are_ray_dmatrix, _deprecate_positional_args,
     _wrap_evaluation_matrices, _convert_ntree_limit, _cls_predict_proba)
 

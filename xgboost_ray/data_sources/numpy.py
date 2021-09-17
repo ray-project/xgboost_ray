@@ -3,11 +3,11 @@ from typing import Any, Optional, Sequence, List, TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from xgboost_ray.data_sources.data_source import DataSource, RayFileType
-from xgboost_ray.data_sources.pandas import Pandas
+from .data_source import DataSource, RayFileType
+from .pandas import Pandas
 
 if TYPE_CHECKING:
-    from xgboost_ray.xgb import xgboost as xgb
+    from ..xgb import xgboost as xgb
 
 
 class Numpy(DataSource):

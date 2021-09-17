@@ -9,8 +9,8 @@ import pandas as pd
 
 import xgboost as xgb
 
-from xgboost_ray.compat import TrainingCallback
-from xgboost_ray.session import get_actor_rank, put_queue
+from ..compat import TrainingCallback
+from ..session import get_actor_rank, put_queue
 
 
 def get_num_trees(bst: xgb.Booster):

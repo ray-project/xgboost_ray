@@ -1,10 +1,10 @@
-from xgboost_ray.main import RayParams, train, predict
-from xgboost_ray.matrix import RayDMatrix, RayDeviceQuantileDMatrix,\
+from .main import RayParams, train, predict
+from .matrix import RayDMatrix, RayDeviceQuantileDMatrix,\
     RayFileType, RayShardingMode, \
     Data, combine_data
 # workaround for legacy xgboost==0.9.0
 try:
-    from xgboost_ray.sklearn import RayXGBClassifier, RayXGBRegressor, \
+    from .sklearn import RayXGBClassifier, RayXGBRegressor, \
         RayXGBRFClassifier, RayXGBRFRegressor, RayXGBRanker
 except ImportError as e:
     if "WILL NOT WORK" in str(e):

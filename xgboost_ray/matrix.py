@@ -19,8 +19,8 @@ import os
 import ray
 from ray import logger
 
-from xgboost_ray.util import Unavailable
-from xgboost_ray.data_sources import DataSource, data_sources, RayFileType
+from .util import Unavailable
+from .data_sources import DataSource, data_sources, RayFileType
 
 try:
     from ray.util.data import MLDataset
@@ -43,7 +43,7 @@ except ImportError:
     LEGACY_MATRIX = True
 
 if TYPE_CHECKING:
-    from xgboost_ray.xgb import xgboost as xgb
+    from .xgb import xgboost as xgb
 
 Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series, MLDataset]
 
@@ -843,8 +843,8 @@ class RayDeviceQuantileDMatrix(RayDMatrix):
 
 def _can_load_distributed(source: Data) -> bool:
     """Returns True if it might be possible to use distributed data loading"""
-    from xgboost_ray.data_sources.ml_dataset import MLDataset
-    from xgboost_ray.data_sources.modin import Modin
+    from .data_sources.ml_dataset import MLDataset
+    from .data_sources.modin import Modin
 
     if isinstance(source, (int, float, bool)):
         return False
@@ -871,8 +871,8 @@ def _can_load_distributed(source: Data) -> bool:
 
 def _detect_distributed(source: Data) -> bool:
     """Returns True if we should try to use distributed data loading"""
-    from xgboost_ray.data_sources.ml_dataset import MLDataset
-    from xgboost_ray.data_sources.modin import Modin
+    from .data_sources.ml_dataset import MLDataset
+    from .data_sources.modin import Modin
     if not _can_load_distributed(source):
         return False
     if MLDataset.is_data_type(source):

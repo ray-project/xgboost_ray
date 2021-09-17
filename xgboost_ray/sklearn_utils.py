@@ -23,7 +23,7 @@ from typing import Callable, Tuple, Optional, Any, List
 import warnings
 import functools
 
-from xgboost_ray.matrix import RayDMatrix
+from .matrix import RayDMatrix
 
 
 def _check_if_params_are_ray_dmatrix(X, sample_weight, base_margin, eval_set,

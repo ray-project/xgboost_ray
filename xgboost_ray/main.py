@@ -14,12 +14,12 @@ import inspect
 import numpy as np
 import pandas as pd
 
-from xgboost_ray.xgb import xgboost as xgb
-from xgboost_ray.xgb import XGBoostError, EarlyStopException
+from .xgb import xgboost as xgb
+from .xgb import XGBoostError, EarlyStopException
 
-from xgboost_ray.callback import DistributedCallback, \
+from .callback import DistributedCallback, \
     DistributedCallbackContainer
-from xgboost_ray.compat import TrainingCallback, RabitTracker, LEGACY_CALLBACK
+from .compat import TrainingCallback, RabitTracker, LEGACY_CALLBACK
 
 try:
     import ray
@@ -30,7 +30,7 @@ try:
     from ray.util.placement_group import PlacementGroup, \
         remove_placement_group, get_current_placement_group
 
-    from xgboost_ray.util import Event, Queue, MultiActorTask, \
+    from .util import Event, Queue, MultiActorTask, \
         force_on_current_node
 
     if LooseVersion(ray.__version__) >= LooseVersion("1.5.0"):
@@ -44,13 +44,13 @@ except ImportError:
     ray = get_node_ip_address = Queue = Event = ActorHandle = logger = None
     RAY_INSTALLED = False
 
-from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources, \
+from .tune import _try_add_tune_callback, _get_tune_resources, \
     TUNE_USING_PG, is_session_enabled
 
-from xgboost_ray.matrix import RayDMatrix, combine_data, \
+from .matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes, \
     LEGACY_MATRIX
-from xgboost_ray.session import init_session, put_queue, \
+from .session import init_session, put_queue, \
     set_session_queue
 
 # Whether to use SPREAD placement group strategy for training.
@@ -858,7 +858,7 @@ def _train(params: Dict,
     errors occur. It is called more than once if errors occurred (e.g. an
     actor died) and failure handling is enabled.
     """
-    from xgboost_ray.elastic import _maybe_schedule_new_actors, \
+    from .elastic import _maybe_schedule_new_actors, \
         _update_scheduled_actor_states, _get_actor_alive_status
 
     # Un-schedule possible scheduled restarts

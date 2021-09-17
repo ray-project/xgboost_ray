@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from xgboost_ray.xgb import xgboost as xgb
+    from ..xgb import xgboost as xgb
 
 try:
     from xgboost.callback import TrainingCallback
@@ -42,6 +42,6 @@ except ImportError:
 try:
     from xgboost import RabitTracker
 except ImportError:
-    from xgboost_ray.compat.tracker import RabitTracker
+    from .tracker import RabitTracker
 
 __all__ = ["TrainingCallback", "RabitTracker"]

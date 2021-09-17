@@ -2,7 +2,7 @@ from typing import Any, Optional, Sequence, Union, List
 
 import pandas as pd
 
-from xgboost_ray.data_sources.data_source import DataSource, RayFileType
+from .data_source import DataSource, RayFileType
 
 try:
     import petastorm

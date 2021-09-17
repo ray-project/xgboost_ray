@@ -5,8 +5,8 @@ import os
 import pandas as pd
 
 if TYPE_CHECKING:
-    from xgboost_ray.main import RayXGBoostActor
-    from xgboost_ray.matrix import RayDMatrix
+    from .main import RayXGBoostActor
+    from .matrix import RayDMatrix
 
 
 class DistributedCallback(ABC):

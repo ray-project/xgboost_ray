@@ -7,7 +7,7 @@ import pandas as pd
 from ray.actor import ActorHandle
 
 if TYPE_CHECKING:
-    from xgboost_ray.xgb import xgboost as xgb
+    from ..xgb import xgboost as xgb
 
 
 class RayFileType(Enum):

@@ -7,9 +7,9 @@ import pandas as pd
 import ray
 from ray.actor import ActorHandle
 
-from xgboost_ray.data_sources._distributed import \
+from _distributed import \
     assign_partitions_to_actors, get_actor_rank_ips
-from xgboost_ray.data_sources.data_source import DataSource, RayFileType
+from .data_source import DataSource, RayFileType
 
 try:
     import dask  # noqa: F401

@@ -5,8 +5,8 @@ import pandas as pd
 import ray
 from ray import ObjectRef
 
-from xgboost_ray.data_sources.data_source import DataSource, RayFileType
-from xgboost_ray.data_sources.pandas import Pandas
+from .data_source import DataSource, RayFileType
+from .pandas import Pandas
 
 
 class ObjectStore(DataSource):

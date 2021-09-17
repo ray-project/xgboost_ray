@@ -3,12 +3,12 @@ from typing import Optional, Dict, List, Tuple, Callable
 
 import ray
 
-from xgboost_ray.main import RayParams, _TrainingState, \
+from .main import RayParams, _TrainingState, \
     logger, ActorHandle, _PrepareActorTask, _create_actor, \
     RayXGBoostActorAvailable, \
     ELASTIC_RESTART_RESOURCE_CHECK_S, ELASTIC_RESTART_GRACE_PERIOD_S
 
-from xgboost_ray.matrix import RayDMatrix
+from .matrix import RayDMatrix
 
 
 def _maybe_schedule_new_actors(

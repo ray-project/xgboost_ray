@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 import os
 
-from xgboost_ray.tests.utils import create_parquet
+from ...tests.utils import create_parquet
 
 if __name__ == "__main__":
     if "OMP_NUM_THREADS" in os.environ:
