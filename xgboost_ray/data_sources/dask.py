@@ -7,7 +7,7 @@ import pandas as pd
 import ray
 from ray.actor import ActorHandle
 
-from _distributed import \
+from ._distributed import \
     assign_partitions_to_actors, get_actor_rank_ips
 from .data_source import DataSource, RayFileType
 
