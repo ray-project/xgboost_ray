@@ -2,18 +2,19 @@ import json
 import os
 import tempfile
 import time
-from typing import Tuple, Union, List, Dict, Optional
+from typing import Tuple, Union, List, Dict, Optional, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
-import xgboost as xgb
-
 from ..compat import TrainingCallback
 from ..session import get_actor_rank, put_queue
 
+if TYPE_CHECKING:
+    from ..xgb import xgboost as xgb
 
-def get_num_trees(bst: xgb.Booster):
+
+def get_num_trees(bst: "xgb.Booster"):
     import json
     data = [json.loads(d) for d in bst.get_dump(dump_format="json")]
     return len(data) // 4
@@ -98,7 +99,7 @@ def flatten_obj(obj: Union[List, Dict], keys=None, base=None):
     return base
 
 
-def tree_obj(bst: xgb.Booster):
+def tree_obj(bst: "xgb.Booster"):
     return [json.loads(j) for j in bst.get_dump(dump_format="json")]
 
 
