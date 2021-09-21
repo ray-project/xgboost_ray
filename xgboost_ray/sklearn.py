@@ -561,9 +561,8 @@ class RayXGBRFRegressor(RayXGBRegressor):
 
 RayXGBRFRegressor.__doc__ = _treat_estimator_doc(XGBRFRegressor.__doc__)
 
-PublicAPI(stability="beta")
 
-
+@PublicAPI(stability="beta")
 class RayXGBClassifier(XGBClassifier, RayXGBMixin):
     __init__ = _xgboost_version_warn(XGBClassifier.__init__)
 
