@@ -1088,7 +1088,7 @@ def _train(params: Dict,
     return bst, evals_result, _training_state.additional_results
 
 
-@PublicAPI
+@PublicAPI(stability="beta")
 def train(
         params: Dict,
         dtrain: RayDMatrix,
@@ -1512,7 +1512,7 @@ def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
     return combine_data(data.sharding, actor_results)
 
 
-@PublicAPI
+@PublicAPI(stability="beta")
 def predict(model: xgb.Booster,
             data: RayDMatrix,
             ray_params: Union[None, RayParams, Dict] = None,
