@@ -2,6 +2,7 @@ from typing import Tuple, Dict, Any, List, Optional, Callable, Union, Sequence
 from dataclasses import dataclass, field
 from distutils.version import LooseVersion
 
+import functools
 import multiprocessing
 import os
 import pickle
@@ -43,7 +44,15 @@ try:
     RAY_INSTALLED = True
 except ImportError:
     ray = get_node_ip_address = Queue = Event = ActorHandle = logger = None
-    PublicAPI = DeveloperAPI = lambda fn: fn
+
+    def PublicAPI(f):
+        @functools.wraps(f)
+        def inner_f(*args, **kwargs):
+            return f(*args, **kwargs)
+
+        return inner_f
+
+    DeveloperAPI = PublicAPI
     RAY_INSTALLED = False
 
 from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources, \
