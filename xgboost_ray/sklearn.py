@@ -388,9 +388,7 @@ class RayXGBMixin:
             self.evals_result_ = evals_result
 
 
-PublicAPI(stability="beta")
-
-
+@PublicAPI(stability="beta")
 class RayXGBRegressor(XGBRegressor, RayXGBMixin):
     __init__ = _xgboost_version_warn(XGBRegressor.__init__)
 
@@ -904,9 +902,8 @@ class RayXGBRFClassifier(RayXGBClassifier):
 
 RayXGBRFClassifier.__doc__ = _treat_estimator_doc(XGBRFClassifier.__doc__)
 
-PublicAPI(stability="beta")
 
-
+@PublicAPI(stability="beta")
 class RayXGBRanker(XGBRanker, RayXGBMixin):
     __init__ = _xgboost_version_warn(XGBRanker.__init__)
 
