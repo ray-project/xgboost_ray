@@ -9,9 +9,8 @@ if TYPE_CHECKING:
     from xgboost_ray.main import RayXGBoostActor
     from xgboost_ray.matrix import RayDMatrix
 
-PublicAPI(stability="beta")
 
-
+@PublicAPI(stability="beta")
 class DistributedCallback(ABC):
     """Distributed callbacks for RayXGBoostActors.
 
