@@ -3,9 +3,11 @@ from typing import Dict, Optional, List
 import asyncio
 
 import ray
+from ray.util.annotations import DeveloperAPI
 from ray.util.queue import Queue as RayQueue, Empty, Full
 
 
+@DeveloperAPI
 class Unavailable:
     """No object should be instance of this class"""
 
@@ -27,6 +29,7 @@ class _EventActor:
         return self._event.is_set()
 
 
+@DeveloperAPI
 class Event:
     def __init__(self, actor_options: Optional[Dict] = None):
         actor_options = {} if not actor_options else actor_options
@@ -101,6 +104,7 @@ else:
 
 
 # Remove after Ray 1.2 release.
+@DeveloperAPI
 class Queue(RayQueue):
     def __init__(self, maxsize: int = 0,
                  actor_options: Optional[Dict] = None) -> None:
@@ -118,6 +122,7 @@ class Queue(RayQueue):
             self.actor = None
 
 
+@DeveloperAPI
 class MultiActorTask:
     """Utility class to hold multiple futures.
 
@@ -147,6 +152,7 @@ class MultiActorTask:
         return not bool(self._pending_futures)
 
 
+@DeveloperAPI
 def get_current_node_resource_key() -> str:
     """Get the Ray resource key for current node.
     It can be used for actor placement.
@@ -164,6 +170,7 @@ def get_current_node_resource_key() -> str:
         raise ValueError("Cannot found the node dictionary for current node.")
 
 
+@DeveloperAPI
 def force_on_current_node(task_or_actor):
     """Given a task or actor, place it on the current node.
 

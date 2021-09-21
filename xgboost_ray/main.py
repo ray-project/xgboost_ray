@@ -27,6 +27,7 @@ try:
     from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
     from ray.util import get_node_ip_address, placement_group
+    from ray.util.annotations import PublicAPI, DeveloperAPI
     from ray.util.placement_group import PlacementGroup, \
         remove_placement_group, get_current_placement_group
 
@@ -42,6 +43,7 @@ try:
     RAY_INSTALLED = True
 except ImportError:
     ray = get_node_ip_address = Queue = Event = ActorHandle = logger = None
+    PublicAPI = DeveloperAPI = lambda fn: fn
     RAY_INSTALLED = False
 
 from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources, \
@@ -185,7 +187,7 @@ def _stop_rabit_tracker(rabit_process: multiprocessing.Process):
     rabit_process.terminate()
 
 
-class RabitContext:
+class _RabitContext:
     """This context is used by local training actors to connect to the
     Rabit tracker.
 
@@ -289,6 +291,7 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
     return matrix
 
 
+@PublicAPI(stability="beta")
 @dataclass
 class RayParams:
     """Parameters to configure Ray-specific behavior.
@@ -356,10 +359,10 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
             f"the `ray_params` parameter.")
     if ray_params.num_actors <= 0:
         raise ValueError(
-            f"The `num_actors` parameter is set to 0. Please always specify "
-            f"the number of distributed actors you want to use."
-            f"\nFIX THIS by passing a `RayParams(num_actors=X)` argument "
-            f"to your call to xgboost_ray.")
+            "The `num_actors` parameter is set to 0. Please always specify "
+            "the number of distributed actors you want to use."
+            "\nFIX THIS by passing a `RayParams(num_actors=X)` argument "
+            "to your call to xgboost_ray.")
     elif ray_params.num_actors < 2:
         warnings.warn(
             f"`num_actors` in `ray_params` is smaller than 2 "
@@ -367,6 +370,7 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
     return ray_params
 
 
+@DeveloperAPI
 class RayXGBoostActor:
     """Remote Ray XGBoost actor class.
 
@@ -550,7 +554,7 @@ class RayXGBoostActor:
         # We run xgb.train in a thread to be able to react to the stop event.
         def _train():
             try:
-                with RabitContext(str(id(self)), rabit_args):
+                with _RabitContext(str(id(self)), rabit_args):
                     if LEGACY_CALLBACK:
                         for xgb_callback in kwargs.get("callbacks", []):
                             if isinstance(xgb_callback, TrainingCallback):
@@ -1084,6 +1088,7 @@ def _train(params: Dict,
     return bst, evals_result, _training_state.additional_results
 
 
+@PublicAPI
 def train(
         params: Dict,
         dtrain: RayDMatrix,
@@ -1507,6 +1512,7 @@ def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
     return combine_data(data.sharding, actor_results)
 
 
+@PublicAPI
 def predict(model: xgb.Booster,
             data: RayDMatrix,
             ray_params: Union[None, RayParams, Dict] = None,
