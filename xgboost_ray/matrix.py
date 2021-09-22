@@ -18,6 +18,7 @@ import os
 
 import ray
 from ray import logger
+from ray.util.annotations import PublicAPI, DeveloperAPI
 
 from xgboost_ray.util import Unavailable
 from xgboost_ray.data_sources import DataSource, data_sources, RayFileType
@@ -53,6 +54,7 @@ def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
     return pd.concat(filtered, ignore_index=True, copy=False)
 
 
+@PublicAPI(stability="beta")
 class RayShardingMode(Enum):
     """Enum for different modes of sharding the data.
 
@@ -73,6 +75,7 @@ class RayShardingMode(Enum):
     FIXED = 3
 
 
+@DeveloperAPI
 class RayDataIter(DataIter):
     def __init__(
             self,
@@ -544,6 +547,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
         return refs, n
 
 
+@PublicAPI(stability="beta")
 class RayDMatrix:
     """XGBoost on Ray DMatrix class.
 
@@ -912,6 +916,7 @@ def _get_sharding_indices(sharding: RayShardingMode, rank: int,
     return indices
 
 
+@DeveloperAPI
 def combine_data(sharding: RayShardingMode, data: Iterable) -> np.ndarray:
     if sharding not in (RayShardingMode.BATCH, RayShardingMode.INTERLEAVED):
         raise ValueError(f"Invalid value for `sharding` parameter: "

@@ -11,6 +11,8 @@ except ImportError:
 
 import logging
 
+from ray.util.annotations import PublicAPI
+
 from xgboost_ray.xgb import xgboost as xgb
 
 from xgboost_ray.compat import TrainingCallback
@@ -236,6 +238,7 @@ def _get_tune_resources(num_actors: int, cpus_per_actor: int,
                            "install ray[tune]`.")
 
 
+@PublicAPI(stability="beta")
 def load_model(model_path):
     """Loads the model stored in the provided model_path.
 

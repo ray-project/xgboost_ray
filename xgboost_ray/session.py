@@ -1,7 +1,9 @@
 from typing import Optional
+from ray.util.annotations import PublicAPI, DeveloperAPI
 from ray.util.queue import Queue
 
 
+@DeveloperAPI
 class RayXGBoostSession:
     def __init__(self, rank: int, queue: Optional[Queue]):
         self._rank = rank
@@ -25,6 +27,7 @@ class RayXGBoostSession:
 _session = None
 
 
+@DeveloperAPI
 def init_session(*args, **kwargs):
     global _session
     if _session:
@@ -34,6 +37,7 @@ def init_session(*args, **kwargs):
     _session = RayXGBoostSession(*args, **kwargs)
 
 
+@DeveloperAPI
 def get_session() -> RayXGBoostSession:
     global _session
     if not _session or not isinstance(_session, RayXGBoostSession):
@@ -44,21 +48,25 @@ def get_session() -> RayXGBoostSession:
     return _session
 
 
+@DeveloperAPI
 def set_session_queue(queue: Queue):
     session = get_session()
     session.set_queue(queue)
 
 
+@PublicAPI
 def get_actor_rank() -> int:
     session = get_session()
     return session.get_actor_rank()
 
 
+@PublicAPI
 def get_rabit_rank() -> int:
     import xgboost as xgb
     return xgb.rabit.get_rank()
 
 
+@PublicAPI
 def put_queue(*args, **kwargs):
     session = get_session()
     session.put_queue(*args, **kwargs)

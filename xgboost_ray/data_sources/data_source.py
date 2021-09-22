@@ -5,11 +5,13 @@ from enum import Enum
 import pandas as pd
 
 from ray.actor import ActorHandle
+from ray.util.annotations import PublicAPI
 
 if TYPE_CHECKING:
     from xgboost_ray.xgb import xgboost as xgb
 
 
+@PublicAPI(stability="beta")
 class RayFileType(Enum):
     """Enum for different file types (used for overrides)."""
     CSV = 1
@@ -17,6 +19,7 @@ class RayFileType(Enum):
     PETASTORM = 3
 
 
+@PublicAPI(stability="beta")
 class DataSource:
     """Abstract class for data sources.
 

@@ -3,12 +3,14 @@ from typing import Dict, Sequence, TYPE_CHECKING, Any, Union
 
 import os
 import pandas as pd
+from ray.util.annotations import PublicAPI, DeveloperAPI
 
 if TYPE_CHECKING:
     from xgboost_ray.main import RayXGBoostActor
     from xgboost_ray.matrix import RayDMatrix
 
 
+@PublicAPI(stability="beta")
 class DistributedCallback(ABC):
     """Distributed callbacks for RayXGBoostActors.
 
@@ -51,6 +53,7 @@ class DistributedCallback(ABC):
         pass
 
 
+@DeveloperAPI
 class DistributedCallbackContainer:
     def __init__(self, callbacks: Sequence[DistributedCallback]):
         self.callbacks = callbacks or []
