@@ -2,7 +2,7 @@ import glob
 import uuid
 from enum import Enum
 from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence, \
-    Callable, Type
+    Callable, Type, TYPE_CHECKING
 
 from ray.actor import ActorHandle
 
@@ -13,12 +13,12 @@ except ImportError:
 
 import numpy as np
 import pandas as pd
-import xgboost as xgb
 
 import os
 
 import ray
 from ray import logger
+from ray.util.annotations import PublicAPI, DeveloperAPI
 
 from xgboost_ray.util import Unavailable
 from xgboost_ray.data_sources import DataSource, data_sources, RayFileType
@@ -43,6 +43,9 @@ except ImportError:
     DataIter = object
     LEGACY_MATRIX = True
 
+if TYPE_CHECKING:
+    from xgboost_ray.xgb import xgboost as xgb
+
 Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series, MLDataset]
 
 
@@ -51,6 +54,7 @@ def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
     return pd.concat(filtered, ignore_index=True, copy=False)
 
 
+@PublicAPI(stability="beta")
 class RayShardingMode(Enum):
     """Enum for different modes of sharding the data.
 
@@ -71,6 +75,7 @@ class RayShardingMode(Enum):
     FIXED = 3
 
 
+@DeveloperAPI
 class RayDataIter(DataIter):
     def __init__(
             self,
@@ -194,7 +199,7 @@ class _RayDMatrixLoader:
         # Pass per default
         pass
 
-    def update_matrix_properties(self, matrix: xgb.DMatrix):
+    def update_matrix_properties(self, matrix: "xgb.DMatrix"):
         data_source = self.get_data_source()
         data_source.update_feature_names(matrix, self.feature_names)
 
@@ -542,6 +547,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
         return refs, n
 
 
+@PublicAPI(stability="beta")
 class RayDMatrix:
     """XGBoost on Ray DMatrix class.
 
@@ -780,7 +786,7 @@ class RayDMatrix:
                 del self.refs[rank][name]
         self.loaded = False
 
-    def update_matrix_properties(self, matrix: xgb.DMatrix):
+    def update_matrix_properties(self, matrix: "xgb.DMatrix"):
         self.loader.update_matrix_properties(matrix)
 
     def __hash__(self):
@@ -910,6 +916,7 @@ def _get_sharding_indices(sharding: RayShardingMode, rank: int,
     return indices
 
 
+@DeveloperAPI
 def combine_data(sharding: RayShardingMode, data: Iterable) -> np.ndarray:
     if sharding not in (RayShardingMode.BATCH, RayShardingMode.INTERLEAVED):
         raise ValueError(f"Invalid value for `sharding` parameter: "

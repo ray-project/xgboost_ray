@@ -2,6 +2,7 @@ from typing import Tuple, Dict, Any, List, Optional, Callable, Union, Sequence
 from dataclasses import dataclass, field
 from distutils.version import LooseVersion
 
+import functools
 import multiprocessing
 import os
 import pickle
@@ -14,7 +15,7 @@ import inspect
 import numpy as np
 import pandas as pd
 
-import xgboost as xgb
+from xgboost_ray.xgb import xgboost as xgb
 from xgboost.core import XGBoostError, EarlyStopException
 
 from xgboost_ray.callback import DistributedCallback, \
@@ -24,10 +25,10 @@ from xgboost_ray.compat import TrainingCallback, RabitTracker, LEGACY_CALLBACK
 try:
     import ray
     from ray import logger
-    from ray.services import get_node_ip_address
     from ray.exceptions import RayActorError, RayTaskError
     from ray.actor import ActorHandle
-    from ray.util import placement_group
+    from ray.util import get_node_ip_address, placement_group
+    from ray.util.annotations import PublicAPI, DeveloperAPI
     from ray.util.placement_group import PlacementGroup, \
         remove_placement_group, get_current_placement_group
 
@@ -43,6 +44,15 @@ try:
     RAY_INSTALLED = True
 except ImportError:
     ray = get_node_ip_address = Queue = Event = ActorHandle = logger = None
+
+    def PublicAPI(f):
+        @functools.wraps(f)
+        def inner_f(*args, **kwargs):
+            return f(*args, **kwargs)
+
+        return inner_f
+
+    DeveloperAPI = PublicAPI
     RAY_INSTALLED = False
 
 from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources, \
@@ -77,16 +87,18 @@ ELASTIC_RESTART_RESOURCE_CHECK_S = int(
 ELASTIC_RESTART_GRACE_PERIOD_S = int(
     os.getenv("RXGB_ELASTIC_RESTART_GRACE_PERIOD_S", 10))
 
+xgboost_version = xgb.__version__ if xgb else "0.0.0"
+
 LEGACY_WARNING = (
     f"You are using `xgboost_ray` with a legacy XGBoost version "
-    f"(version {xgb.__version__}). While we try to support "
+    f"(version {xgboost_version}). While we try to support "
     f"older XGBoost versions, please note that this library is only "
     f"fully tested and supported for XGBoost >= 1.4. Please consider "
     f"upgrading your XGBoost version (`pip install -U xgboost`).")
 
 # XGBoost version as an int tuple for comparisions
 XGBOOST_VERSION_TUPLE = tuple(
-    int(x) for x in re.sub(r"[^\.0-9]", "", xgb.__version__).split("."))
+    int(x) for x in re.sub(r"[^\.0-9]", "", xgboost_version).split("."))
 
 
 class RayXGBoostTrainingError(RuntimeError):
@@ -184,7 +196,7 @@ def _stop_rabit_tracker(rabit_process: multiprocessing.Process):
     rabit_process.terminate()
 
 
-class RabitContext:
+class _RabitContext:
     """This context is used by local training actors to connect to the
     Rabit tracker.
 
@@ -288,6 +300,7 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
     return matrix
 
 
+@PublicAPI(stability="beta")
 @dataclass
 class RayParams:
     """Parameters to configure Ray-specific behavior.
@@ -355,10 +368,10 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
             f"the `ray_params` parameter.")
     if ray_params.num_actors <= 0:
         raise ValueError(
-            f"The `num_actors` parameter is set to 0. Please always specify "
-            f"the number of distributed actors you want to use."
-            f"\nFIX THIS by passing a `RayParams(num_actors=X)` argument "
-            f"to your call to xgboost_ray.")
+            "The `num_actors` parameter is set to 0. Please always specify "
+            "the number of distributed actors you want to use."
+            "\nFIX THIS by passing a `RayParams(num_actors=X)` argument "
+            "to your call to xgboost_ray.")
     elif ray_params.num_actors < 2:
         warnings.warn(
             f"`num_actors` in `ray_params` is smaller than 2 "
@@ -366,6 +379,7 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
     return ray_params
 
 
+@DeveloperAPI
 class RayXGBoostActor:
     """Remote Ray XGBoost actor class.
 
@@ -549,7 +563,7 @@ class RayXGBoostActor:
         # We run xgb.train in a thread to be able to react to the stop event.
         def _train():
             try:
-                with RabitContext(str(id(self)), rabit_args):
+                with _RabitContext(str(id(self)), rabit_args):
                     if LEGACY_CALLBACK:
                         for xgb_callback in kwargs.get("callbacks", []):
                             if isinstance(xgb_callback, TrainingCallback):
@@ -1083,6 +1097,7 @@ def _train(params: Dict,
     return bst, evals_result, _training_state.additional_results
 
 
+@PublicAPI(stability="beta")
 def train(
         params: Dict,
         dtrain: RayDMatrix,
@@ -1144,6 +1159,11 @@ def train(
     Returns: An ``xgboost.Booster`` object.
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
+
+    if xgb is None:
+        raise ImportError(
+            "xgboost package is not installed. XGBoost-Ray WILL NOT WORK. "
+            "FIX THIS by running `pip install \"xgboost-ray\"`.")
 
     if _remote is None:
         _remote = _is_client_connected() and \
@@ -1501,6 +1521,7 @@ def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
     return combine_data(data.sharding, actor_results)
 
 
+@PublicAPI(stability="beta")
 def predict(model: xgb.Booster,
             data: RayDMatrix,
             ray_params: Union[None, RayParams, Dict] = None,
@@ -1528,6 +1549,11 @@ def predict(model: xgb.Booster,
 
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
+
+    if xgb is None:
+        raise ImportError(
+            "xgboost package is not installed. XGBoost-Ray WILL NOT WORK. "
+            "FIX THIS by running `pip install \"xgboost-ray\"`.")
 
     if _remote is None:
         _remote = _is_client_connected() and \

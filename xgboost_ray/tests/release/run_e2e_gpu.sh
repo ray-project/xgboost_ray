@@ -6,7 +6,7 @@ fi
 NOW=$(date +%s)
 export SESSION_NAME="xgboost_ray_ci_gpu_${NOW}"
 export NUM_WORKERS=3
-export XGBOOST_RAY_PACKAGE="git+https://github.com/ray-project/xgboost_ray.git@${GITHUB_SHA:-master}#xgboost_ray"
+export XGBOOST_RAY_PACKAGE="git+https://github.com/ray-project/xgboost_ray.git@${GITHUB_SHA:-master}#egg=xgboost_ray"
 export NO_TMUX=1
 
 ./start_gpu_cluster.sh

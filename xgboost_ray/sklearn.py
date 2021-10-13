@@ -32,6 +32,8 @@ import warnings
 import functools
 import inspect
 
+from ray.util.annotations import PublicAPI, DeveloperAPI
+
 from xgboost_ray.main import (RayParams, train, predict, XGBOOST_VERSION_TUPLE,
                               LEGACY_WARNING)
 from xgboost_ray.matrix import RayDMatrix
@@ -278,6 +280,7 @@ def _check_if_params_are_ray_dmatrix(X, sample_weight, base_margin, eval_set,
     return train_dmatrix, evals
 
 
+@DeveloperAPI
 class RayXGBMixin:
     """Mixin class to provide xgboost-ray functionality"""
 
@@ -385,6 +388,7 @@ class RayXGBMixin:
             self.evals_result_ = evals_result
 
 
+@PublicAPI(stability="beta")
 class RayXGBRegressor(XGBRegressor, RayXGBMixin):
     __init__ = _xgboost_version_warn(XGBRegressor.__init__)
 
@@ -558,6 +562,7 @@ class RayXGBRFRegressor(RayXGBRegressor):
 RayXGBRFRegressor.__doc__ = _treat_estimator_doc(XGBRFRegressor.__doc__)
 
 
+@PublicAPI(stability="beta")
 class RayXGBClassifier(XGBClassifier, RayXGBMixin):
     __init__ = _xgboost_version_warn(XGBClassifier.__init__)
 
@@ -897,6 +902,7 @@ class RayXGBRFClassifier(RayXGBClassifier):
 RayXGBRFClassifier.__doc__ = _treat_estimator_doc(XGBRFClassifier.__doc__)
 
 
+@PublicAPI(stability="beta")
 class RayXGBRanker(XGBRanker, RayXGBMixin):
     __init__ = _xgboost_version_warn(XGBRanker.__init__)
 

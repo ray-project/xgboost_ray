@@ -1,13 +1,17 @@
-from typing import Any, Optional, Sequence, Tuple, Dict, List
+from typing import Any, Optional, Sequence, Tuple, Dict, List, TYPE_CHECKING
 
 from enum import Enum
 
 import pandas as pd
-import xgboost as xgb
 
 from ray.actor import ActorHandle
+from ray.util.annotations import PublicAPI
+
+if TYPE_CHECKING:
+    from xgboost_ray.xgb import xgboost as xgb
 
 
+@PublicAPI(stability="beta")
 class RayFileType(Enum):
     """Enum for different file types (used for overrides)."""
     CSV = 1
@@ -15,6 +19,7 @@ class RayFileType(Enum):
     PETASTORM = 3
 
 
+@PublicAPI(stability="beta")
 class DataSource:
     """Abstract class for data sources.
 
@@ -86,7 +91,7 @@ class DataSource:
         raise NotImplementedError
 
     @staticmethod
-    def update_feature_names(matrix: xgb.DMatrix,
+    def update_feature_names(matrix: "xgb.DMatrix",
                              feature_names: Optional[List[str]]):
         """Optionally update feature names before training/prediction
 
