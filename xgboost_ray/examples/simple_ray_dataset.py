@@ -21,11 +21,8 @@ def main(cpus_per_actor, num_actors):
     data = pd.DataFrame(x)
     data["label"] = y
 
-    # Split into 4 partitions
-    partitions = [ray.put(part) for part in np.split(data, 4)]
-
-    # Generate Ray dataset
-    ray_ds = ray.data.from_pandas(partitions)
+    # Generate Ray dataset from 4 partitions
+    ray_ds = ray.data.from_pandas(np.split(data, 4))
 
     train_set = RayDMatrix(ray_ds, "label")
 
