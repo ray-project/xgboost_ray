@@ -57,7 +57,13 @@ class RayDataset(DataSource):
             # We got a list of ObjectRefs belonging to Ray dataset partitions
             return ObjectStore.load_data(
                 data=indices, indices=None, ignore=ignore)
-        obj_refs = data.to_pandas()
+
+        if hasattr(data, "to_pandas_refs"):
+            obj_refs = data.to_pandas_refs()
+        else:
+            # Legacy API
+            obj_refs = data.to_pandas()
+
         ray.wait(obj_refs)
         return ObjectStore.load_data(obj_refs, ignore=ignore, indices=indices)
 
@@ -84,7 +90,11 @@ class RayDataset(DataSource):
         }
 
         # Get object store locations
-        obj_refs = data.to_pandas()
+        if hasattr(data, "to_pandas_refs"):
+            obj_refs = data.to_pandas_refs()
+        else:
+            # Legacy API
+            obj_refs = data.to_pandas()
         ray.wait(obj_refs)
 
         ip_to_parts = defaultdict(list)

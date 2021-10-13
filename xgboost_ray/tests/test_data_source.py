@@ -495,7 +495,11 @@ class RayDatasetSourceTest(_DistributedDataSourceTest, unittest.TestCase):
             mock_nodes.side_effect = node_map
             mock_ranks.side_effect = actor_ranks
 
-            data = ray.data.from_pandas(list(part_to_node.keys()))
+            if hasattr(ray.data, "from_pandas_refs"):
+                data = ray.data.from_pandas_refs(list(part_to_node.keys()))
+            else:
+                # Legacy API
+                data = ray.data.from_pandas(list(part_to_node.keys()))
 
             _, actor_to_parts = RayDataset.get_actor_shards(
                 data=data, actors=[])
@@ -528,9 +532,14 @@ class RayDatasetSourceTest(_DistributedDataSourceTest, unittest.TestCase):
         ])
 
         # Create Ray dataset from distributed partitions
-        ray_ds = ray.data.from_pandas(node_dfs)
+        if hasattr(ray.data, "from_pandas_refs"):
+            ray_ds = ray.data.from_pandas_refs(node_dfs)
+            df_objs = ray_ds.to_pandas_refs()
+        else:
+            # Legacy API
+            ray_ds = ray.data.from_pandas(node_dfs)
+            df_objs = ray_ds.to_pandas()
 
-        df_objs = ray_ds.to_pandas()
         ray.wait(df_objs)
         locations = ray.experimental.get_object_locations(df_objs)
 
