@@ -50,7 +50,6 @@ class Dask(DataSource):
     supports_central_loading = True
     supports_distributed_loading = True
 
-    @ensure_ray_dask_initialized
     @staticmethod
     def is_data_type(data: Any,
                      filetype: Optional[RayFileType] = None) -> bool:
