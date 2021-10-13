@@ -21,6 +21,16 @@ def main(cpus_per_actor, num_actors):
     data = pd.DataFrame(x)
     data["label"] = y
 
+    # There was recent API change - the first clause covers the new
+    # and current Ray master API
+    if hasattr(ray.data, "from_pandas_refs"):
+        # Generate Ray dataset from 4 partitions
+        ray_ds = ray.data.from_pandas(np.split(data, 4))
+    else:
+        # Split into 4 partitions
+        partitions = [ray.put(part) for part in np.split(data, 4)]
+        ray_ds = ray.data.from_pandas(partitions)
+
     # Generate Ray dataset from 4 partitions
     ray_ds = ray.data.from_pandas(np.split(data, 4))
 
