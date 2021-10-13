@@ -37,4 +37,4 @@ file_mounts_sync_continuously: false
 setup_commands:
     - pip install -U {{env["RAY_WHEEL"] | default("ray")}}
     - pip install dask pytest
-    - pip install -U {{env["XGBOOST_RAY_PACKAGE"] | default("xgboost_ray")}}[default]
+    - pip install -U {{env["XGBOOST_RAY_PACKAGE"] | default("xgboost_ray")}}

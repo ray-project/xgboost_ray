@@ -22,16 +22,14 @@ Installation
 You can install the latest XGBoost-Ray release from PIP:
 
 ```bash
-pip install "xgboost_ray[default]"
+pip install "xgboost_ray"
 ```
 
 If you'd like to install the latest master, use this command instead:
 
 ```bash
-pip install "git+https://github.com/ray-project/xgboost_ray.git#egg=xgboost_ray[default]"
+pip install "git+https://github.com/ray-project/xgboost_ray.git#egg=xgboost_ray"
 ```
-
-Omitting `[default]` will cause `xgboost` to not be installed as a dependency.
 
 Usage
 -----
