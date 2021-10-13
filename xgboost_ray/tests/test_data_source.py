@@ -8,7 +8,7 @@ import pandas as pd
 import ray
 from ray import ObjectRef
 
-from xgboost_ray.data_sources import Modin, Dask
+from xgboost_ray.data_sources import Modin, Dask, Partitioned
 from xgboost_ray.data_sources.ray_dataset import RAY_DATASET_AVAILABLE, \
     RayDataset
 from xgboost_ray.main import _RemoteRayXGBoostActor
@@ -575,6 +575,131 @@ class RayDatasetSourceTest(_DistributedDataSourceTest, unittest.TestCase):
                 assigned_df = ray.get(actor_to_parts[actor_rank][i])
                 part_df = pd.DataFrame(partitions[part_id])
 
+                self.assertTrue(
+                    assigned_df.equals(part_df),
+                    msg=f"Assignment failed: Actor rank {actor_rank}, "
+                    f"partition {i} is not partition with ID {part_id}.")
+
+
+class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
+    def _testAssignPartitions(self, part_nodes, actor_nodes,
+                              expected_actor_parts):
+        partitions = [
+            ray.put(pd.DataFrame(p))
+            for p in np.array_split(self.x, len(part_nodes))
+        ]
+
+        # Dict from partition (obj ref) to node host
+        part_to_node = dict(zip(partitions, [f"node{n}" for n in part_nodes]))
+
+        actors_to_node = dict(enumerate(f"node{n}" for n in actor_nodes))
+
+        actor_to_parts = self._getActorToParts(actors_to_node, partitions,
+                                               part_to_node, part_nodes)
+
+        for actor_rank, part_ids in expected_actor_parts.items():
+            for i, part_id in enumerate(part_ids):
+                self.assertEqual(
+                    actor_to_parts[actor_rank][i],
+                    partitions[part_id],
+                    msg=f"Assignment failed: Actor rank {actor_rank}, "
+                    f"partition {i} is not partition with ID {part_id}.")
+
+    def _mk_partitioned(self, part_to_node, nr, nc, shapes):
+        class Parted:
+            """Class exposing __partitioned__
+            """
+
+            def __init__(self, parted):
+                self.__partitioned__ = parted
+
+        num_parts = len(part_to_node)
+        data = {
+            "shape": (nr, nc),
+            "partition_tiling": (num_parts, 1),
+            "get": lambda x: ray.get(x),
+            "partitions": {}
+        }
+        startx = 0
+        for i, pn in enumerate(part_to_node.items()):
+            partref, node = pn
+            data["partitions"][(i, 0)] = {
+                "start": (startx, 0),
+                "shape": shapes[partref],
+                "data": partref,
+                "location": [node],
+            }
+            startx = startx + shapes[partref][0]
+
+        return Parted(data)
+
+    def _getActorToParts(self, actors_to_node, partitions, part_to_node,
+                         part_nodes):
+        def actor_ranks(actors):
+            return actors_to_node
+
+        with patch("xgboost_ray.data_sources.partitioned.get_actor_rank_ips"
+                   ) as mock_ranks:
+            mock_ranks.side_effect = actor_ranks
+
+            nr, nc = self.x.shape
+            data = self._mk_partitioned(
+                part_to_node, nr, nc,
+                {p: ray.get(p).shape
+                 for p in partitions})
+
+            _, actor_to_parts = Partitioned.get_actor_shards(
+                data=data, actors=[])
+
+        return actor_to_parts
+
+    def _testDataSourceAssignment(self, part_nodes, actor_nodes,
+                                  expected_actor_parts):
+        node_ips = [
+            node["NodeManagerAddress"] for node in ray.nodes() if node["Alive"]
+        ]
+        if len(node_ips) < max(max(actor_nodes), max(part_nodes)) + 1:
+            print("Not running on cluster, skipping rest of this test.")
+            return
+
+        actor_node_ips = [node_ips[nid] for nid in actor_nodes]
+        part_node_ips = [node_ips[nid] for nid in part_nodes]
+
+        # Initialize data frames on remote nodes
+        # This way we can control which partition is on which node
+        @ray.remote(num_cpus=0.1)
+        def create_remote_df(arr):
+            return ray.put(pd.DataFrame(arr))
+
+        partitions = np.array_split(self.x, len(part_nodes))
+        node_dfs, shapes = {}, {}
+        for pid, pip in enumerate(part_node_ips):
+            pref = ray.get(
+                create_remote_df.options(resources={
+                    f"node:{pip}": 0.1
+                }).remote(partitions[pid]))
+            node_dfs[pref] = pip
+            shapes[pref] = partitions[pid].shape
+
+        nr, nc = self.x.shape
+        # Create structure with __partitioned__ from distributed partitions
+        parted = self._mk_partitioned(node_dfs, nr, nc, shapes)
+
+        # Create ray actors
+        actors = [
+            _RemoteRayXGBoostActor.options(resources={
+                f"node:{nip}": 0.1
+            }).remote(rank=rank, num_actors=len(actor_nodes))
+            for rank, nip in enumerate(actor_node_ips)
+        ]
+
+        # Calculate shards
+        _, actor_to_parts = Partitioned.get_actor_shards(parted, actors)
+
+        for actor_rank, part_ids in expected_actor_parts.items():
+            for i, part_id in enumerate(part_ids):
+                assigned_df = ray.get(actor_to_parts[actor_rank][i])
+                part_df = pd.DataFrame(partitions[part_id])
                 self.assertTrue(
                     assigned_df.equals(part_df),
                     msg=f"Assignment failed: Actor rank {actor_rank}, "
