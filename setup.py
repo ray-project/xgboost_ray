@@ -10,7 +10,7 @@ setup(
     "distributed computing framework Ray.",
     url="https://github.com/ray-project/xgboost_ray",
     install_requires=[
-        "ray", "numpy>=1.16,<1.20", "pandas", "pyarrow<5.0.0", "wrapt>=1.12.1",
+        "ray>=1.6", "numpy>=1.16,<1.20", "pandas", "pyarrow<5.0.0", "wrapt>=1.12.1",
         "xgboost>=0.90"
     ])
 # pyarrow<5.0.0 pinned until petastorm is updated
