@@ -213,7 +213,7 @@ def _start_rabit_tracker(num_workers: int):
 
     env = {"DMLC_NUM_WORKER": num_workers}
 
-    rabit_tracker = _RabitTracker(hostIP=host, nslave=num_workers)
+    rabit_tracker = _RabitTracker(host, num_workers)
 
     # Get tracker Host + IP
     env.update(rabit_tracker.slave_envs())
