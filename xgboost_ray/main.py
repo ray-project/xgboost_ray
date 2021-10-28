@@ -173,14 +173,24 @@ def _is_client_connected() -> bool:
         return False
 
 
-class _RabitTracker(RabitTracker):
+class _RabitTrackerCompatMixin:
+    """Fallback calls to legacy terminology"""
+
+    def accept_workers(self, n_workers: int):
+        return self.accept_slaves(n_workers)
+
+    def worker_envs(self):
+        return self.slave_envs()
+
+
+class _RabitTracker(RabitTracker, _RabitTrackerCompatMixin):
     """
     This method overwrites the xgboost-provided RabitTracker to switch
     from a daemon thread to a multiprocessing Process. This is so that
     we are able to terminate/kill the tracking process at will.
     """
 
-    def start(self, nslave):
+    def start(self, nworker):
         # TODO: refactor RabitTracker to support spawn process creation.
         # In python 3.8, spawn is used as default process creation on macOS.
         # But spawn doesn't work because `run` is not pickleable.
@@ -188,7 +198,7 @@ class _RabitTracker(RabitTracker):
         multiprocessing.set_start_method("fork", force=True)
 
         def run():
-            self.accept_slaves(nslave)
+            self.accept_workers(nworker)
 
         self.thread = multiprocessing.Process(target=run, args=())
         self.thread.start()
@@ -216,7 +226,7 @@ def _start_rabit_tracker(num_workers: int):
     rabit_tracker = _RabitTracker(host, num_workers)
 
     # Get tracker Host + IP
-    env.update(rabit_tracker.slave_envs())
+    env.update(rabit_tracker.worker_envs())
     rabit_tracker.start(num_workers)
 
     logger.debug(
