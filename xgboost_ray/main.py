@@ -72,7 +72,6 @@ from xgboost_ray.session import init_session, put_queue, \
     set_session_queue
 
 
-@functools.lru_cache(maxsize=None)
 def _get_environ(item: str, old_val: Any):
     env_var = f"RXGB_{item}"
     new_val = old_val
