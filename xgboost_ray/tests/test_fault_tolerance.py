@@ -107,9 +107,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         # Two workers finished, so N=32
         self.assertEqual(additional_results["total_n"], 32)
 
-    @patch("xgboost_ray.main.ELASTIC_RESTART_DISABLED", True)
     def testTrainingContinuationElasticKilled(self):
         """This should continue after one actor died."""
+        os.environ["ELASTIC_RESTART_DISABLED"] = "1"
+
         logging.getLogger().setLevel(10)
 
         additional_results = {}
@@ -148,9 +149,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         # Only one worker finished, so n=16
         self.assertEqual(additional_results["total_n"], 16)
 
-    @patch("xgboost_ray.main.ELASTIC_RESTART_DISABLED", False)
     def testTrainingContinuationElasticKilledRestarted(self):
         """This should continue after one actor died and restart it."""
+        os.environ["ELASTIC_RESTART_DISABLED"] = "0"
+
         logging.getLogger().setLevel(10)
 
         ft_manager = FaultToleranceManager.remote()
@@ -201,9 +203,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         # Both workers finished, so n=32
         self.assertEqual(additional_results["total_n"], 32)
 
-    @patch("xgboost_ray.main.ELASTIC_RESTART_DISABLED", True)
     def testTrainingContinuationElasticMultiKilled(self):
         """This should still show 20 boost rounds after two failures."""
+        os.environ["ELASTIC_RESTART_DISABLED"] = "1"
+
         logging.getLogger().setLevel(10)
 
         additional_results = {}
@@ -232,9 +235,9 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         self.assertSequenceEqual(list(self.y), list(pred_y))
         print(f"Got correct predictions: {pred_y}")
 
-    @patch("xgboost_ray.main.ELASTIC_RESTART_DISABLED", True)
     def testTrainingContinuationElasticFailed(self):
         """This should continue after one actor failed training."""
+        os.environ["ELASTIC_RESTART_DISABLED"] = "1"
 
         additional_results = {}
         keep_actors = {}
@@ -419,8 +422,6 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
     @patch("xgboost_ray.main._PrepareActorTask", _FakeTask)
     @patch("xgboost_ray.elastic._PrepareActorTask", _FakeTask)
     @patch("xgboost_ray.main._RemoteRayXGBoostActor", MagicMock)
-    @patch("xgboost_ray.main.ELASTIC_RESTART_GRACE_PERIOD_S", 30)
-    @patch("xgboost_ray.elastic.ELASTIC_RESTART_GRACE_PERIOD_S", 30)
     def testMaybeScheduleNewActors(self):
         """Test scheduling of new actors if resources become available.
 
@@ -435,6 +436,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         from xgboost_ray.main import _TrainingState
         from xgboost_ray.elastic import _update_scheduled_actor_states
         from xgboost_ray.elastic import _maybe_schedule_new_actors
+
+        os.environ["ELASTIC_RESTART_GRACE_PERIOD_S"] = "30"
 
         # Three actors are dead
         actors = [
@@ -520,7 +523,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             # actor.
             _update_scheduled_actor_states(training_state=state)
 
-            # Grace period is set through ELASTIC_RESTART_GRACE_PERIOD_S
+            # Grace period is set through ENV.ELASTIC_RESTART_GRACE_PERIOD_S
             # Allow for some slack in test execution
             self.assertGreaterEqual(state.restart_training_at,
                                     time.time() + 22)
