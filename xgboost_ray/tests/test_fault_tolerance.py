@@ -109,7 +109,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingContinuationElasticKilled(self):
         """This should continue after one actor died."""
-        os.environ["ELASTIC_RESTART_DISABLED"] = "1"
+        os.environ["RXGB_ELASTIC_RESTART_DISABLED"] = "1"
 
         logging.getLogger().setLevel(10)
 
@@ -151,7 +151,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingContinuationElasticKilledRestarted(self):
         """This should continue after one actor died and restart it."""
-        os.environ["ELASTIC_RESTART_DISABLED"] = "0"
+        os.environ["RXGB_ELASTIC_RESTART_DISABLED"] = "0"
 
         logging.getLogger().setLevel(10)
 
@@ -205,7 +205,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingContinuationElasticMultiKilled(self):
         """This should still show 20 boost rounds after two failures."""
-        os.environ["ELASTIC_RESTART_DISABLED"] = "1"
+        os.environ["RXGB_ELASTIC_RESTART_DISABLED"] = "1"
 
         logging.getLogger().setLevel(10)
 
@@ -237,7 +237,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingContinuationElasticFailed(self):
         """This should continue after one actor failed training."""
-        os.environ["ELASTIC_RESTART_DISABLED"] = "1"
+        os.environ["RXGB_ELASTIC_RESTART_DISABLED"] = "1"
 
         additional_results = {}
         keep_actors = {}
@@ -437,7 +437,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         from xgboost_ray.elastic import _update_scheduled_actor_states
         from xgboost_ray.elastic import _maybe_schedule_new_actors
 
-        os.environ["ELASTIC_RESTART_GRACE_PERIOD_S"] = "30"
+        os.environ["RXGB_ELASTIC_RESTART_GRACE_PERIOD_S"] = "30"
 
         # Three actors are dead
         actors = [

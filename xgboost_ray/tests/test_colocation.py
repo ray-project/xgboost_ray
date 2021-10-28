@@ -178,7 +178,7 @@ class TestColocation(unittest.TestCase):
 
     def test_timeout(self):
         """Checks that an error occurs when placement group setup times out."""
-        os.environ["PLACEMENT_GROUP_TIMEOUT_S"] = "5"
+        os.environ["RXGB_PLACEMENT_GROUP_TIMEOUT_S"] = "5"
 
         with self.ray_start_cluster() as cluster:
             ray.init(address=cluster.address)
