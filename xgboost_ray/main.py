@@ -79,7 +79,7 @@ def _get_environ(item: str, old_val: Any):
         new_val_str = os.environ.get(env_var)
 
         if isinstance(old_val, bool):
-            new_val = bool(new_val_str)
+            new_val = bool(int(new_val_str))
         elif isinstance(old_val, int):
             new_val = int(new_val_str)
         elif isinstance(old_val, float):
