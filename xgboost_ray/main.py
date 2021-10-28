@@ -16,7 +16,14 @@ import numpy as np
 import pandas as pd
 
 from xgboost_ray.xgb import xgboost as xgb
-from xgboost.core import XGBoostError, EarlyStopException
+from xgboost.core import XGBoostError
+
+try:
+    from xgboost.core import EarlyStopException
+except ImportError:
+
+    class EarlyStopException(XGBoostError):
+        pass
 
 from xgboost_ray.callback import DistributedCallback, \
     DistributedCallbackContainer
@@ -1058,7 +1065,7 @@ def _train(params: Dict,
                     callback_returns=callback_returns)
 
             if ray_params.elastic_training \
-                    and not env.ELASTIC_RESTART_DISABLED:
+                    and not ENV.ELASTIC_RESTART_DISABLED:
                 _maybe_schedule_new_actors(
                     training_state=_training_state,
                     num_cpus_per_actor=cpus_per_actor,
