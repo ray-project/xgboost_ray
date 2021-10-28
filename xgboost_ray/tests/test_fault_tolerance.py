@@ -33,6 +33,9 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
     """
 
     def setUp(self):
+        # Set default
+        os.environ["RXGB_ELASTIC_RESTART_DISABLED"] = "0"
+
         repeat = 8  # Repeat data a couple of times for stability
         self.x = np.array([
             [1, 0, 0, 0],  # Feature 0 -> Label 0
@@ -151,8 +154,6 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingContinuationElasticKilledRestarted(self):
         """This should continue after one actor died and restart it."""
-        os.environ["RXGB_ELASTIC_RESTART_DISABLED"] = "0"
-
         logging.getLogger().setLevel(10)
 
         ft_manager = FaultToleranceManager.remote()
@@ -288,6 +289,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
     def testTrainingStopElastic(self):
         """This should now stop training after one actor died."""
+        os.environ["RXGB_ELASTIC_RESTART_DISABLED"] = "0"
+
         # The `train()` function raises a RuntimeError
         ft_manager = FaultToleranceManager.remote()
 
