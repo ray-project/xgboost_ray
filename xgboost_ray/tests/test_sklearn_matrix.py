@@ -52,8 +52,7 @@ class XGBoostRaySklearnMatrixTest(unittest.TestCase):
                 use_label_encoder=False, **self.params).fit(
                     train_matrix, None)
 
-        with self.assertRaisesRegex(Exception,
-                                    r"must be \(RayDMatrix, str\)"):
+        with self.assertRaisesRegex(Exception, r"must be \(RayDMatrix, str\)"):
             RayXGBClassifier(
                 use_label_encoder=False, **self.params).fit(
                     train_matrix, None, eval_set=[(X_test, y_test)])
@@ -100,8 +99,7 @@ class XGBoostRaySklearnMatrixTest(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "num_class"):
             RayXGBClassifier(**self.params).fit(train_matrix, None)
 
-        with self.assertRaisesRegex(Exception,
-                                    r"must be \(RayDMatrix, str\)"):
+        with self.assertRaisesRegex(Exception, r"must be \(RayDMatrix, str\)"):
             RayXGBClassifier(**self.params).fit(
                 train_matrix, None, eval_set=[(X_test, y_test)])
 
@@ -140,8 +138,7 @@ class XGBoostRaySklearnMatrixTest(unittest.TestCase):
         train_matrix = RayDMatrix(X_train, y_train)
         test_matrix = RayDMatrix(X_test, y_test)
 
-        with self.assertRaisesRegex(Exception,
-                                    r"must be \(RayDMatrix, str\)"):
+        with self.assertRaisesRegex(Exception, r"must be \(RayDMatrix, str\)"):
             RayXGBRegressor(**self.params).fit(
                 train_matrix, None, eval_set=[(X_test, y_test)])
 
