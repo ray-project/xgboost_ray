@@ -5,8 +5,7 @@ import ray
 
 from xgboost_ray.main import RayParams, _TrainingState, \
     logger, ActorHandle, _PrepareActorTask, _create_actor, \
-    RayXGBoostActorAvailable, \
-    ELASTIC_RESTART_RESOURCE_CHECK_S, ELASTIC_RESTART_GRACE_PERIOD_S
+    RayXGBoostActorAvailable, ENV
 
 from xgboost_ray.matrix import RayDMatrix
 
@@ -36,7 +35,7 @@ def _maybe_schedule_new_actors(
 
     # Check periodically every n seconds.
     if now < training_state.last_resource_check_at + \
-            ELASTIC_RESTART_RESOURCE_CHECK_S:
+            ENV.ELASTIC_RESTART_RESOURCE_CHECK_S:
         return False
 
     training_state.last_resource_check_at = now
@@ -108,7 +107,7 @@ def _update_scheduled_actor_states(training_state: _TrainingState):
         # If an actor became ready but other actors are pending, we wait
         # for n seconds before restarting, as chances are that they become
         # ready as well (e.g. if a large node came up).
-        grace_period = ELASTIC_RESTART_GRACE_PERIOD_S
+        grace_period = ENV.ELASTIC_RESTART_GRACE_PERIOD_S
         if training_state.restart_training_at is None:
             logger.debug(
                 f"A RayXGBoostActor became ready for training. Waiting "

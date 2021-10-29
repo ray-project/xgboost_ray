@@ -16,7 +16,14 @@ import numpy as np
 import pandas as pd
 
 from xgboost_ray.xgb import xgboost as xgb
-from xgboost.core import XGBoostError, EarlyStopException
+from xgboost.core import XGBoostError
+
+try:
+    from xgboost.core import EarlyStopException
+except ImportError:
+
+    class EarlyStopException(XGBoostError):
+        pass
 
 from xgboost_ray.callback import DistributedCallback, \
     DistributedCallbackContainer
@@ -64,28 +71,56 @@ from xgboost_ray.matrix import RayDMatrix, combine_data, \
 from xgboost_ray.session import init_session, put_queue, \
     set_session_queue
 
-# Whether to use SPREAD placement group strategy for training.
-_USE_SPREAD_STRATEGY = int(os.getenv("RXGB_USE_SPREAD_STRATEGY", 1))
 
-# How long to wait for placement group creation before failing.
-PLACEMENT_GROUP_TIMEOUT_S = int(
-    os.getenv("RXGB_PLACEMENT_GROUP_TIMEOUT_S", 100))
+def _get_environ(item: str, old_val: Any):
+    env_var = f"RXGB_{item}"
+    new_val = old_val
+    if env_var in os.environ:
+        new_val_str = os.environ.get(env_var)
 
-# Status report frequency when waiting for initial actors and during training
-STATUS_FREQUENCY_S = int(os.getenv("RXGB_STATUS_FREQUENCY_S", 30))
+        if isinstance(old_val, bool):
+            new_val = bool(int(new_val_str))
+        elif isinstance(old_val, int):
+            new_val = int(new_val_str)
+        elif isinstance(old_val, float):
+            new_val = float(new_val_str)
+        else:
+            new_val = new_val_str
 
-# If restarting failed actors is disabled
-ELASTIC_RESTART_DISABLED = bool(
-    int(os.getenv("RXGB_ELASTIC_RESTART_DISABLED", 0)))
+    return new_val
 
-# How often to check for new available resources
-ELASTIC_RESTART_RESOURCE_CHECK_S = int(
-    os.getenv("RXGB_ELASTIC_RESTART_RESOURCE_CHECK_S", 30))
 
-# How long to wait before triggering a new start of the training loop
-# when new actors become available
-ELASTIC_RESTART_GRACE_PERIOD_S = int(
-    os.getenv("RXGB_ELASTIC_RESTART_GRACE_PERIOD_S", 10))
+@dataclass
+class _XGBoostEnv:
+    # Whether to use SPREAD placement group strategy for training.
+    USE_SPREAD_STRATEGY: bool = True
+
+    # How long to wait for placement group creation before failing.
+    PLACEMENT_GROUP_TIMEOUT_S: int = 100
+
+    # Status report frequency when waiting for initial actors
+    # and during training
+    STATUS_FREQUENCY_S: int = 30
+
+    # If restarting failed actors is disabled
+    ELASTIC_RESTART_DISABLED: bool = False
+
+    # How often to check for new available resources
+    ELASTIC_RESTART_RESOURCE_CHECK_S: int = 30
+
+    # How long to wait before triggering a new start of the training loop
+    # when new actors become available
+    ELASTIC_RESTART_GRACE_PERIOD_S: int = 10
+
+    def __getattribute__(self, item):
+        old_val = super(_XGBoostEnv, self).__getattribute__(item)
+        new_val = _get_environ(item, old_val)
+        if new_val != old_val:
+            setattr(self, item, new_val)
+        return super(_XGBoostEnv, self).__getattribute__(item)
+
+
+ENV = _XGBoostEnv()
 
 xgboost_version = xgb.__version__ if xgb else "0.0.0"
 
@@ -138,14 +173,24 @@ def _is_client_connected() -> bool:
         return False
 
 
-class _RabitTracker(RabitTracker):
+class _RabitTrackerCompatMixin:
+    """Fallback calls to legacy terminology"""
+
+    def accept_workers(self, n_workers: int):
+        return self.accept_slaves(n_workers)
+
+    def worker_envs(self):
+        return self.slave_envs()
+
+
+class _RabitTracker(RabitTracker, _RabitTrackerCompatMixin):
     """
     This method overwrites the xgboost-provided RabitTracker to switch
     from a daemon thread to a multiprocessing Process. This is so that
     we are able to terminate/kill the tracking process at will.
     """
 
-    def start(self, nslave):
+    def start(self, nworker):
         # TODO: refactor RabitTracker to support spawn process creation.
         # In python 3.8, spawn is used as default process creation on macOS.
         # But spawn doesn't work because `run` is not pickleable.
@@ -153,7 +198,7 @@ class _RabitTracker(RabitTracker):
         multiprocessing.set_start_method("fork", force=True)
 
         def run():
-            self.accept_slaves(nslave)
+            self.accept_workers(nworker)
 
         self.thread = multiprocessing.Process(target=run, args=())
         self.thread.start()
@@ -178,10 +223,10 @@ def _start_rabit_tracker(num_workers: int):
 
     env = {"DMLC_NUM_WORKER": num_workers}
 
-    rabit_tracker = _RabitTracker(hostIP=host, nslave=num_workers)
+    rabit_tracker = _RabitTracker(host, num_workers)
 
     # Get tracker Host + IP
-    env.update(rabit_tracker.slave_envs())
+    env.update(rabit_tracker.worker_envs())
     rabit_tracker.start(num_workers)
 
     logger.debug(
@@ -704,7 +749,7 @@ def _create_actor(
 
 def _trigger_data_load(actor, dtrain, evals):
     wait_load = [actor.load_data.remote(dtrain)]
-    for deval, name in evals:
+    for deval, _name in evals:
         wait_load.append(actor.load_data.remote(deval))
     return wait_load
 
@@ -778,7 +823,7 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
     pg = placement_group(bundles, strategy=strategy)
     # Wait for placement group to get created.
     logger.debug("Waiting for placement group to start.")
-    ready, _ = ray.wait([pg.ready()], timeout=PLACEMENT_GROUP_TIMEOUT_S)
+    ready, _ = ray.wait([pg.ready()], timeout=ENV.PLACEMENT_GROUP_TIMEOUT_S)
     if ready:
         logger.debug("Placement group has started.")
     else:
@@ -955,7 +1000,7 @@ def _train(params: Dict,
         # Construct list before calling any() to force evaluation
         ready_states = [task.is_ready() for task in prepare_actor_tasks]
         while not all(ready_states):
-            if time.time() >= last_status + STATUS_FREQUENCY_S:
+            if time.time() >= last_status + ENV.STATUS_FREQUENCY_S:
                 wait_time = time.time() - start_wait
                 logger.info(f"Waiting until actors are ready "
                             f"({wait_time:.0f} seconds passed).")
@@ -1029,7 +1074,7 @@ def _train(params: Dict,
                     callback_returns=callback_returns)
 
             if ray_params.elastic_training \
-                    and not ELASTIC_RESTART_DISABLED:
+                    and not ENV.ELASTIC_RESTART_DISABLED:
                 _maybe_schedule_new_actors(
                     training_state=_training_state,
                     num_cpus_per_actor=cpus_per_actor,
@@ -1041,7 +1086,7 @@ def _train(params: Dict,
                 # This may raise RayXGBoostActorAvailable
                 _update_scheduled_actor_states(_training_state)
 
-            if time.time() >= last_status + STATUS_FREQUENCY_S:
+            if time.time() >= last_status + ENV.STATUS_FREQUENCY_S:
                 wait_time = time.time() - start_wait
                 logger.info(f"Training in progress "
                             f"({wait_time:.0f} seconds since last restart).")
@@ -1290,7 +1335,7 @@ def train(
     if not dtrain.loaded and not dtrain.distributed:
         dtrain.load_data(ray_params.num_actors)
 
-    for (deval, name) in evals:
+    for (deval, _name) in evals:
         if not deval.has_label:
             raise ValueError(
                 "Evaluation data has no label set. Please make sure to set "
@@ -1321,7 +1366,7 @@ def train(
                 placement_strategy = None
             else:
                 placement_strategy = "PACK"
-        elif bool(_USE_SPREAD_STRATEGY):
+        elif bool(ENV.USE_SPREAD_STRATEGY):
             placement_strategy = "SPREAD"
 
     if placement_strategy is not None:
