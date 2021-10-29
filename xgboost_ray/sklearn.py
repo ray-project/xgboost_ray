@@ -347,10 +347,17 @@ class RayXGBMixin:
             **compat_predict_kwargs,
         )
 
-    def _ray_get_wrap_evaluation_matrices_compat_kwargs(self) -> dict:
+    def _ray_get_wrap_evaluation_matrices_compat_kwargs(
+            self, label_transform=None) -> dict:
+        ret = {}
+        if "label_transform" in inspect.signature(
+                _wrap_evaluation_matrices).parameters:
+            # XGBoost < 1.6.0
+            identity_func = lambda x: x  # noqa
+            ret["label_transform"] = label_transform or identity_func
         if hasattr(self, "enable_categorical"):
-            return {"enable_categorical": self.enable_categorical}
-        return {}
+            ret["enable_categorical"] = self.enable_categorical
+        return ret
 
     # copied from the file in the top comment
     # provided here for compatibility with legacy xgboost versions
@@ -450,8 +457,13 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
         else:
             obj = None
 
-        model, feval, params = self._configure_fit(xgb_model, eval_metric,
-                                                   params)
+        try:
+            model, feval, params = self._configure_fit(xgb_model, eval_metric,
+                                                       params)
+        except TypeError:
+            # XGBoost >= 1.6.0
+            model, feval, params, early_stopping_rounds = self._configure_fit(
+                xgb_model, eval_metric, params, early_stopping_rounds)
 
         # remove those as they will be set in RayXGBoostActor
         params.pop("n_jobs", None)
@@ -638,8 +650,13 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
             params["objective"] = "multi:softprob"
             params["num_class"] = self.n_classes_
 
-        model, feval, params = self._configure_fit(xgb_model, eval_metric,
-                                                   params)
+        try:
+            model, feval, params = self._configure_fit(xgb_model, eval_metric,
+                                                       params)
+        except TypeError:
+            # XGBoost >= 1.6.0
+            model, feval, params, early_stopping_rounds = self._configure_fit(
+                xgb_model, eval_metric, params, early_stopping_rounds)
 
         if train_dmatrix is None:
             train_dmatrix, evals = _wrap_evaluation_matrices(
@@ -656,13 +673,13 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
                 base_margin_eval_set=base_margin_eval_set,
                 eval_group=None,
                 eval_qid=None,
-                label_transform=label_transform,
                 # changed in xgboost-ray:
                 create_dmatrix=lambda **kwargs: RayDMatrix(**{
                     **kwargs,
                     **ray_dmatrix_params
                 }),
-                **self._ray_get_wrap_evaluation_matrices_compat_kwargs())
+                **self._ray_get_wrap_evaluation_matrices_compat_kwargs(
+                    label_transform=label_transform))
 
         # remove those as they will be set in RayXGBoostActor
         params.pop("n_jobs", None)
@@ -970,8 +987,13 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
         evals_result = {}
         params = self.get_xgb_params()
 
-        model, feval, params = self._configure_fit(xgb_model, eval_metric,
-                                                   params)
+        try:
+            model, feval, params = self._configure_fit(xgb_model, eval_metric,
+                                                       params)
+        except TypeError:
+            # XGBoost >= 1.6.0
+            model, feval, params, early_stopping_rounds = self._configure_fit(
+                xgb_model, eval_metric, params, early_stopping_rounds)
         if callable(feval):
             raise ValueError(
                 "Custom evaluation metric is not yet supported for XGBRanker.")

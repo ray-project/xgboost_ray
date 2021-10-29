@@ -43,32 +43,29 @@ class XGBoostRaySklearnMatrixTest(unittest.TestCase):
         train_matrix = RayDMatrix(X_train, y_train)
         test_matrix = RayDMatrix(X_test, y_test)
 
-        with self.assertRaisesRegex(Exception, "use_label_encoder"):
-            RayXGBClassifier(
-                use_label_encoder=True, **self.params).fit(train_matrix, None)
+        if (XGBOOST_VERSION_TUPLE < (1, 6, 0)):
+            with self.assertRaisesRegex(Exception, "use_label_encoder"):
+                RayXGBClassifier(
+                    use_label_encoder=True, **self.params).fit(
+                        train_matrix, None)
 
         with self.assertRaisesRegex(Exception, "num_class"):
-            RayXGBClassifier(
-                use_label_encoder=False, **self.params).fit(
-                    train_matrix, None)
+            RayXGBClassifier(**self.params).fit(train_matrix, None)
 
         with self.assertRaisesRegex(Exception, r"must be \(RayDMatrix, str\)"):
-            RayXGBClassifier(
-                use_label_encoder=False, **self.params).fit(
-                    train_matrix, None, eval_set=[(X_test, y_test)])
+            RayXGBClassifier(**self.params).fit(
+                train_matrix, None, eval_set=[(X_test, y_test)])
 
         with self.assertRaisesRegex(Exception,
                                     r"must be \(array_like, array_like\)"):
-            RayXGBClassifier(
-                use_label_encoder=False, **self.params).fit(
-                    X_train, y_train, eval_set=[(test_matrix, "eval")])
+            RayXGBClassifier(**self.params).fit(
+                X_train, y_train, eval_set=[(test_matrix, "eval")])
 
         RayXGBClassifier(
-            use_label_encoder=False, num_class=n_class, **self.params).fit(
-                train_matrix, None)
+            num_class=n_class, **self.params).fit(train_matrix, None)
 
         clf = RayXGBClassifier(
-            use_label_encoder=False, num_class=n_class, **self.params).fit(
+            num_class=n_class, **self.params).fit(
                 train_matrix, None, eval_set=[(test_matrix, "eval")])
 
         clf.predict(test_matrix)
