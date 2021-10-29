@@ -30,7 +30,7 @@ jobs:
 
   test_linux_ray_master:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 100
     strategy:
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
@@ -60,15 +60,21 @@ jobs:
       run: |
         ./xgboost_ray/tests/env_info.sh
     - name: Run tests
-      run: |
-        bash ./run_ci_tests.sh
+      uses: nick-invision/retry@v2
+      with:
+        timeout_minutes: 30
+        max_attempts: 3
+        command: bash ./run_ci_tests.sh
     - name: Run examples
-      run: |
-        bash ./run_ci_examples.sh
+      uses: nick-invision/retry@v2
+      with:
+        timeout_minutes: 30
+        max_attempts: 3
+        command: bash ./run_ci_examples.sh
 
   test_linux_ray_release:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 100
     strategy:
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
@@ -91,17 +97,23 @@ jobs:
       run: |
         ./xgboost_ray/tests/env_info.sh
     - name: Run tests
-      run: |
-        bash ./run_ci_tests.sh
+      uses: nick-invision/retry@v2
+      with:
+        timeout_minutes: 30
+        max_attempts: 3
+        command: bash ./run_ci_tests.sh
     - name: Run examples
-      run: |
-        bash ./run_ci_examples.sh
+      uses: nick-invision/retry@v2
+      with:
+        timeout_minutes: 30
+        max_attempts: 3
+        command: bash ./run_ci_examples.sh
 
   test_linux_compat:
     # Test compatibility when some optional libraries are missing
     # Test runs on latest ray release
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 100
     strategy:
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
@@ -129,16 +141,22 @@ jobs:
       run: |
         ./xgboost_ray/tests/env_info.sh
     - name: Run tests
-      run: |
-        bash ./run_ci_tests.sh --no-tune
+      uses: nick-invision/retry@v2
+      with:
+        timeout_minutes: 30
+        max_attempts: 3
+        command: bash ./run_ci_tests.sh --no-tune
     - name: Run examples
-      run: |
-        bash ./run_ci_examples.sh --no-tune
+      uses: nick-invision/retry@v2
+      with:
+        timeout_minutes: 30
+        max_attempts: 3
+        command: bash ./run_ci_examples.sh --no-tune
 
   test_linux_cutting_edge:
     # Tests on cutting edge, i.e. latest Ray master, latest XGBoost master
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 100
     strategy:
       matrix:
         python-version: [3.6.9, 3.7, 3.8]
@@ -185,16 +203,22 @@ jobs:
       run: |
         ./xgboost_ray/tests/env_info.sh
     - name: Run tests
-      run: |
-        bash ./run_ci_tests.sh
+      uses: nick-invision/retry@v2
+      with:
+        timeout_minutes: 30
+        max_attempts: 3
+        command: bash ./run_ci_tests.sh
     - name: Run examples
-      run: |
-        bash ./run_ci_examples.sh
+      uses: nick-invision/retry@v2
+      with:
+        timeout_minutes: 30
+        max_attempts: 3
+        command: bash ./run_ci_examples.sh
 
   test_linux_xgboost_legacy:
     # Tests on XGBoost 0.90 and latest Ray release
     runs-on: ubuntu-latest
-    timeout-minutes: 38
+    timeout-minutes: 100
     strategy:
       matrix:
         python-version: [3.6.9]
@@ -220,8 +244,14 @@ jobs:
       run: |
         ./xgboost_ray/tests/env_info.sh
     - name: Run tests
-      run: |
-        bash ./run_ci_tests.sh
+      uses: nick-invision/retry@v2
+      with:
+        timeout_minutes: 30
+        max_attempts: 3
+        command: bash ./run_ci_tests.sh
     - name: Run examples
-      run: |
-        bash ./run_ci_examples.sh
+      uses: nick-invision/retry@v2
+      with:
+        timeout_minutes: 30
+        max_attempts: 3
+        command: bash ./run_ci_examples.sh
