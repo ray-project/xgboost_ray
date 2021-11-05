@@ -250,7 +250,7 @@ class _RayDMatrixLoader:
 
         x = local_data
         if exclude_cols:
-            x = x[x.columns.difference(exclude_cols)]
+            x = x[[col for col in x.columns if col not in exclude_cols]]
 
         return x, label, weight, base_margin, label_lower_bound, \
             label_upper_bound
