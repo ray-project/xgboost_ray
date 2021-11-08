@@ -865,12 +865,17 @@ def _create_communication_processes(added_tune_callback: bool = False):
 def _validate_kwargs_for_func(kwargs: Dict[str, Any], func: Callable,
                               func_name: str):
     """Raise exception if kwargs are not valid for a given function."""
-    valid_keys = inspect.getfullargspec(func)[0]
-    invalid_kwargs = [k for k in kwargs if k not in valid_keys]
-    if invalid_kwargs:
+    sig = inspect.signature(func)
+    try:
+        sig.bind_partial(**kwargs)
+    except TypeError as e:
+        # Try to find set of invalid kwargs
+        valid_keys = inspect.getfullargspec(func)[0]
+        invalid_kwargs = [k for k in kwargs if k not in valid_keys]
+
         raise TypeError(
             f"Got invalid keyword arguments to be passed to `{func_name}`. "
-            f"Invalid keys: {invalid_kwargs}")
+            f"Please check these arguments: {invalid_kwargs}") from e
 
 
 @dataclass
