@@ -655,8 +655,9 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
                                                        params)
         except TypeError:
             # XGBoost >= 1.6.0
-            model, feval, params, early_stopping_rounds = self._configure_fit(
-                xgb_model, eval_metric, params, early_stopping_rounds)
+            (model, feval, params, early_stopping_rounds,
+             callbacks) = self._configure_fit(xgb_model, eval_metric, params,
+                                              early_stopping_rounds, callbacks)
 
         if train_dmatrix is None:
             train_dmatrix, evals = _wrap_evaluation_matrices(
@@ -992,8 +993,9 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
                                                        params)
         except TypeError:
             # XGBoost >= 1.6.0
-            model, feval, params, early_stopping_rounds = self._configure_fit(
-                xgb_model, eval_metric, params, early_stopping_rounds)
+            (model, feval, params, early_stopping_rounds,
+             callbacks) = self._configure_fit(xgb_model, eval_metric, params,
+                                              early_stopping_rounds, callbacks)
         if callable(feval):
             raise ValueError(
                 "Custom evaluation metric is not yet supported for XGBRanker.")
