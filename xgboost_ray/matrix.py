@@ -2,7 +2,7 @@ import glob
 import uuid
 from enum import Enum
 from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence, \
-    Callable, Type, TYPE_CHECKING
+    Callable, Type, TYPE_CHECKING, Set
 
 from ray.actor import ActorHandle
 
@@ -223,30 +223,30 @@ class _RayDMatrixLoader:
         `label_upper_bound`
 
         """
-        exclude_cols: List[str] = []  # Exclude these columns from `x`
+        exclude_cols: Set[str] = set()  # Exclude these columns from `x`
 
         label, exclude = data_source.get_column(local_data, self.label)
         if exclude:
-            exclude_cols.append(exclude)
+            exclude_cols.add(exclude)
 
         weight, exclude = data_source.get_column(local_data, self.weight)
         if exclude:
-            exclude_cols.append(exclude)
+            exclude_cols.add(exclude)
 
         base_margin, exclude = data_source.get_column(local_data,
                                                       self.base_margin)
         if exclude:
-            exclude_cols.append(exclude)
+            exclude_cols.add(exclude)
 
         label_lower_bound, exclude = data_source.get_column(
             local_data, self.label_lower_bound)
         if exclude:
-            exclude_cols.append(exclude)
+            exclude_cols.add(exclude)
 
         label_upper_bound, exclude = data_source.get_column(
             local_data, self.label_upper_bound)
         if exclude:
-            exclude_cols.append(exclude)
+            exclude_cols.add(exclude)
 
         x = local_data
         if exclude_cols:
