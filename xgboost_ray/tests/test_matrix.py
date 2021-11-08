@@ -44,7 +44,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         self.assertTrue(ray.get(same.remote(data, data)))
 
     def testColumnOrdering(self):
-        """when excluding cols, the remaining col order should be preserved."""
+        """When excluding cols, the remaining col order should be preserved."""
 
         cols = [str(i) for i in range(50)]
         df = pd.DataFrame(np.random.randn(1, len(cols)), columns=cols)
