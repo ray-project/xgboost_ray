@@ -43,6 +43,16 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         data = RayDMatrix(self.x, self.y)
         self.assertTrue(ray.get(same.remote(data, data)))
 
+    def testColumnOrdering(self):
+        """When excluding cols, the remaining col order should be preserved."""
+
+        cols = [str(i) for i in range(50)]
+        df = pd.DataFrame(np.random.randn(1, len(cols)), columns=cols)
+        matrix = RayDMatrix(df, label=cols[-1], num_actors=1)
+        data = matrix.get_data(0)["data"]
+
+        assert data.columns.tolist() == cols[:-1]
+
     def _testMatrixCreation(self, in_x, in_y, **kwargs):
         if "sharding" not in kwargs:
             kwargs["sharding"] = RayShardingMode.BATCH
