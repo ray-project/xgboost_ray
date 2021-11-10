@@ -13,4 +13,3 @@ setup(
         "ray>=1.6", "numpy>=1.16,<1.20", "pandas", "wrapt>=1.12.1",
         "xgboost>=0.90"
     ])
-# pyarrow<5.0.0 pinned until petastorm is updated
