@@ -1,8 +1,31 @@
-from typing import Any, Optional, Sequence, List
+from typing import Any, Optional, Sequence, List, Tuple, Dict
+
+from ray.actor import ActorHandle
 
 import pandas as pd
-from ray.util.data import MLDataset as MLDatasetType
 from xgboost_ray.data_sources.data_source import DataSource, RayFileType
+
+try:
+    import pyarrow  # noqa: F401
+    PYARROW_INSTALLED = True
+except (ImportError, AttributeError):
+    PYARROW_INSTALLED = False
+
+if PYARROW_INSTALLED:
+    from ray.util.data import MLDataset as MLDatasetType
+else:
+    MLDatasetType = None
+
+
+def _assert_pyarrow_installed():
+    if not PYARROW_INSTALLED:
+        raise RuntimeError(
+            "Tried to use MLDataset as a data source, but pyarrow is not "
+            "installed. This function shouldn't have been called. "
+            "\nFIX THIS by installing pyarrow: `pip install pyarrow`. "
+            "\nPlease also raise an issue on our GitHub: "
+            "https://github.com/ray-project/xgboost_ray as this part of "
+            "the code should not have been reached.")
 
 
 class MLDataset(DataSource):
@@ -20,6 +43,8 @@ class MLDataset(DataSource):
     @staticmethod
     def is_data_type(data: Any,
                      filetype: Optional[RayFileType] = None) -> bool:
+        if not PYARROW_INSTALLED:
+            return False
         return isinstance(data, MLDatasetType)
 
     @staticmethod
@@ -27,6 +52,7 @@ class MLDataset(DataSource):
                   ignore: Optional[Sequence[str]] = None,
                   indices: Optional[Sequence[int]] = None,
                   **kwargs):
+        _assert_pyarrow_installed()
         indices = indices or list(range(0, data.num_shards()))
 
         shards: List[pd.DataFrame] = [
@@ -44,3 +70,14 @@ class MLDataset(DataSource):
     @staticmethod
     def get_n(data: MLDatasetType):
         return data.num_shards()
+
+    @staticmethod
+    def convert_to_series(data: MLDatasetType) -> pd.Series:
+        _assert_pyarrow_installed()
+        return super().convert_to_series(data)
+
+    @staticmethod
+    def get_actor_shards(data: MLDatasetType, actors: Sequence[ActorHandle]
+                         ) -> Tuple[Any, Optional[Dict[int, Any]]]:
+        _assert_pyarrow_installed()
+        return super().get_actor_shards(data, actors)
