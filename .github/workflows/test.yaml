@@ -133,7 +133,7 @@ jobs:
       # Disables modin, Ray Data and Ray Tune (via tabulate)
       run: |
         python -m pip uninstall -y modin
-        python -m pip uninstall -y pyarrow
+        python -m pip uninstall -y tabulate
     - name: Install package
       run: |
         python -m pip install -e .
