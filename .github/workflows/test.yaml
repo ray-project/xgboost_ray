@@ -130,7 +130,7 @@ jobs:
         python -m pip install -U ray
         if [ -f requirements-test.txt ]; then python -m pip install -r requirements-test.txt; fi
     - name: Uninstall unavailable dependencies
-      # Disables modin, Ray Data and Ray Tune (via tabulate)
+      # Disables modin and Ray Tune (via tabulate)
       run: |
         python -m pip uninstall -y modin
         python -m pip uninstall -y tabulate
