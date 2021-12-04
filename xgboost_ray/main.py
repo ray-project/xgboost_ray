@@ -671,7 +671,7 @@ class RayXGBoostActor:
 
         if data not in self._data:
             self.load_data(data)
-        local_data = self._data[data]
+        local_data = _get_dmatrix(data, self._data[data])
 
         predictions = model.predict(local_data, **kwargs)
         if predictions.ndim == 1:
