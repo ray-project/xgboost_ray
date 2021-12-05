@@ -543,10 +543,8 @@ class RayXGBoostActor:
             self._local_n[data] = sum(len(a) for a in param["data"])
         else:
             self._local_n[data] = len(param["data"])
-        data.unload_data()  # Free object store
 
-        matrix = _get_dmatrix(data, param)
-        self._data[data] = matrix
+        self._data[data] = param
 
         self._distributed_callbacks.after_data_loading(self, data)
 
@@ -578,19 +576,9 @@ class RayXGBoostActor:
         if dtrain not in self._data:
             self.load_data(dtrain)
 
-        local_dtrain = self._data[dtrain]
-
-        if not local_dtrain.get_label().size:
-            raise RuntimeError(
-                "Training data has no label set. Please make sure to set "
-                "the `label` argument when initializing `RayDMatrix()` "
-                "for data you would like to train on.")
-
-        local_evals = []
-        for deval, name in evals:
+        for deval, _name in evals:
             if deval not in self._data:
                 self.load_data(deval)
-            local_evals.append((self._data[deval], name))
 
         evals_result = dict()
 
@@ -609,6 +597,21 @@ class RayXGBoostActor:
         def _train():
             try:
                 with _RabitContext(str(id(self)), rabit_args):
+
+                    local_dtrain = _get_dmatrix(dtrain, self._data[dtrain])
+
+                    if not local_dtrain.get_label().size:
+                        raise RuntimeError(
+                            "Training data has no label set. Please make sure "
+                            "to set the `label` argument when initializing "
+                            "`RayDMatrix()` for data you would like "
+                            "to train on.")
+
+                    local_evals = []
+                    for deval, name in evals:
+                        local_evals.append((_get_dmatrix(
+                            deval, self._data[deval]), name))
+
                     if LEGACY_CALLBACK:
                         for xgb_callback in kwargs.get("callbacks", []):
                             if isinstance(xgb_callback, TrainingCallback):
@@ -668,7 +671,7 @@ class RayXGBoostActor:
 
         if data not in self._data:
             self.load_data(data)
-        local_data = self._data[data]
+        local_data = _get_dmatrix(data, self._data[data])
 
         predictions = model.predict(local_data, **kwargs)
         if predictions.ndim == 1:
