@@ -25,14 +25,11 @@ def main(cpus_per_actor, num_actors):
     # and current Ray master API
     if hasattr(ray.data, "from_pandas_refs"):
         # Generate Ray dataset from 4 partitions
-        ray_ds = ray.data.from_pandas(np.split(data, 4))
+        ray_ds = ray.data.from_pandas(data).repartition(num_actors)
     else:
         # Split into 4 partitions
-        partitions = [ray.put(part) for part in np.split(data, 4)]
+        partitions = [ray.put(part) for part in np.split(data, num_actors)]
         ray_ds = ray.data.from_pandas(partitions)
-
-    # Generate Ray dataset from 4 partitions
-    ray_ds = ray.data.from_pandas(np.split(data, 4))
 
     train_set = RayDMatrix(ray_ds, "label")
 
