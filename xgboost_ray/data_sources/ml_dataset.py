@@ -74,10 +74,10 @@ class MLDataset(DataSource):
     @staticmethod
     def convert_to_series(data: MLDatasetType) -> pd.Series:
         _assert_pyarrow_installed()
-        return super().convert_to_series(data)
+        return DataSource.convert_to_series(data)
 
     @staticmethod
     def get_actor_shards(data: MLDatasetType, actors: Sequence[ActorHandle]
                          ) -> Tuple[Any, Optional[Dict[int, Any]]]:
         _assert_pyarrow_installed()
-        return super().get_actor_shards(data, actors)
+        return DataSource.get_actor_shards(data, actors)
