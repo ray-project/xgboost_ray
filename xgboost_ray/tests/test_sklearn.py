@@ -387,7 +387,10 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         )
         clf.fit(X, y)
         assert clf.best_score_ < 0.7
-        assert clf.best_params_ == {"n_estimators": 100, "max_depth": 4}
+        if XGBOOST_VERSION_TUPLE >= (1, 6, 0):
+            assert clf.best_params_ == {"n_estimators": 200, "max_depth": 2}
+        else:
+            assert clf.best_params_ == {"n_estimators": 100, "max_depth": 4}
 
     def test_regression_with_custom_objective(self):
         self._init_ray()
@@ -960,8 +963,14 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         reg.fit(X, y)
 
         config = json.loads(reg.get_booster().save_config())
-        assert (config["learner"]["gradient_booster"]["updater"]["prune"][
-            "train_param"]["interaction_constraints"] == "[[0, 1], [2, 3, 4]]")
+        if XGBOOST_VERSION_TUPLE >= (1, 6, 0):
+            assert (config["learner"]["gradient_booster"]["updater"][
+                "grow_histmaker"]["train_param"]["interaction_constraints"] ==
+                    "[[0, 1], [2, 3, 4]]")
+        else:
+            assert (config["learner"]["gradient_booster"]["updater"]["prune"][
+                "train_param"]["interaction_constraints"] ==
+                    "[[0, 1], [2, 3, 4]]")
 
     # TODO check why this is not working (output is empty, probably due to Ray)
     # def test_parameter_validation(self):
