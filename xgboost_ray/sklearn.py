@@ -963,9 +963,9 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
             raise ValueError("`qid` is required for ranking.")
 
         if eval_set is not None:
-            if eval_group is None and eval_qid is None:
-                raise ValueError("eval_group or eval_qid is required if"
-                                 " eval_set is not None")
+            if eval_qid is None:
+                raise ValueError("`eval_qid `is required if"
+                                 " `eval_set` is not None")
 
         evals_result = {}
         ray_dmatrix_params = ray_dmatrix_params or {}
