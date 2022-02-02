@@ -83,6 +83,7 @@ class RayDataIter(DataIter):
             label: List[Optional[Data]],
             missing: Optional[float],
             weight: List[Optional[Data]],
+            qid: List[Optional[Data]],
             base_margin: List[Optional[Data]],
             label_lower_bound: List[Optional[Data]],
             label_upper_bound: List[Optional[Data]],
@@ -97,6 +98,7 @@ class RayDataIter(DataIter):
         self._label = label
         self._missing = missing
         self._weight = weight
+        self._qid = qid
         self._base_margin = base_margin
         self._label_lower_bound = label_lower_bound
         self._label_upper_bound = label_upper_bound
@@ -128,6 +130,7 @@ class RayDataIter(DataIter):
             data=self._prop(self._data),
             label=self._prop(self._label),
             weight=self._prop(self._weight),
+            qid=self._prop(self._qid),
             group=None,
             label_lower_bound=self._prop(self._label_lower_bound),
             label_upper_bound=self._prop(self._label_upper_bound),
@@ -148,6 +151,7 @@ class _RayDMatrixLoader:
                  label_upper_bound: Optional[Data] = None,
                  feature_names: Optional[List[str]] = None,
                  feature_types: Optional[List[np.dtype]] = None,
+                 qid: Optional[Data] = None,
                  filetype: Optional[RayFileType] = None,
                  ignore: Optional[List[str]] = None,
                  **kwargs):
@@ -160,6 +164,7 @@ class _RayDMatrixLoader:
         self.label_upper_bound = label_upper_bound
         self.feature_names = feature_names
         self.feature_types = feature_types
+        self.qid = qid
 
         self.data_source = None
         self.actor_shards = None
@@ -233,6 +238,10 @@ class _RayDMatrixLoader:
         if exclude:
             exclude_cols.add(exclude)
 
+        qid, exclude = data_source.get_column(local_data, self.qid)
+        if exclude:
+            exclude_cols.add(exclude)
+
         base_margin, exclude = data_source.get_column(local_data,
                                                       self.base_margin)
         if exclude:
@@ -253,7 +262,7 @@ class _RayDMatrixLoader:
             x = x[[col for col in x.columns if col not in exclude_cols]]
 
         return x, label, weight, base_margin, label_lower_bound, \
-            label_upper_bound
+            label_upper_bound, qid
 
     def load_data(self,
                   num_actors: int,
@@ -341,7 +350,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
         # yet. Instead, we'll be selecting the rows below.
         local_df = data_source.load_data(
             self.data, ignore=self.ignore, indices=None, **self.kwargs)
-        x, y, w, b, ll, lu = self._split_dataframe(
+        x, y, w, b, ll, lu, qid = self._split_dataframe(
             local_df, data_source=data_source)
 
         if isinstance(x, list):
@@ -362,7 +371,8 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 "label_lower_bound": ray.put(ll.iloc[indices]
                                              if ll is not None else None),
                 "label_upper_bound": ray.put(lu.iloc[indices]
-                                             if lu is not None else None)
+                                             if lu is not None else None),
+                "qid": ray.put(qid.iloc[indices] if qid is not None else None),
             }
             refs[i] = actor_refs
 
@@ -505,7 +515,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 indices=rank_shards,
                 ignore=self.ignore,
                 **self.kwargs)
-            x, y, w, b, ll, lu = self._split_dataframe(
+            x, y, w, b, ll, lu, qid = self._split_dataframe(
                 local_df, data_source=data_source)
 
             if isinstance(x, list):
@@ -517,7 +527,8 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             indices = _get_sharding_indices(sharding, rank, num_actors, n)
 
             if not indices:
-                x, y, w, b, ll, lu = None, None, None, None, None, None
+                x, y, w, b, ll, lu, qid = (None, None, None, None, None, None,
+                                           None)
                 n = 0
             else:
                 local_df = data_source.load_data(
@@ -525,7 +536,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                     ignore=self.ignore,
                     indices=indices,
                     **self.kwargs)
-                x, y, w, b, ll, lu = self._split_dataframe(
+                x, y, w, b, ll, lu, qid = self._split_dataframe(
                     local_df, data_source=data_source)
 
                 if isinstance(x, list):
@@ -540,7 +551,8 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 "weight": ray.put(w),
                 "base_margin": ray.put(b),
                 "label_lower_bound": ray.put(ll),
-                "label_upper_bound": ray.put(lu)
+                "label_upper_bound": ray.put(lu),
+                "qid": ray.put(qid),
             }
         }
 
@@ -648,6 +660,7 @@ class RayDMatrix:
                  label_upper_bound: Optional[Data] = None,
                  feature_names: Optional[List[str]] = None,
                  feature_types: Optional[List[np.dtype]] = None,
+                 qid: Optional[Data] = None,
                  num_actors: Optional[int] = None,
                  filetype: Optional[RayFileType] = None,
                  ignore: Optional[List[str]] = None,
@@ -656,10 +669,20 @@ class RayDMatrix:
                  lazy: bool = False,
                  **kwargs):
 
+        if kwargs.get("group", None) is not None:
+            raise ValueError(
+                "`group` parameter is not supported. "
+                "If you are using XGBoost-Ray, use `qid` parameter instead. "
+                "If you are using LightGBM-Ray, ranking is not yet supported.")
+
+        if qid is not None and weight is not None:
+            raise NotImplementedError("per-group weight is not implemented.")
+
         self._uid = uuid.uuid4().int
 
         self.feature_names = feature_names
         self.feature_types = feature_types
+        self.qid = qid
         self.missing = missing
 
         self.num_actors = num_actors
@@ -691,6 +714,7 @@ class RayDMatrix:
                 feature_types=feature_types,
                 filetype=filetype,
                 ignore=ignore,
+                qid=qid,
                 **kwargs)
         else:
             self.loader = _CentralRayDMatrixLoader(
@@ -705,6 +729,7 @@ class RayDMatrix:
                 feature_types=feature_types,
                 filetype=filetype,
                 ignore=ignore,
+                qid=qid,
                 **kwargs)
 
         self.refs: Dict[int, Dict[str, ray.ObjectRef]] = {}
@@ -809,6 +834,7 @@ class RayDeviceQuantileDMatrix(RayDMatrix):
                  label_upper_bound: Optional[Data] = None,
                  feature_names: Optional[List[str]] = None,
                  feature_types: Optional[List[np.dtype]] = None,
+                 qid: Optional[Data] = None,
                  *args,
                  **kwargs):
         if cp is None:
@@ -831,6 +857,7 @@ class RayDeviceQuantileDMatrix(RayDMatrix):
             label_upper_bound=None,
             feature_names=feature_names,
             feature_types=feature_types,
+            qid=qid,
             *args,
             **kwargs)
 

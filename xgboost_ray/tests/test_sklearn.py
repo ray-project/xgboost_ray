@@ -42,7 +42,8 @@ from xgboost_ray.sklearn import (RayXGBClassifier, RayXGBRegressor,
                                  RayXGBRFClassifier, RayXGBRFRegressor,
                                  RayXGBRanker)
 
-from xgboost_ray.main import XGBOOST_VERSION_TUPLE
+from xgboost_ray.main import (XGBOOST_VERSION_TUPLE, RayDMatrix, RayParams,
+                              train, predict)
 from xgboost_ray.matrix import RayShardingMode
 
 
@@ -387,10 +388,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         )
         clf.fit(X, y)
         assert clf.best_score_ < 0.7
-        if XGBOOST_VERSION_TUPLE >= (1, 6, 0):
-            assert clf.best_params_ == {"n_estimators": 200, "max_depth": 2}
-        else:
-            assert clf.best_params_ == {"n_estimators": 100, "max_depth": 4}
+        assert clf.best_params_ == {"n_estimators": 100, "max_depth": 4}
 
     def test_regression_with_custom_objective(self):
         self._init_ray()
@@ -1213,6 +1211,64 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
             cls = RayXGBClassifier()
             cls.load_model(path)  # no error
+
+    def test_ranking(self):
+        # generate random data
+        x_train = np.random.rand(1000, 10)
+        y_train = np.random.randint(5, size=1000)
+        train_qid = np.repeat(np.array([list(range(20))]), 50)
+
+        x_valid = np.random.rand(200, 10)
+        y_valid = np.random.randint(5, size=200)
+        valid_qid = np.repeat(np.array([list(range(4))]), 50)
+
+        x_test = np.random.rand(100, 10)
+
+        params = {
+            "objective": "rank:pairwise",
+            "learning_rate": 0.1,
+            "gamma": 1.0,
+            "min_child_weight": 0.1,
+            "max_depth": 6,
+            "n_estimators": 4,
+            "random_state": 1,
+            "n_jobs": 2
+        }
+        model = RayXGBRanker(**params)
+        model.fit(
+            x_train,
+            y_train,
+            qid=train_qid,
+            eval_set=[(x_valid, y_valid)],
+            eval_qid=[valid_qid])
+        assert model.evals_result()
+
+        pred = model.predict(x_test)
+
+        train_data = RayDMatrix(x_train, y_train, qid=train_qid)
+        valid_data = RayDMatrix(x_valid, y_valid, qid=valid_qid)
+        test_data = RayDMatrix(x_test)
+
+        params_orig = {
+            "objective": "rank:pairwise",
+            "eta": 0.1,
+            "gamma": 1.0,
+            "min_child_weight": 0.1,
+            "max_depth": 6,
+            "random_state": 1
+        }
+        xgb_model_orig = train(
+            params_orig,
+            train_data,
+            num_boost_round=4,
+            evals=[(valid_data, "validation")],
+            ray_params=RayParams(num_actors=2, max_actor_restarts=0))
+        pred_orig = predict(
+            xgb_model_orig,
+            test_data,
+            ray_params=RayParams(num_actors=2, max_actor_restarts=0))
+
+        np.testing.assert_almost_equal(pred, pred_orig)
 
 
 if __name__ == "__main__":
