@@ -19,6 +19,8 @@ def main(cpus_per_actor, num_actors):
     y[bits_to_flip] = 1 - y[bits_to_flip]
 
     data = pd.DataFrame(x)
+    # Ray Datasets require all columns to be string
+    data.columns = [str(c) for c in data.columns]
     data["label"] = y
 
     # There was recent API change - the first clause covers the new

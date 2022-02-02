@@ -443,7 +443,8 @@ class RayDatasetSourceTest(_DistributedDataSourceTest, unittest.TestCase):
     def _testAssignPartitions(self, part_nodes, actor_nodes,
                               expected_actor_parts):
         partitions = [
-            ray.put(pd.DataFrame(p))
+            ray.put(
+                pd.DataFrame(p, columns=[str(x) for x in range(p.shape[1])]))
             for p in np.array_split(self.x, len(part_nodes))
         ]
 
