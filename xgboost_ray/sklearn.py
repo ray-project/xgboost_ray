@@ -239,9 +239,13 @@ def _xgboost_version_warn(f):
     return inner_f
 
 
-def _check_if_params_are_ray_dmatrix(X, sample_weight, base_margin, eval_set,
+def _check_if_params_are_ray_dmatrix(X,
+                                     sample_weight,
+                                     base_margin,
+                                     eval_set,
                                      sample_weight_eval_set,
-                                     base_margin_eval_set):
+                                     base_margin_eval_set,
+                                     eval_qid=None):
     train_dmatrix = None
     evals = ()
     eval_set = eval_set or ()
@@ -266,6 +270,8 @@ def _check_if_params_are_ray_dmatrix(X, sample_weight, base_margin, eval_set,
             params_to_warn_about.append("sample_weight_eval_set")
         if base_margin_eval_set is not None:
             params_to_warn_about.append("base_margin_eval_set")
+        if eval_qid is not None:
+            params_to_warn_about.append("eval_qid")
         if params_to_warn_about:
             warnings.warn(
                 "`eval_set` is composed of RayDMatrix tuples, "
@@ -951,18 +957,24 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
             ray_dmatrix_params: Optional[Dict] = None,
     ):
 
-        # check if group information is provided
-        if group is None and qid is None:
-            raise ValueError("group or qid is required for ranking task")
+        if not (group is None and eval_group is None):
+            raise ValueError("Use `qid` instead of `group` for RayXGBRanker.")
+        if qid is None:
+            raise ValueError("`qid` is required for ranking.")
 
         if eval_set is not None:
-            if eval_group is None and eval_qid is None:
-                raise ValueError("eval_group or eval_qid is required if"
-                                 " eval_set is not None")
+            if eval_qid is None:
+                raise ValueError("`eval_qid `is required if"
+                                 " `eval_set` is not None")
+
+        evals_result = {}
+        ray_dmatrix_params = ray_dmatrix_params or {}
+
+        params = self.get_xgb_params()
 
         train_dmatrix, evals = _check_if_params_are_ray_dmatrix(
             X, sample_weight, base_margin, eval_set, sample_weight_eval_set,
-            base_margin_eval_set)
+            base_margin_eval_set, eval_qid)
 
         if train_dmatrix is None:
             train_dmatrix, evals = _wrap_evaluation_matrices(
@@ -985,9 +997,6 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
                     **ray_dmatrix_params
                 }),
                 **self._ray_get_wrap_evaluation_matrices_compat_kwargs())
-
-        evals_result = {}
-        params = self.get_xgb_params()
 
         try:
             model, feval, params = self._configure_fit(xgb_model, eval_metric,

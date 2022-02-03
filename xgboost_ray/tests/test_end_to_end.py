@@ -9,6 +9,8 @@ import xgboost as xgb
 import ray
 from ray.exceptions import RayActorError, RayTaskError
 
+from scipy.sparse import csr_matrix
+
 from xgboost_ray import RayParams, train, RayDMatrix, predict, RayShardingMode
 from xgboost_ray.main import RayXGBoostTrainingError
 from xgboost_ray.callback import DistributedCallback
@@ -340,6 +342,38 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
                 evals=[(train_set, "train")],
                 ray_params=RayParams(num_actors=1, max_actor_restarts=0),
                 totally_invalid_kwarg="")
+
+    def testRanking(self):
+        Xrow = np.array([1, 2, 6, 8, 11, 14, 16, 17])
+        Xcol = np.array([0, 0, 1, 1, 2, 2, 3, 3])
+        X = csr_matrix(
+            (np.ones(shape=8), (Xrow, Xcol)), shape=(20, 4)).toarray()
+        y = np.array([
+            0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+            0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0
+        ])
+
+        qid = np.array([0] * 5 + [1] * 5 + [2] * 5 + [3] * 5)
+        dtrain = RayDMatrix(X, label=y, qid=qid)
+
+        params = {
+            "eta": 1,
+            "objective": "rank:pairwise",
+            "eval_metric": ["auc", "aucpr"],
+            "max_depth": 1
+        }
+        evals_result = {}
+        train(
+            params,
+            dtrain,
+            10,
+            evals=[(dtrain, "train")],
+            evals_result=evals_result,
+            ray_params=RayParams(num_actors=2, max_actor_restarts=0))
+        auc_rec = evals_result["train"]["auc"]
+        self.assertTrue(all(p <= q for p, q in zip(auc_rec, auc_rec[1:])))
+        auc_rec = evals_result["train"]["aucpr"]
+        self.assertTrue((p <= q for p, q in zip(auc_rec, auc_rec[1:])))
 
 
 if __name__ == "__main__":
