@@ -338,6 +338,8 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
 
         if LEGACY_MATRIX:
             param.pop("base_margin", None)
+
+        if "qid" not in inspect.signature(xgb.DMatrix).parameters:
             param.pop("qid", None)
 
         matrix = xgb.DMatrix(**param)
