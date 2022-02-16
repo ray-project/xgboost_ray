@@ -373,12 +373,25 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         in_x = self.x
         in_y = self.y
         weight = np.array([1] * len(in_y))
-        qid = np.array([0] + [1] * len(in_y-1))
+        qid = np.array([0] + [1] * len(in_y - 1))
         base_margin = np.array([1] * len(in_y))
         label_lower_bound = np.array([0.1] * len(in_y))
         label_upper_bound = np.array([1] * len(in_y))
-        self._testMatrixCreation(in_x, in_y, weight=weight, base_margin=base_margin, label_lower_bound=label_lower_bound, label_upper_bound=label_upper_bound)
-        self._testMatrixCreation(in_x, in_y, qid=qid, base_margin=base_margin, label_lower_bound=label_lower_bound, label_upper_bound=label_upper_bound)
+        self._testMatrixCreation(
+            in_x,
+            in_y,
+            weight=weight,
+            base_margin=base_margin,
+            label_lower_bound=label_lower_bound,
+            label_upper_bound=label_upper_bound)
+        self._testMatrixCreation(
+            in_x,
+            in_y,
+            qid=qid,
+            base_margin=base_margin,
+            label_lower_bound=label_lower_bound,
+            label_upper_bound=label_upper_bound)
+
 
 if __name__ == "__main__":
     import pytest
