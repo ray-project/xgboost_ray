@@ -334,7 +334,9 @@ the `num_actors` argument.
 ### Multi GPU training
 XGBoost-Ray enables multi GPU training. The XGBoost core backend
 will automatically leverage NCCL2 for cross-device communication.
-All you have to do is to start one actor per GPU.
+All you have to do is to start one actor per GPU and set XGBoost's
+`tree_method` to a GPU-compatible option, eg. `gpu_hist` (see XGBoost
+documentation for more details.) 
 
 For instance, if you have 2 machines with 4 GPUs each, you will want
 to start 8 remote actors, and set `gpus_per_actor=1`. There is usually
