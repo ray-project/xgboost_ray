@@ -35,9 +35,14 @@ Usage
 -----
 XGBoost-Ray provides a drop-in replacement for XGBoost's `train`
 function. To pass data, instead of using `xgb.DMatrix` you will 
-have to use `xgboost_ray.RayDMatrix`.
+have to use `xgboost_ray.RayDMatrix`. You can also use a scikit-learn
+interface - see next section.
 
-Distributed training parameters are configured with a
+Just as in original `xgb.train()` function, the 
+[training parameters](https://xgboost.readthedocs.io/en/stable/parameter.html)
+are passed as the `params` dictionary.
+
+Ray-specific distributed training parameters are configured with a
 `xgboost_ray.RayParams` object. For instance, you can set
 the `num_actors` property to specify how many distributed actors
 you would like to use.
@@ -198,7 +203,8 @@ columns = [
 dtrain = RayDMatrix(
     path, 
     label="passenger_count",  # Will select this column as the label
-    columns=columns, 
+    columns=columns,
+    # ignore=["total_amount"],  # Optional list of columns to ignore
     filetype=RayFileType.PARQUET)
 ```
 
@@ -420,7 +426,8 @@ ray_params = RayDMatrix([
 ```
 
 Lastly, XGBoost-Ray supports **distributed dataframe** representations, such
-as [Modin](https://modin.readthedocs.io/en/latest/) and 
+as [Ray Datasets](https://docs.ray.io/en/latest/data/dataset.html),
+[Modin](https://modin.readthedocs.io/en/latest/) and 
 [Dask dataframes](https://docs.dask.org/en/latest/dataframe.html)
 (used with [Dask on Ray](https://docs.ray.io/en/master/dask-on-ray.html)). 
 Here, XGBoost-Ray will check on which nodes the distributed partitions 
@@ -439,6 +446,8 @@ ray_params = RayDMatrix(existing_modin_df)
 
 ### Data sources
 
+The following data sources can be used with a `RayDMatrix` object.
+
 | Type                                                             | Centralized loading | Distributed loading |
 |------------------------------------------------------------------|---------------------|---------------------|
 | Numpy array                                                      | Yes                 | No                  |
@@ -447,8 +456,8 @@ ray_params = RayDMatrix(existing_modin_df)
 | Multi CSV                                                        | Yes                 | Yes                 |
 | Single Parquet                                                   | Yes                 | No                  |
 | Multi Parquet                                                    | Yes                 | Yes                 |
+| [Ray Dataset](https://docs.ray.io/en/latest/data/dataset.html)   | Yes                 | Yes                 |
 | [Petastorm](https://github.com/uber/petastorm)                   | Yes                 | Yes                 |
-| [Ray MLDataset](https://docs.ray.io/en/master/iter.html)         | Yes                 | Yes                 |
 | [Dask dataframe](https://docs.dask.org/en/latest/dataframe.html) | Yes                 | Yes                 |
 | [Modin dataframe](https://modin.readthedocs.io/en/latest/)       | Yes                 | Yes                 |
 
