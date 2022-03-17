@@ -67,11 +67,13 @@ class XGBoostRayTuneTest(unittest.TestCase):
     def testNumIters(self):
         """Test that the number of reported tune results is correct"""
         ray_params = RayParams(cpus_per_actor=1, num_actors=2)
+        params = self.params.copy()
+        params["num_boost_round"] = tune.gridsearch([1, 3])
         analysis = tune.run(
             self.train_func(ray_params),
             config=self.params,
             resources_per_trial=ray_params.get_tune_resources(),
-            num_samples=2)
+            num_samples=1)
 
         self.assertSequenceEqual(
             list(analysis.results_df["training_iteration"]),
