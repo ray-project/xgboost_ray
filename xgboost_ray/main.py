@@ -1078,10 +1078,19 @@ def _train(params: Dict,
     # The train() wrapper function will then handle the error.
     start_wait = time.time()
     last_status = start_wait
+
+    # When the number of trees/dataset size is very small,
+    # training can be too fast and finish before the queue Actor
+    # gets to process the calls it has recieved. This is a very rare edge
+    # case, but it can show up in CI.
+    # In order to mitigate, if the queue has not been handled before,
+    # we simply wait a moment before checking it one last time.
+    has_queue_been_handled = False
     try:
         not_ready = training_futures
         while not_ready:
             if _training_state.queue:
+                has_queue_been_handled = True
                 _handle_queue(
                     queue=_training_state.queue,
                     checkpoint=_training_state.checkpoint,
@@ -1111,6 +1120,8 @@ def _train(params: Dict,
             ray.get(ready)
 
         # Get items from queue one last time
+        if not has_queue_been_handled:
+            time.sleep(1)
         if _training_state.queue:
             _handle_queue(
                 queue=_training_state.queue,
