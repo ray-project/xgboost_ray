@@ -1,24 +1,26 @@
-Distributed XGBoost on Ray
-==========================
+<!--$UNCOMMENT(xgboost-ray)=-->
+
+# Distributed XGBoost on Ray
+<!--$REMOVE-->
 ![Build Status](https://github.com/ray-project/xgboost_ray/workflows/pytest%20on%20push/badge.svg)
 [![docs.ray.io](https://img.shields.io/badge/docs-ray.io-blue)](https://docs.ray.io/en/master/xgboost-ray.html)
-
-XGBoost-Ray is a distributed backend for 
+<!--$END_REMOVE-->
+XGBoost-Ray is a distributed backend for
 [XGBoost](https://xgboost.readthedocs.io/en/latest/), built
-on top of 
+on top of
 [distributed computing framework Ray](https://ray.io).
 
 XGBoost-Ray
-- enables [**multi-node**](#usage) and [**multi-GPU**](#multi-gpu-training) training
-- integrates seamlessly with distributed [**hyperparameter optimization**](#hyperparameter-tuning) library [Ray Tune](http://tune.io)
-- comes with advanced [**fault tolerance handling**](#fault-tolerance) mechanisms, and
-- supports [**distributed dataframes** and **distributed data loading**](#distributed-data-loading)
+
+- enables [multi-node](#usage) and [multi-GPU](#multi-gpu-training) training
+- integrates seamlessly with distributed [hyperparameter optimization](#hyperparameter-tuning) library [Ray Tune](http://tune.io)
+- comes with advanced [fault tolerance handling](#fault-tolerance) mechanisms, and
+- supports [distributed dataframes and distributed data loading](#distributed-data-loading)
 
 All releases are tested on large clusters and workloads.
 
+## Installation
 
-Installation
-------------
 You can install the latest XGBoost-Ray release from PIP:
 
 ```bash
@@ -31,12 +33,13 @@ If you'd like to install the latest master, use this command instead:
 pip install "git+https://github.com/ray-project/xgboost_ray.git#egg=xgboost_ray"
 ```
 
-Usage
------
+## Usage
+
 XGBoost-Ray provides a drop-in replacement for XGBoost's `train`
-function. To pass data, instead of using `xgb.DMatrix` you will 
+function. To pass data, instead of using `xgb.DMatrix` you will
 have to use `xgboost_ray.RayDMatrix`. You can also use a scikit-learn
 interface - see next section.
+
 
 Just as in original `xgb.train()` function, the 
 [training parameters](https://xgboost.readthedocs.io/en/stable/parameter.html)
@@ -125,7 +128,7 @@ clf = RayXGBClassifier(
     random_state=seed
 )
 
-# scikit-learn API will automatically conver the data
+# scikit-learn API will automatically convert the data
 # to RayDMatrix format as needed.
 # You can also pass X as a RayDMatrix, in which case
 # y will be ignored.
@@ -151,33 +154,32 @@ print(pred_ray)
 Things to keep in mind:
 
 - `n_jobs` parameter controls the number of actors spawned.
-You can pass a `RayParams` object to the
-`fit`/`predict`/`predict_proba` methods as the `ray_params` argument 
-for greater control over resource allocation. Doing
-so will override the value of `n_jobs` with the value of
-`ray_params.num_actors` attribute. For more information, refer
-to the [Resources](#resources) section below.
+  You can pass a `RayParams` object to the
+  `fit`/`predict`/`predict_proba` methods as the `ray_params` argument
+  for greater control over resource allocation. Doing
+  so will override the value of `n_jobs` with the value of
+  `ray_params.num_actors` attribute. For more information, refer
+  to the [Resources](#resources) section below.
 - By default `n_jobs` is set to `1`, which means the training
-will **not** be distributed. Make sure to either set `n_jobs`
-to a higher value or pass a `RayParams` object as outlined above
-in order to take advantage of XGBoost-Ray's functionality.
+  will **not** be distributed. Make sure to either set `n_jobs`
+  to a higher value or pass a `RayParams` object as outlined above
+  in order to take advantage of XGBoost-Ray's functionality.
 - After calling `fit`, additional evaluation results (e.g. training time,
-number of rows, callback results) will be available under
-`additional_results_` attribute.
+  number of rows, callback results) will be available under
+  `additional_results_` attribute.
 - XGBoost-Ray's scikit-learn API is based on XGBoost 1.4.
-While we try to support older XGBoost versions, please note that
-this library is only fully tested and supported for XGBoost >= 1.4.
+  While we try to support older XGBoost versions, please note that
+  this library is only fully tested and supported for XGBoost >= 1.4.
 
 For more information on the scikit-learn API, refer to the [XGBoost documentation](https://xgboost.readthedocs.io/en/latest/python/python_api.html#module-xgboost.sklearn).
 
-Data loading
-------------
+## Data loading
 
 Data is passed to XGBoost-Ray via a `RayDMatrix` object.
 
 The `RayDMatrix` lazy loads data and stores it sharded in the
 Ray object store. The Ray XGBoost actors then access these
-shards to run their training on. 
+shards to run their training on.
 
 A `RayDMatrix` support various data and file types, like
 Pandas DataFrames, Numpy Arrays, CSV files and Parquet files.
@@ -185,7 +187,7 @@ Pandas DataFrames, Numpy Arrays, CSV files and Parquet files.
 Example loading multiple parquet files:
 
 ```python
-import glob    
+import glob
 from xgboost_ray import RayDMatrix, RayFileType
 
 # We can also pass a list of files
@@ -201,17 +203,18 @@ columns = [
 ]
 
 dtrain = RayDMatrix(
-    path, 
+    path,
     label="passenger_count",  # Will select this column as the label
     columns=columns,
     # ignore=["total_amount"],  # Optional list of columns to ignore
     filetype=RayFileType.PARQUET)
 ```
 
-Hyperparameter Tuning
----------------------
+<!--$UNCOMMENT(xgboost-ray-tuning)=-->
 
-XGBoost-Ray integrates with [Ray Tune](https://tune.io) to provide distributed hyperparameter tuning for your
+## Hyperparameter Tuning
+
+XGBoost-Ray integrates with <!--$UNCOMMENT{ref}`Ray Tune <tune-main>`--><!--$REMOVE-->[Ray Tune](https://tune.io)<!--$END_REMOVE--> to provide distributed hyperparameter tuning for your
 distributed XGBoost models. You can run multiple XGBoost-Ray training runs in parallel, each with a different
 hyperparameter configuration, and each training run parallelized by itself. All you have to do is move your training
 code to a function, and pass the function to `tune.run`. Internally, `train` will detect if `tune` is being used and will
@@ -269,8 +272,8 @@ print("Best hyperparameters", analysis.best_config)
 
 Also see examples/simple_tune.py for another example.
 
-Fault tolerance
----------------
+## Fault tolerance
+
 XGBoost-Ray leverages the stateful Ray actor model to
 enable fault tolerant training. There are currently
 two modes implemented.
@@ -304,11 +307,11 @@ and are reintegrated into training once they are back and
 loaded their data.
 
 This mode will train on fewer data for a period of time,
-which can impact accuracy. In practice, we found these 
+which can impact accuracy. In practice, we found these
 effects to be minor, especially for large shuffled datasets.
-The immediate benefit is that training time is reduced 
+The immediate benefit is that training time is reduced
 significantly to almost the same level as if no actors died.
-Thus, especially when data loading takes a large part of 
+Thus, especially when data loading takes a large part of
 the total training time, this setting can dramatically speed
 up training times for large distributed jobs.
 
@@ -324,8 +327,8 @@ ray_params = RayParams(
 )
 ```
 
-Resources
----------
+## Resources
+
 By default, XGBoost-Ray tries to determine the number of CPUs
 available and distributes them evenly across actors.
 
@@ -335,9 +338,10 @@ by setting the `cpus_per_actor` argument. Consider always
 setting this explicitly.
 
 The number of XGBoost actors always has to be set manually with
-the `num_actors` argument. 
+the `num_actors` argument.
 
 ### Multi GPU training
+
 XGBoost-Ray enables multi GPU training. The XGBoost core backend
 will automatically leverage NCCL2 for cross-device communication.
 All you have to do is to start one actor per GPU and set XGBoost's
@@ -346,9 +350,9 @@ documentation for more details.)
 
 For instance, if you have 2 machines with 4 GPUs each, you will want
 to start 8 remote actors, and set `gpus_per_actor=1`. There is usually
-no benefit in allocating less (e.g. 0.5) or more than one GPU per actor. 
+no benefit in allocating less (e.g. 0.5) or more than one GPU per actor.
 
-You should divide the CPUs evenly across actors per machine, so if your 
+You should divide the CPUs evenly across actors per machine, so if your
 machines have 16 CPUs in addition to the 4 GPUs, each actor should have
 4 CPUs to use.
 
@@ -372,7 +376,7 @@ XGBoost core can already leverage multiple CPUs via threading.
 However, there are some cases when you should consider starting
 more than one actor per node:
 
-- For [**multi GPU training**](#multi-gpu-training), each GPU should have a separate
+- For [multi GPU training](#multi-gpu-training), each GPU should have a separate
   remote actor. Thus, if your machine has 24 CPUs and 4 GPUs,
   you will want to start 4 remote actors with 6 CPUs and 1 GPU
   each
@@ -380,11 +384,11 @@ more than one actor per node:
   [greatest common divisor](https://en.wikipedia.org/wiki/Greatest_common_divisor)
   for the number of CPUs.
   E.g. for a cluster with three nodes of 4, 8, and 12 CPUs, respectively,
-  you should set the number of actors to 6 and the CPUs per 
+  you should set the number of actors to 6 and the CPUs per
   actor to 4.
 
-Distributed data loading
-------------------------
+## Distributed data loading
+
 XGBoost-Ray can leverage both centralized and distributed data loading.
 
 In **centralized data loading**, the data is partitioned by the head node
@@ -393,7 +397,6 @@ partitions by querying the Ray object store. Centralized loading is used
 when you pass centralized in-memory dataframes, such as Pandas dataframes
 or Numpy arrays, or when you pass a single source file, such as a single CSV
 or Parquet file.
-
 
 ```python
 from xgboost_ray import RayDMatrix
@@ -404,7 +407,7 @@ ray_params = RayDMatrix("./source_file.csv", label="label_col")
 ```
 
 In **distributed data loading**, each remote actor loads their data directly from
-the source (e.g. local hard disk, NFS, HDFS, S3), 
+the source (e.g. local hard disk, NFS, HDFS, S3),
 without a central bottleneck. The data is still stored in the
 object store, but locally to each actor. This mode is used automatically
 when loading data from multiple CSV or Parquet files. Please note that
@@ -426,14 +429,14 @@ ray_params = RayDMatrix([
 ```
 
 Lastly, XGBoost-Ray supports **distributed dataframe** representations, such
-as [Ray Datasets](https://docs.ray.io/en/latest/data/dataset.html),
-[Modin](https://modin.readthedocs.io/en/latest/) and 
+as <!--$UNCOMMENT{ref}`Ray Datasets <datasets>`--><!--$REMOVE-->[Ray Datasets](https://docs.ray.io/en/latest/data/dataset.html)<!--$END_REMOVE-->,
+[Modin](https://modin.readthedocs.io/en/latest/) and
 [Dask dataframes](https://docs.dask.org/en/latest/dataframe.html)
-(used with [Dask on Ray](https://docs.ray.io/en/master/dask-on-ray.html)). 
-Here, XGBoost-Ray will check on which nodes the distributed partitions 
+(used with <!--$UNCOMMENT{ref}`Dask on Ray <dask-on-ray>`--><!--$REMOVE-->[Dask on Ray](https://docs.ray.io/en/master/dask-on-ray.html)<!--$END_REMOVE-->).
+Here, XGBoost-Ray will check on which nodes the distributed partitions
 are currently located, and will assign partitions to actors in order to
 minimize cross-node data transfer. Please note that we also assume here
-that partition sizes are uniform. 
+that partition sizes are uniform.
 
 ```python
 from xgboost_ray import RayDMatrix
@@ -461,24 +464,24 @@ The following data sources can be used with a `RayDMatrix` object.
 | [Dask dataframe](https://docs.dask.org/en/latest/dataframe.html) | Yes                 | Yes                 |
 | [Modin dataframe](https://modin.readthedocs.io/en/latest/)       | Yes                 | Yes                 |
 
+## Memory usage
 
-Memory usage
--------------
 XGBoost uses a compute-optimized datastructure, the `DMatrix`,
 to hold training data. When converting a dataset to a `DMatrix`,
-XGBoost creates intermediate copies and ends up 
+XGBoost creates intermediate copies and ends up
 holding a complete copy of the full data. The data will be converted
 into the local dataformat (on a 64 bit system these are 64 bit floats.)
-Depending on the system and original dataset dtype, this matrix can 
+Depending on the system and original dataset dtype, this matrix can
 thus occupy more memory than the original dataset.
 
 The **peak memory usage** for CPU-based training is at least
-**3x** the dataset size (assuming dtype `float32` on a 64bit system) 
+**3x** the dataset size (assuming dtype `float32` on a 64bit system)
 plus about **400,000 KiB** for other resources,
 like operating system requirements and storing of intermediate
 results.
 
 **Example**
+
 - Machine type: AWS m5.xlarge (4 vCPUs, 16 GiB RAM)
 - Usable RAM: ~15,350,000 KiB
 - Dataset: 1,250,000 rows with 1024 features, dtype float32.
@@ -493,12 +496,12 @@ Note that the DMatrix size might be lower on a 32 bit system.
 
 Generally, the same memory requirements exist for GPU-based
 training. Additionally, the GPU must have enough memory
-to hold the dataset. 
+to hold the dataset.
 
-In the example above, the GPU must have at least 
-10,000,000 KiB (about 9.6 GiB) memory. However, 
+In the example above, the GPU must have at least
+10,000,000 KiB (about 9.6 GiB) memory. However,
 empirically we found that using a `DeviceQuantileDMatrix`
-seems to show more peak GPU memory usage, possibly 
+seems to show more peak GPU memory usage, possibly
 for intermediate storage when loading data (about 10%).
 
 **Best practices**
@@ -506,20 +509,20 @@ for intermediate storage when loading data (about 10%).
 In order to reduce peak memory usage, consider the following
 suggestions:
 
-- Store data as `float32` or less. More precision is often 
+- Store data as `float32` or less. More precision is often
   not needed, and keeping data in a smaller format will
   help reduce peak memory usage for initial data loading.
 - Pass the `dtype` when loading data from CSV. Otherwise,
-  floating point values will be loaded as `np.float64` 
+  floating point values will be loaded as `np.float64`
   per default, increasing peak memory usage by 33%.
 
-Placement Strategies
---------------------
-XGBoost-Ray leverages Ray's Placement Group API (https://docs.ray.io/en/master/placement-group.html)
-to implement placement strategies for better fault tolerance. 
+## Placement Strategies
+
+XGBoost-Ray leverages Ray's Placement Group API (<https://docs.ray.io/en/master/placement-group.html>)
+to implement placement strategies for better fault tolerance.
 
 By default, a SPREAD strategy is used for training, which attempts to spread all of the training workers
-across the nodes in a cluster on a best-effort basis. This improves fault tolerance since it minimizes the 
+across the nodes in a cluster on a best-effort basis. This improves fault tolerance since it minimizes the
 number of worker failures when a node goes down, but comes at a cost of increased inter-node communication
 To disable this strategy, set the `RXGB_USE_SPREAD_STRATEGY` environment variable to 0. If disabled, no
 particular placement strategy will be used.
@@ -533,24 +536,63 @@ goes down, it will be less likely to impact multiple trials.
 
 When placement strategies are used, XGBoost-Ray will wait for 100 seconds for the required resources
 to become available, and will fail if the required resources cannot be reserved and the cluster cannot autoscale
-to increase the number of resources. You can change the `RXGB_PLACEMENT_GROUP_TIMEOUT_S` environment variable to modify 
-how long this timeout should be. 
+to increase the number of resources. You can change the `RXGB_PLACEMENT_GROUP_TIMEOUT_S` environment variable to modify
+how long this timeout should be.
 
-More examples
--------------
+## More examples
 
-Fore complete end to end examples, please have a look at 
-the [examples folder](xgboost_ray/examples/):
+For complete end to end examples, please have a look at
+the [examples folder](https://github.com/ray-project/xgboost_ray/tree/master/examples/):
 
-* [Simple sklearn breastcancer dataset example](xgboost_ray/examples/simple.py) (requires `sklearn`)
-* [HIGGS classification example](xgboost_ray/examples/higgs.py) 
-([download dataset (2.6 GB)](https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz))
-* [HIGGS classification example with Parquet](xgboost_ray/examples/higgs_parquet.py) (uses the same dataset) 
-* [Test data classification](xgboost_ray/examples/train_on_test_data.py) (uses a self-generated dataset) 
+- [Simple sklearn breastcancer dataset example](https://github.com/ray-project/xgboost_ray/blob/master/xgboost_ray/examples/simple.py) (requires `sklearn`)
+- [HIGGS classification example](https://github.com/ray-project/xgboost_ray/blob/master/xgboost_ray/examples/higgs.py)
+  ([download dataset (2.6 GB)](https://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz))
+- [HIGGS classification example with Parquet](https://github.com/ray-project/xgboost_ray/blob/master/xgboost_ray/examples/higgs_parquet.py) (uses the same dataset)
+- [Test data classification](https://github.com/ray-project/xgboost_ray/blob/master/xgboost_ray/examples/train_on_test_data.py) (uses a self-generated dataset)
+<!--$REMOVE-->
+## Resources
 
-
-Resources
----------
-* [XGBoost-Ray documentation](https://docs.ray.io/en/master/xgboost-ray.html)
+* [XGBoost-Ray documentation](https://docs.ray.io/en/master/xgboost-ray.html)	
 * [Ray community slack](https://forms.gle/9TSdDYUgxYs8SA9e8)
+<!--$END_REMOVE-->
+<!--$UNCOMMENT## API reference
 
+```{eval-rst}
+.. autoclass:: xgboost_ray.RayParams
+    :members:
+```
+
+```{eval-rst}
+.. autoclass:: xgboost_ray.RayDMatrix
+    :members:
+```
+
+```{eval-rst}
+.. autofunction:: xgboost_ray.train
+```
+
+```{eval-rst}
+.. autofunction:: xgboost_ray.predict
+```
+
+### scikit-learn API
+
+```{eval-rst}
+.. autoclass:: xgboost_ray.RayXGBClassifier
+    :members:
+```
+
+```{eval-rst}
+.. autoclass:: xgboost_ray.RayXGBRegressor
+    :members:
+```
+
+```{eval-rst}
+.. autoclass:: xgboost_ray.RayXGBRFClassifier
+    :members:
+```
+
+```{eval-rst}
+.. autoclass:: xgboost_ray.RayXGBRFRegressor
+    :members:
+```-->
