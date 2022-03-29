@@ -451,46 +451,6 @@ ray_params = RayDMatrix(existing_modin_df)
 
 The following data sources can be used with a ``RayDMatrix`` object.
 
-<!--$UNCOMMENT```{eval-rst}
-.. list-table::
-   :header-rows: 1
-
-   * - Type
-     - Centralized loading
-     - Distributed loading
-   * - Numpy array
-     - Yes
-     - No
-   * - Pandas dataframe
-     - Yes
-     - No
-   * - Single CSV
-     - Yes
-     - No
-   * - Multi CSV
-     - Yes
-     - Yes
-   * - Single Parquet
-     - Yes
-     - No
-   * - Multi Parquet
-     - Yes
-     - Yes
-   * - :ref:`Ray Dataset <datasets>`
-     - Yes
-     - Yes
-   * - `Petastorm <https://github.com/uber/petastorm>`_
-     - Yes
-     - Yes
-   * - `Dask dataframe <https://docs.dask.org/en/latest/dataframe.html>`_
-     - Yes
-     - Yes
-   * - `Modin dataframe <https://modin.readthedocs.io/en/latest/>`_
-     - Yes
-     - Yes
-
-```-->
-<!--$REMOVE-->
 | Type                                                             | Centralized loading | Distributed loading |
 |------------------------------------------------------------------|---------------------|---------------------|
 | Numpy array                                                      | Yes                 | No                  |
@@ -503,7 +463,6 @@ The following data sources can be used with a ``RayDMatrix`` object.
 | [Petastorm](https://github.com/uber/petastorm)                   | Yes                 | Yes                 |
 | [Dask dataframe](https://docs.dask.org/en/latest/dataframe.html) | Yes                 | Yes                 |
 | [Modin dataframe](https://modin.readthedocs.io/en/latest/)       | Yes                 | Yes                 |
-<!--$END_REMOVE-->
 
 ## Memory usage
 
