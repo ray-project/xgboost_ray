@@ -449,7 +449,7 @@ ray_params = RayDMatrix(existing_modin_df)
 
 ### Data sources
 
-The following data sources can be used with a ``RayDMatrix`` object.
+The following data sources can be used with a `RayDMatrix` object.
 
 | Type                                                             | Centralized loading | Distributed loading |
 |------------------------------------------------------------------|---------------------|---------------------|
