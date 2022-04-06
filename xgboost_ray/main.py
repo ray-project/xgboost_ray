@@ -196,7 +196,7 @@ class _RabitTracker(RabitTracker, _RabitTrackerCompatMixin):
         # In python 3.8, spawn is used as default process creation on macOS.
         # But spawn doesn't work because `run` is not pickleable.
         # For now we force the start method to use fork.
-        multiprocessing.set_start_method("spawn", force=True)
+        multiprocessing.set_start_method("fork", force=True)
 
         def run():
             self
@@ -1233,7 +1233,7 @@ def train(
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
     if sys.platform.startswith("win"):
-        raise RuntimeError("xgboost-ray training is currently does not support "
+        raise RuntimeError("xgboost-ray training currently does not support "
                            "Windows.")
 
     if xgb is None:
