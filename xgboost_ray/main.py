@@ -1233,7 +1233,8 @@ def train(
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
 
     if sys.platform.startswith("win"):
-        raise RuntimeError("xgboost-ray training is not supported on Windows.")
+        raise RuntimeError("xgboost-ray training is currently does not support "
+                           "Windows.")
 
     if xgb is None:
         raise ImportError(
