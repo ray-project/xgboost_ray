@@ -1,3 +1,4 @@
+import sys
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union, Sequence
 from dataclasses import dataclass, field
 from distutils.version import LooseVersion
@@ -195,10 +196,11 @@ class _RabitTracker(RabitTracker, _RabitTrackerCompatMixin):
         # In python 3.8, spawn is used as default process creation on macOS.
         # But spawn doesn't work because `run` is not pickleable.
         # For now we force the start method to use fork.
-        multiprocessing.set_start_method("fork", force=True)
+        multiprocessing.set_start_method("spawn", force=True)
 
         def run():
-            self.accept_workers(nworker)
+            self
+            # self.accept_workers(nworker)
 
         self.thread = multiprocessing.Process(target=run, args=())
         self.thread.start()
@@ -1229,6 +1231,9 @@ def train(
     Returns: An ``xgboost.Booster`` object.
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
+
+    if sys.platform.startswith("win"):
+        raise RuntimeError("xgboost-ray training is not supported on Windows.")
 
     if xgb is None:
         raise ImportError(
