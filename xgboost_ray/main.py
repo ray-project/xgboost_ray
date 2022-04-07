@@ -199,8 +199,7 @@ class _RabitTracker(RabitTracker, _RabitTrackerCompatMixin):
         multiprocessing.set_start_method("fork", force=True)
 
         def run():
-            self
-            # self.accept_workers(nworker)
+            self.accept_workers(nworker)
 
         self.thread = multiprocessing.Process(target=run, args=())
         self.thread.start()
