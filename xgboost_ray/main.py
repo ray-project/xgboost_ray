@@ -1,4 +1,4 @@
-import sys
+import platform
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union, Sequence
 from dataclasses import dataclass, field
 from distutils.version import LooseVersion
