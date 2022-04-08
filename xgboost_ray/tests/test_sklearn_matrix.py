@@ -1,3 +1,4 @@
+from distutils.version import LooseVersion
 import numpy as np
 import unittest
 
@@ -9,10 +10,10 @@ from sklearn.model_selection import train_test_split
 from xgboost_ray.sklearn import (RayXGBClassifier, RayXGBRegressor)
 from xgboost_ray.main import RayDMatrix
 
-from xgboost_ray.main import XGBOOST_VERSION_TUPLE
+from xgboost_ray.main import XGBOOST_LOOSE_VERSION
 
-has_label_encoder = (XGBOOST_VERSION_TUPLE >= (1, 0, 0)
-                     and XGBOOST_VERSION_TUPLE < (1, 6, 0))
+has_label_encoder = (XGBOOST_LOOSE_VERSION >= LooseVersion("1.0.0")
+                     and XGBOOST_LOOSE_VERSION < LooseVersion("1.6.0"))
 
 
 class XGBoostRaySklearnMatrixTest(unittest.TestCase):
