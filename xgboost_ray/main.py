@@ -1,3 +1,4 @@
+import platform
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union, Sequence
 from dataclasses import dataclass, field
 from distutils.version import LooseVersion
@@ -1229,6 +1230,10 @@ def train(
     Returns: An ``xgboost.Booster`` object.
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
+
+    if platform.system() == "Windows":
+        raise RuntimeError("xgboost-ray training currently does not support "
+                           "Windows.")
 
     if xgb is None:
         raise ImportError(
