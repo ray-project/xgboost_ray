@@ -28,6 +28,7 @@ distributed setting."""  # noqa: E501
 import numpy as np
 import xgboost as xgb
 import unittest
+from distutils.version import LooseVersion
 
 # import io
 # from contextlib import redirect_stdout, redirect_stderr
@@ -42,7 +43,7 @@ from xgboost_ray.sklearn import (RayXGBClassifier, RayXGBRegressor,
                                  RayXGBRFClassifier, RayXGBRFRegressor,
                                  RayXGBRanker)
 
-from xgboost_ray.main import (XGBOOST_VERSION_TUPLE, RayDMatrix, RayParams,
+from xgboost_ray.main import (XGBOOST_LOOSE_VERSION, RayDMatrix, RayParams,
                               train, predict)
 from xgboost_ray.matrix import RayShardingMode
 
@@ -134,7 +135,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             ray_dmatrix_params={"sharding": RayShardingMode.BATCH})
 
     # ray: added for legacy CI test
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 0, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.0.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_binary_rf_classification(self):
         self.run_binary_classification(RayXGBRFClassifier)
@@ -193,7 +194,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         assert proba.shape[0] == X.shape[0]
         assert proba.shape[1] == cls.n_classes_
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 4, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.4.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_best_ntree_limit(self):
         self._init_ray()
@@ -306,15 +307,20 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         dump = bst.get_booster().get_dump(dump_format="json")
         assert len(dump) == 16
 
-        if xgb.__version__ != "0.90":
+        if XGBOOST_LOOSE_VERSION != LooseVersion("0.90"):
             reg = RayXGBRFRegressor(n_estimators=4)
             bst = reg.fit(X=boston["data"], y=boston["target"])
             dump = bst.get_booster().get_dump(dump_format="json")
             assert len(dump) == 4
 
-            config = json.loads(bst.get_booster().save_config())
-            assert (int(config["learner"]["gradient_booster"][
-                "gbtree_train_param"]["num_parallel_tree"]) == 4)
+            if XGBOOST_LOOSE_VERSION >= LooseVersion("2.0.0"):
+                config = json.loads(bst.get_booster().save_config())
+                assert (int(config["learner"]["gradient_booster"][
+                    "gbtree_model_param"]["num_parallel_tree"]) == 4)
+            else:
+                config = json.loads(bst.get_booster().save_config())
+                assert (int(config["learner"]["gradient_booster"][
+                    "gbtree_train_param"]["num_parallel_tree"]) == 4)
 
     def test_boston_housing_regression(self):
         self._init_ray()
@@ -345,7 +351,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             assert mean_squared_error(preds3, labels) < 25
             assert mean_squared_error(preds4, labels) < 350
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 0, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.0.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def run_boston_housing_rf_regression(self, tree_method):
         from sklearn.metrics import mean_squared_error
@@ -517,7 +523,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
                     if p != l]) * 1.0 / len(te_l))
         assert err < 0.5
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 0, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.0.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_sklearn_random_state(self):
         self._init_ray()
@@ -532,7 +538,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         clf = RayXGBClassifier(random_state=random_state)
         assert isinstance(clf.get_xgb_params()["random_state"], int)
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 0, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.0.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_sklearn_n_jobs(self):
         self._init_ray()
@@ -543,7 +549,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         clf = RayXGBClassifier(n_jobs=2)
         assert clf.get_xgb_params()["n_jobs"] == 2
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 3, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.3.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_parameters_access(self):
         self._init_ray()
@@ -609,7 +615,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         clf.n_jobs = -1
         clone(clf)
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 0, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.0.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_sklearn_get_default_params(self):
         self._init_ray()
@@ -624,7 +630,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         cls.fit(X[:4, ...], y[:4, ...])
         assert cls.get_params()["base_score"] is not None
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 1, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.1.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_validation_weights_xgbmodel(self):
         self._init_ray()
@@ -796,7 +802,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
                 xgb_model = xgb.XGBModel()
                 xgb_model.load_model(model_path)
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 3, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.3.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_save_load_model(self):
         self._init_ray()
@@ -950,7 +956,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             assert np.any(pred1 != pred2)
             assert log_loss1 > log_loss2
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 0, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.0.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_constraint_parameters(self):
         self._init_ray()
@@ -961,7 +967,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         reg.fit(X, y)
 
         config = json.loads(reg.get_booster().save_config())
-        if XGBOOST_VERSION_TUPLE >= (1, 6, 0):
+        if XGBOOST_LOOSE_VERSION >= LooseVersion("1.6.0"):
             assert (config["learner"]["gradient_booster"]["updater"][
                 "grow_histmaker"]["train_param"]["interaction_constraints"] ==
                     "[[0, 1], [2, 3, 4]]")
@@ -1170,12 +1176,12 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
         self.run_boost_from_prediction(tree_method)
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 0, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.0.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_boost_from_prediction_hist(self):
         self.run_boost_from_prediction("hist")
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 2, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.2.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_boost_from_prediction_approx(self):
         self.run_boost_from_prediction("approx")
@@ -1186,7 +1192,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.run_boost_from_prediction("exact")
 
-    @unittest.skipIf(XGBOOST_VERSION_TUPLE < (1, 4, 0),
+    @unittest.skipIf(XGBOOST_LOOSE_VERSION < LooseVersion("1.4.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def test_estimator_type(self):
         self._init_ray()

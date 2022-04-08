@@ -10,7 +10,6 @@ import pickle
 import time
 import threading
 import warnings
-import re
 import inspect
 
 import numpy as np
@@ -132,9 +131,8 @@ LEGACY_WARNING = (
     f"fully tested and supported for XGBoost >= 1.4. Please consider "
     f"upgrading your XGBoost version (`pip install -U xgboost`).")
 
-# XGBoost version as an int tuple for comparisions
-XGBOOST_VERSION_TUPLE = tuple(
-    int(x) for x in re.sub(r"[^\.0-9]", "", xgboost_version).split("."))
+# XGBoost LooseVersion for comparisions
+XGBOOST_LOOSE_VERSION = LooseVersion(xgboost_version)
 
 
 class RayXGBoostTrainingError(RuntimeError):

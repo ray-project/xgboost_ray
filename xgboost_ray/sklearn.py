@@ -25,6 +25,7 @@ Requires xgboost>=0.90"""
 # https://github.com/dmlc/xgboost/blob/c6a0bdbb5a68232cd59ea556c981c633cc0646ca/LICENSE
 
 from typing import Callable, Tuple, Dict, Optional, Union, Any, List
+from distutils.version import LooseVersion
 
 import numpy as np
 
@@ -34,7 +35,7 @@ import inspect
 
 from ray.util.annotations import PublicAPI, DeveloperAPI
 
-from xgboost_ray.main import (RayParams, train, predict, XGBOOST_VERSION_TUPLE,
+from xgboost_ray.main import (RayParams, train, predict, XGBOOST_LOOSE_VERSION,
                               LEGACY_WARNING)
 from xgboost_ray.matrix import RayDMatrix
 
@@ -232,7 +233,7 @@ def _xgboost_version_warn(f):
 
     @functools.wraps(f)
     def inner_f(*args, **kwargs):
-        if XGBOOST_VERSION_TUPLE < (1, 4, 0):
+        if XGBOOST_LOOSE_VERSION < LooseVersion("1.4.0"):
             warnings.warn(LEGACY_WARNING)
         return f(*args, **kwargs)
 
