@@ -313,7 +313,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             dump = bst.get_booster().get_dump(dump_format="json")
             assert len(dump) == 4
 
-            if XGBOOST_LOOSE_VERSION >= LooseVersion("2.0.0"):
+            if XGBOOST_LOOSE_VERSION >= LooseVersion("1.6.0"):
                 config = json.loads(bst.get_booster().save_config())
                 assert (int(config["learner"]["gradient_booster"][
                     "gbtree_model_param"]["num_parallel_tree"]) == 4)
