@@ -59,6 +59,8 @@ except ImportError:
         return inner_f
 
 
+# If _wrap_evaluation_matrices has new arguments added in xgboost, update
+# RayXGBMixin._ray_get_wrap_evaluation_matrices_compat_kwargs
 try:
     from xgboost.sklearn import _wrap_evaluation_matrices
 except ImportError:
@@ -358,13 +360,20 @@ class RayXGBMixin:
     def _ray_get_wrap_evaluation_matrices_compat_kwargs(
             self, label_transform=None) -> dict:
         ret = {}
-        if "label_transform" in inspect.signature(
-                _wrap_evaluation_matrices).parameters:
+        wrap_evaluation_matrices_parameters = inspect.signature(
+            _wrap_evaluation_matrices).parameters
+        if "label_transform" in wrap_evaluation_matrices_parameters:
             # XGBoost < 1.6.0
             identity_func = lambda x: x  # noqa
             ret["label_transform"] = label_transform or identity_func
-        if hasattr(self, "enable_categorical"):
+        if hasattr(
+                self, "enable_categorical"
+        ) and "enable_categorical" in wrap_evaluation_matrices_parameters:
             ret["enable_categorical"] = self.enable_categorical
+        if hasattr(
+                self, "feature_types"
+        ) and "feature_types" in wrap_evaluation_matrices_parameters:
+            ret["feature_types"] = self.feature_types
         return ret
 
     # copied from the file in the top comment
