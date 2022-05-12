@@ -1,13 +1,7 @@
 # Tune imports.
-import os
-from typing import Dict, Union, List, Optional
+from typing import Dict, Optional
 
 import ray
-
-try:
-    from typing import OrderedDict
-except ImportError:
-    from collections import OrderedDict
 
 import logging
 
@@ -15,7 +9,6 @@ from ray.util.annotations import PublicAPI
 
 from xgboost_ray.xgb import xgboost as xgb
 
-from xgboost_ray.compat import TrainingCallback
 from xgboost_ray.session import put_queue, get_rabit_rank
 from xgboost_ray.util import Unavailable, force_on_current_node
 
@@ -42,90 +35,7 @@ except ImportError:
     flatten_dict = is_session_enabled
     TUNE_INSTALLED = False
 
-# Todo(krfricke): Remove after next ray core release
-if not hasattr(OrigTuneReportCallback, "_get_report_dict") or not issubclass(
-        OrigTuneReportCallback, TrainingCallback):
-    TUNE_LEGACY = True
-else:
-    TUNE_LEGACY = False
-
-# Todo(amogkam): Remove after Ray 1.3 release.
-try:
-    from ray.tune import PlacementGroupFactory
-
-    TUNE_USING_PG = True
-except ImportError:
-    TUNE_USING_PG = False
-    PlacementGroupFactory = Unavailable
-
-if TUNE_LEGACY and TUNE_INSTALLED:
-    # Until the next release, keep compatible callbacks here.
-    class TuneReportCallback(OrigTuneReportCallback, TrainingCallback):
-        def _get_report_dict(self, evals_log):
-            if isinstance(evals_log, OrderedDict):
-                # xgboost>=1.3
-                result_dict = flatten_dict(evals_log, delimiter="-")
-                for k in list(result_dict):
-                    result_dict[k] = result_dict[k][0]
-            else:
-                # xgboost<1.3
-                result_dict = dict(evals_log)
-            if not self._metrics:
-                report_dict = result_dict
-            else:
-                report_dict = {}
-                for key in self._metrics:
-                    if isinstance(self._metrics, dict):
-                        metric = self._metrics[key]
-                    else:
-                        metric = key
-                    report_dict[key] = result_dict[metric]
-            return report_dict
-
-        def after_iteration(self, model, epoch: int, evals_log: Dict):
-            if get_rabit_rank() == 0:
-                report_dict = self._get_report_dict(evals_log)
-                put_queue(lambda: tune.report(**report_dict))
-
-    class _TuneCheckpointCallback(_OrigTuneCheckpointCallback,
-                                  TrainingCallback):
-        def __init__(self, filename: str, frequency: int):
-            super(_TuneCheckpointCallback, self).__init__(filename)
-            self._frequency = frequency
-
-        @staticmethod
-        def _create_checkpoint(model, epoch: int, filename: str,
-                               frequency: int):
-            if epoch % frequency > 0:
-                return
-            with tune.checkpoint_dir(step=epoch) as checkpoint_dir:
-                model.save_model(os.path.join(checkpoint_dir, filename))
-
-        def after_iteration(self, model, epoch: int, evals_log: Dict):
-            if get_rabit_rank() == 0:
-                put_queue(lambda: self._create_checkpoint(
-                    model, epoch, self._filename, self._frequency))
-
-    class TuneReportCheckpointCallback(OrigTuneReportCheckpointCallback,
-                                       TrainingCallback):
-        _checkpoint_callback_cls = _TuneCheckpointCallback
-        _report_callbacks_cls = TuneReportCallback
-
-        def __init__(
-                self,
-                metrics: Union[None, str, List[str], Dict[str, str]] = None,
-                filename: str = "checkpoint",
-                frequency: int = 5):
-            self._checkpoint = self._checkpoint_callback_cls(
-                filename, frequency)
-            self._report = self._report_callbacks_cls(metrics)
-
-        def after_iteration(self, model, epoch: int, evals_log: Dict):
-            if get_rabit_rank() == 0:
-                self._checkpoint.after_iteration(model, epoch, evals_log)
-                self._report.after_iteration(model, epoch, evals_log)
-
-elif TUNE_INSTALLED:
+if TUNE_INSTALLED:
     # New style callbacks.
     class TuneReportCallback(OrigTuneReportCallback):
         def after_iteration(self, model, epoch: int, evals_log: Dict):
@@ -168,15 +78,10 @@ def _try_add_tune_callback(kwargs: Dict):
                         target="xgboost_ray.tune.TuneReportCallback"))
                 has_tune_callback = True
             elif isinstance(cb, OrigTuneReportCheckpointCallback):
-                if TUNE_LEGACY:
-                    replace_cb = TuneReportCheckpointCallback(
-                        metrics=cb._report._metrics,
-                        filename=cb._checkpoint._filename)
-                else:
-                    replace_cb = TuneReportCheckpointCallback(
-                        metrics=cb._report._metrics,
-                        filename=cb._checkpoint._filename,
-                        frequency=cb._checkpoint._frequency)
+                replace_cb = TuneReportCheckpointCallback(
+                    metrics=cb._report._metrics,
+                    filename=cb._checkpoint._filename,
+                    frequency=cb._checkpoint._frequency)
                 new_callbacks.append(replace_cb)
                 logging.warning(
                     REPLACE_MSG.format(
@@ -203,35 +108,21 @@ def _get_tune_resources(num_actors: int, cpus_per_actor: int,
                         resources_per_actor: Optional[Dict]):
     """Returns object to use for ``resources_per_trial`` with Ray Tune."""
     if TUNE_INSTALLED:
-        if not TUNE_USING_PG:
-            resources_per_actor = {} if not resources_per_actor \
-                else resources_per_actor
-            extra_custom_resources = {
-                k: v * num_actors
-                for k, v in resources_per_actor.items()
-            }
-            return dict(
-                cpu=1,
-                extra_cpu=cpus_per_actor * num_actors,
-                extra_gpu=gpus_per_actor * num_actors,
-                extra_custom_resources=extra_custom_resources,
-            )
-        else:
-            from ray.tune import PlacementGroupFactory
+        from ray.tune import PlacementGroupFactory
 
-            head_bundle = {"CPU": 1}
-            child_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
-            child_bundle_extra = {} if resources_per_actor is None else \
-                resources_per_actor
-            child_bundles = [{
-                **child_bundle,
-                **child_bundle_extra
-            } for _ in range(num_actors)]
-            bundles = [head_bundle] + child_bundles
-            placement_group_factory = PlacementGroupFactory(
-                bundles, strategy="PACK")
+        head_bundle = {"CPU": 1}
+        child_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
+        child_bundle_extra = {} if resources_per_actor is None else \
+            resources_per_actor
+        child_bundles = [{
+            **child_bundle,
+            **child_bundle_extra
+        } for _ in range(num_actors)]
+        bundles = [head_bundle] + child_bundles
+        placement_group_factory = PlacementGroupFactory(
+            bundles, strategy="PACK")
 
-            return placement_group_factory
+        return placement_group_factory
     else:
         raise RuntimeError("Tune is not installed, so `get_tune_resources` is "
                            "not supported. You can install Ray Tune via `pip "

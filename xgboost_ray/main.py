@@ -38,15 +38,11 @@ try:
     from ray.util.annotations import PublicAPI, DeveloperAPI
     from ray.util.placement_group import PlacementGroup, \
         remove_placement_group, get_current_placement_group
+    from ray.util.queue import Queue
 
-    from xgboost_ray.util import Event, Queue, MultiActorTask, \
-        force_on_current_node
+    from xgboost_ray.util import Event, MultiActorTask, force_on_current_node
 
-    if LooseVersion(ray.__version__) >= LooseVersion("1.5.0"):
-        # https://github.com/ray-project/ray/pull/16437
-        DEFAULT_PG = "default"
-    else:
-        DEFAULT_PG = None
+    DEFAULT_PG = "default"
 
     RAY_INSTALLED = True
 except ImportError:
@@ -63,7 +59,7 @@ except ImportError:
     RAY_INSTALLED = False
 
 from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources, \
-    TUNE_USING_PG, is_session_enabled
+    is_session_enabled
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes, \
@@ -849,7 +845,7 @@ def _create_communication_processes(added_tune_callback: bool = False):
     node_ip = get_node_ip_address()
     # Have to explicitly set num_cpus to 0.
     placement_option = {"num_cpus": 0}
-    if added_tune_callback and TUNE_USING_PG:
+    if added_tune_callback:
         # If Tune is using placement groups, then we force Queue and
         # StopEvent onto same bundle as the Trainable.
         # This forces all 3 to be on the same node.
@@ -1388,12 +1384,9 @@ def train(
     placement_strategy = None
     if not ray_params.elastic_training:
         if added_tune_callback:
-            if TUNE_USING_PG:
-                # If Tune is using placement groups, then strategy has already
-                # been set. Don't create an additional placement_group here.
-                placement_strategy = None
-            else:
-                placement_strategy = "PACK"
+            # Tune is using placement groups, so the strategy has already
+            # been set. Don't create an additional placement_group here.
+            placement_strategy = None
         elif bool(ENV.USE_SPREAD_STRATEGY):
             placement_strategy = "SPREAD"
 

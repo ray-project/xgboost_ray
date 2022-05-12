@@ -8,9 +8,10 @@ import pytest
 import numpy as np
 
 import ray
+from ray.util.queue import _QueueActor
 from xgboost_ray import train, RayDMatrix, RayParams
 from xgboost_ray.main import _train
-from xgboost_ray.util import _EventActor, _QueueActor
+from xgboost_ray.util import _EventActor
 
 
 class _MockQueueActor(_QueueActor):
@@ -57,7 +58,7 @@ class TestColocation(unittest.TestCase):
             shutil.rmtree(self.tmpdir)
         ray.shutdown()
 
-    @patch("xgboost_ray.util._QueueActor", _MockQueueActor)
+    @patch("ray.util.queue._QueueActor", _MockQueueActor)
     @patch("xgboost_ray.util._EventActor", _MockEventActor)
     def test_communication_colocation(self):
         """Checks that Queue and Event actors are colocated with the driver."""
