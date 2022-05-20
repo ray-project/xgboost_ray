@@ -313,16 +313,6 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             mat = RayDMatrix([csv_file] * 3, lazy=True)
             self.assertTrue(mat.distributed)
 
-            try:
-                from ray.util import data as ml_data
-                mat = RayDMatrix(
-                    ml_data.read_parquet(parquet_file, num_shards=1),
-                    lazy=True)
-                self.assertTrue(mat.distributed)
-            except ImportError:
-                print("MLDataset not available in current Ray version. "
-                      "Skipping part of test.")
-
     def testTooManyActorsDistributed(self):
         """Test error when too many actors are passed"""
         with self.assertRaises(RuntimeError):
