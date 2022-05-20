@@ -24,7 +24,7 @@ class DataSource:
     """Abstract class for data sources.
 
     xgboost_ray supports reading from various sources, such as files
-    (e.g. CSV, Parquet) or distributed datasets (Ray MLDataset, Modin).
+    (e.g. CSV, Parquet) or distributed datasets (Modin).
 
     This abstract class defines an interface to read from these sources.
     New data sources can be added by implementing this interface.
