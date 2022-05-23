@@ -20,13 +20,7 @@ import ray
 from ray import logger
 from ray.util.annotations import PublicAPI, DeveloperAPI
 
-from xgboost_ray.util import Unavailable
 from xgboost_ray.data_sources import DataSource, data_sources, RayFileType
-
-try:
-    from ray.util.data import MLDataset
-except ImportError:
-    MLDataset = Unavailable
 
 try:
     from ray.data.dataset import Dataset as RayDataset
@@ -46,7 +40,7 @@ except ImportError:
 if TYPE_CHECKING:
     from xgboost_ray.xgb import xgboost as xgb
 
-Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series, MLDataset]
+Data = Union[str, List[str], np.ndarray, pd.DataFrame, pd.Series]
 
 
 def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
@@ -404,7 +398,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
 
         # Todo (krfricke): It would be good to have a more general way to
         # check for compatibility here. Combine with test below?
-        if not (isinstance(self.data, (Iterable, MLDataset, RayDataset))
+        if not (isinstance(self.data, (Iterable, RayDataset))
                 or hasattr(self.data, "__partitioned__")) or invalid_data:
             raise ValueError(
                 f"Distributed data loading only works with already "
@@ -444,7 +438,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 f"with FileType: {self.filetype} for a distributed dataset."
                 "\nFIX THIS by passing a supported data type. Supported "
                 "data types for distributed datasets are a list of "
-                "CSV or Parquet sources as well as Ray MLDatasets. If using "
+                "CSV or Parquet sources. If using "
                 "Modin, Dask, or Petastorm, make sure the library is "
                 "installed.")
 
@@ -586,7 +580,7 @@ class RayDMatrix:
 
     Args:
         data: Data object. Can be a pandas dataframe, pandas series,
-            numpy array, Ray MLDataset, modin dataframe, string pointing to
+            numpy array, modin dataframe, string pointing to
             a csv or parquet file, or list of strings pointing to csv or
             parquet files.
         label: Optional label object. Can be a pandas series, numpy array,
@@ -874,13 +868,10 @@ class RayDeviceQuantileDMatrix(RayDMatrix):
 
 def _can_load_distributed(source: Data) -> bool:
     """Returns True if it might be possible to use distributed data loading"""
-    from xgboost_ray.data_sources.ml_dataset import MLDataset
     from xgboost_ray.data_sources.modin import Modin
 
     if isinstance(source, (int, float, bool)):
         return False
-    elif MLDataset.is_data_type(source):
-        return True
     elif Modin.is_data_type(source):
         return True
     elif isinstance(source, str):
@@ -902,12 +893,9 @@ def _can_load_distributed(source: Data) -> bool:
 
 def _detect_distributed(source: Data) -> bool:
     """Returns True if we should try to use distributed data loading"""
-    from xgboost_ray.data_sources.ml_dataset import MLDataset
     from xgboost_ray.data_sources.modin import Modin
     if not _can_load_distributed(source):
         return False
-    if MLDataset.is_data_type(source):
-        return True
     if Modin.is_data_type(source):
         return True
     if isinstance(source, Iterable) and not isinstance(source, str) and \

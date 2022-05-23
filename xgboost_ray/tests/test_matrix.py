@@ -289,32 +289,6 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             self._testMatrixCreation(
                 [data_file_1, data_file_2], "label", distributed=True)
 
-    def testFromMLDataset(self):
-        try:
-            from ray.util import data as ml_data
-        except ImportError:
-            self.skipTest("MLDataset not available in current Ray version.")
-            return
-
-        with tempfile.TemporaryDirectory() as dir:
-            data_file_1 = os.path.join(dir, "data_1.parquet")
-            data_file_2 = os.path.join(dir, "data_2.parquet")
-
-            data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
-            data_df["label"] = pd.Series(self.y)
-
-            df_1 = data_df[0:len(data_df) // 2]
-            df_2 = data_df[len(data_df) // 2:]
-
-            df_1.to_parquet(data_file_1)
-            df_2.to_parquet(data_file_2)
-
-            dataset = ml_data.read_parquet(
-                [data_file_1, data_file_2], num_shards=2)
-
-            self._testMatrixCreation(dataset, "label", distributed=False)
-            self._testMatrixCreation(dataset, "label", distributed=True)
-
     def testDetectDistributed(self):
         with tempfile.TemporaryDirectory() as dir:
             parquet_file = os.path.join(dir, "file.parquet")
@@ -338,16 +312,6 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
             mat = RayDMatrix([csv_file] * 3, lazy=True)
             self.assertTrue(mat.distributed)
-
-            try:
-                from ray.util import data as ml_data
-                mat = RayDMatrix(
-                    ml_data.read_parquet(parquet_file, num_shards=1),
-                    lazy=True)
-                self.assertTrue(mat.distributed)
-            except ImportError:
-                print("MLDataset not available in current Ray version. "
-                      "Skipping part of test.")
 
     def testTooManyActorsDistributed(self):
         """Test error when too many actors are passed"""
