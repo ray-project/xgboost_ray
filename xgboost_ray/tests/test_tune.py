@@ -64,6 +64,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
         shutil.rmtree(self.experiment_dir)
 
     # noinspection PyTypeChecker
+    @patch.dict(os.environ, {"TUNE_RESULT_DELIM": "/"})
     def testNumIters(self):
         """Test that the number of reported tune results is correct"""
         ray_params = RayParams(cpus_per_actor=1, num_actors=2)
@@ -77,7 +78,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
         self.assertSequenceEqual(
             list(analysis.results_df["training_iteration"]),
-            list(analysis.results_df["config.num_boost_round"]))
+            list(analysis.results_df["config/num_boost_round"]))
 
     def testNumItersClient(self):
         """Test ray client mode"""
