@@ -382,7 +382,7 @@ class RayParams:
     # Distributed callbacks
     distributed_callbacks: Optional[List[DistributedCallback]] = None
 
-    verbose: Optional[bool] = False
+    verbose: bool = False
 
     def get_tune_resources(self):
         """Return the resources to use for xgboost_ray training with Tune."""
