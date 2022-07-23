@@ -366,6 +366,8 @@ class RayParams:
             Defaults to 0 (no retries). Set to -1 for unlimited retries.
         checkpoint_frequency (int): How often to save checkpoints. Defaults
             to ``5`` (every 5th iteration).
+        verbose (bool): Whether to output Ray-specific info messages
+            during training/prediction.
     """
     # Actor scheduling
     num_actors: int = 0
