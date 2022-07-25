@@ -259,10 +259,14 @@ class _RabitContext:
 
 def _ray_get_actor_cpus():
     # Get through resource IDs
-    resource_ids = ray.worker.get_resource_ids()
-    if "CPU" in resource_ids:
-        return sum(cpu[1] for cpu in resource_ids["CPU"])
-    return None
+    if LooseVersion(ray.__version__) < LooseVersion("2.0.0"):
+        # Remove after 2.2?
+        resource_ids = ray.worker.get_resource_ids()
+        if "CPU" in resource_ids:
+            return sum(cpu[1] for cpu in resource_ids["CPU"])
+    else:
+        resource_ids = ray.get_runtime_context().get_assigned_resources()
+        return resource_ids.get("CPU")
 
 
 def _ray_get_cluster_cpus():
@@ -569,9 +573,7 @@ class RayXGBoostActor:
                 local_params["nthread"] = num_threads
                 local_params["n_jobs"] = num_threads
             else:
-                local_params["nthread"] = sum(
-                    num
-                    for _, num in ray.worker.get_resource_ids().get("CPU", []))
+                local_params["nthread"] = _ray_get_actor_cpus()
                 local_params["n_jobs"] = local_params["nthread"]
 
         if dtrain not in self._data:
