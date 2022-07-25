@@ -260,16 +260,14 @@ class _RabitContext:
 
 def _ray_get_actor_cpus():
     # Get through resource IDs
-    try:
-        resources = ray.get_runtime_context().get_assigned_resources()
-        return resources.get("CPU", 1)
-    except Exception:
-        pass
-
-    resource_ids = ray.worker.get_resource_ids()
-    if "CPU" in resource_ids:
-        return sum(cpu[1] for cpu in resource_ids["CPU"])
-    return None
+    if LooseVersion(ray.__version__) < LooseVersion("2.0.0"):
+        # Remove after 2.2?
+        resource_ids = ray.worker.get_resource_ids()
+        if "CPU" in resource_ids:
+            return sum(cpu[1] for cpu in resource_ids["CPU"])
+    else:
+        resource_ids = ray.get_runtime_context().get_assigned_resources()
+        return resource_ids.get("CPU")
 
 
 def _ray_get_cluster_cpus():
