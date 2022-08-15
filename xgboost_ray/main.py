@@ -371,6 +371,8 @@ class RayParams:
             Defaults to 0 (no retries). Set to -1 for unlimited retries.
         checkpoint_frequency (int): How often to save checkpoints. Defaults
             to ``5`` (every 5th iteration).
+        verbose (bool): Whether to output Ray-specific info messages
+            during training/prediction.
     """
     # Actor scheduling
     num_actors: int = 0
@@ -386,6 +388,8 @@ class RayParams:
 
     # Distributed callbacks
     distributed_callbacks: Optional[List[DistributedCallback]] = None
+
+    verbose: Optional[bool] = None
 
     def get_tune_resources(self):
         """Return the resources to use for xgboost_ray training with Tune."""
@@ -427,6 +431,9 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) \
         warnings.warn(
             f"`num_actors` in `ray_params` is smaller than 2 "
             f"({ray_params.num_actors}). XGBoost will NOT be distributed!")
+    if ray_params.verbose is None:
+        # In Tune sessions, reduce verbosity
+        ray_params.verbose = not is_session_enabled()
     return ray_params
 
 
@@ -935,6 +942,9 @@ def _train(params: Dict,
     from xgboost_ray.elastic import _maybe_schedule_new_actors, \
         _update_scheduled_actor_states, _get_actor_alive_status
 
+    # Do not modify original parameters
+    params = params.copy()
+
     # Un-schedule possible scheduled restarts
     _training_state.restart_training_at = None
 
@@ -948,6 +958,13 @@ def _train(params: Dict,
     else:
         params["nthread"] = cpus_per_actor
         params["n_jobs"] = cpus_per_actor
+
+    if ray_params.verbose:
+        maybe_log = logger.info
+        params.setdefault("verbosity", 1)
+    else:
+        maybe_log = logger.debug
+        params.setdefault("verbosity", 0)
 
     # This is a callback that handles actor failures.
     # We identify the rank of the failed actor, add this to a set of
@@ -984,9 +1001,10 @@ def _train(params: Dict,
         newly_created += 1
 
     alive_actors = sum(1 for a in _training_state.actors if a is not None)
-    logger.info(f"[RayXGBoost] Created {newly_created} new actors "
-                f"({alive_actors} total actors). Waiting until actors "
-                f"are ready for training.")
+
+    maybe_log(f"[RayXGBoost] Created {newly_created} new actors "
+              f"({alive_actors} total actors). Waiting until actors "
+              f"are ready for training.")
 
     # For distributed datasets (e.g. Modin), this will initialize
     # (and fix) the assignment of data shards to actor ranks
@@ -1029,7 +1047,7 @@ def _train(params: Dict,
         _get_actor_alive_status(_training_state.actors, handle_actor_failure)
         raise RayActorError from exc
 
-    logger.info("[RayXGBoost] Starting XGBoost training.")
+    maybe_log("[RayXGBoost] Starting XGBoost training.")
 
     # Start Rabit tracker for gradient sharing
     rabit_process, env = _start_rabit_tracker(alive_actors)
@@ -1520,10 +1538,15 @@ def train(
     train_additional_results["training_time_s"] = total_training_time
     train_additional_results["total_time_s"] = total_time
 
-    logger.info("[RayXGBoost] Finished XGBoost training on training data "
-                "with total N={total_n:,} in {total_time_s:.2f} seconds "
-                "({training_time_s:.2f} pure XGBoost training time).".format(
-                    **train_additional_results))
+    if ray_params.verbose:
+        maybe_log = logger.info
+    else:
+        maybe_log = logger.debug
+
+    maybe_log("[RayXGBoost] Finished XGBoost training on training data "
+              "with total N={total_n:,} in {total_time_s:.2f} seconds "
+              "({training_time_s:.2f} pure XGBoost training time).".format(
+                  **train_additional_results))
 
     _shutdown(
         actors=actors,
@@ -1545,6 +1568,11 @@ def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
              **kwargs):
     _assert_ray_support()
 
+    if ray_params.verbose:
+        maybe_log = logger.info
+    else:
+        maybe_log = logger.debug
+
     if not ray.is_initialized():
         ray.init()
 
@@ -1560,7 +1588,7 @@ def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
             distributed_callbacks=ray_params.distributed_callbacks)
         for i in range(ray_params.num_actors)
     ]
-    logger.info(f"[RayXGBoost] Created {len(actors)} remote actors.")
+    maybe_log(f"[RayXGBoost] Created {len(actors)} remote actors.")
 
     # Split data across workers
     wait_load = []
@@ -1577,7 +1605,7 @@ def _predict(model: xgb.Booster, data: RayDMatrix, ray_params: RayParams,
     # Put model into object store
     model_ref = ray.put(model)
 
-    logger.info("[RayXGBoost] Starting XGBoost prediction.")
+    maybe_log("[RayXGBoost] Starting XGBoost prediction.")
 
     # Train
     fut = [actor.predict.remote(model_ref, data, **kwargs) for actor in actors]
