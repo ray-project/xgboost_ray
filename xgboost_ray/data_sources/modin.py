@@ -14,8 +14,13 @@ from xgboost_ray.data_sources.object_store import ObjectStore
 
 try:
     import modin  # noqa: F401
+    from modin.config.envvars import Engine
     from distutils.version import LooseVersion
     MODIN_INSTALLED = LooseVersion(modin.__version__) >= LooseVersion("0.9.0")
+
+    # Check if importing the Ray engine leads to errors
+    Engine().get()
+
 except (ImportError, AttributeError):
     MODIN_INSTALLED = False
 
