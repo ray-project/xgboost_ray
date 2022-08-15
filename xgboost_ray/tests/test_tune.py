@@ -20,6 +20,7 @@ from xgboost_ray.tune import TuneReportCallback,\
 try:
     from ray.air import Checkpoint
 except Exception:
+
     class Checkpoint:
         pass
 
