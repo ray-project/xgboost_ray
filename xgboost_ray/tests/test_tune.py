@@ -17,6 +17,13 @@ from xgboost_ray import RayDMatrix, train, RayParams
 from xgboost_ray.tune import TuneReportCallback,\
     TuneReportCheckpointCallback, _try_add_tune_callback
 
+try:
+    from ray.air import Checkpoint
+except Exception:
+
+    class Checkpoint:
+        pass
+
 
 class XGBoostRayTuneTest(unittest.TestCase):
     def setUp(self):
@@ -146,13 +153,17 @@ class XGBoostRayTuneTest(unittest.TestCase):
             log_to_file=True,
             local_dir=self.experiment_dir)
 
-        self.assertTrue(os.path.exists(analysis.best_checkpoint))
+        if isinstance(analysis.best_checkpoint, Checkpoint):
+            self.assertTrue(analysis.best_checkpoint)
+        else:
+            self.assertTrue(os.path.exists(analysis.best_checkpoint))
 
     def testEndToEndCheckpointingOrigTune(self):
         ray_params = RayParams(cpus_per_actor=1, num_actors=2)
         analysis = tune.run(
             self.train_func(
-                ray_params, callbacks=[OrigTuneReportCheckpointCallback()]),
+                ray_params,
+                callbacks=[OrigTuneReportCheckpointCallback(frequency=1)]),
             config=self.params,
             resources_per_trial=ray_params.get_tune_resources(),
             num_samples=1,
@@ -161,7 +172,10 @@ class XGBoostRayTuneTest(unittest.TestCase):
             log_to_file=True,
             local_dir=self.experiment_dir)
 
-        self.assertTrue(os.path.exists(analysis.best_checkpoint))
+        if isinstance(analysis.best_checkpoint, Checkpoint):
+            self.assertTrue(analysis.best_checkpoint)
+        else:
+            self.assertTrue(os.path.exists(analysis.best_checkpoint))
 
 
 if __name__ == "__main__":

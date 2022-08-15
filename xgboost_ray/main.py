@@ -38,6 +38,7 @@ try:
     from ray.util.annotations import PublicAPI, DeveloperAPI
     from ray.util.placement_group import PlacementGroup, \
         remove_placement_group, get_current_placement_group
+    from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
     from ray.util.queue import Queue
 
     from xgboost_ray.util import Event, MultiActorTask, force_on_current_node
@@ -747,17 +748,21 @@ def _create_actor(
     # Send DEFAULT_PG here, which changed in Ray >= 1.5.0
     # If we send `None`, this will ignore the parent placement group and
     # lead to errors e.g. when used within Ray Tune
-    return _RemoteRayXGBoostActor.options(
+    actor_cls = _RemoteRayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
         resources=resources_per_actor,
-        placement_group_capture_child_tasks=True,
-        placement_group=placement_group or DEFAULT_PG).remote(
-            rank=rank,
-            num_actors=num_actors,
-            queue=queue,
-            checkpoint_frequency=checkpoint_frequency,
-            distributed_callbacks=distributed_callbacks)
+        scheduling_strategy=PlacementGroupSchedulingStrategy(
+            placement_group=placement_group or DEFAULT_PG,
+            placement_group_capture_child_tasks=True,
+        ))
+
+    return actor_cls.remote(
+        rank=rank,
+        num_actors=num_actors,
+        queue=queue,
+        checkpoint_frequency=checkpoint_frequency,
+        distributed_callbacks=distributed_callbacks)
 
 
 def _trigger_data_load(actor, dtrain, evals):
