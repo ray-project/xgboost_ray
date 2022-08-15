@@ -741,19 +741,21 @@ def _create_actor(
     # Send DEFAULT_PG here, which changed in Ray >= 1.5.0
     # If we send `None`, this will ignore the parent placement group and
     # lead to errors e.g. when used within Ray Tune
-    return _RemoteRayXGBoostActor.options(
+    actor_cls = _RemoteRayXGBoostActor.options(
         num_cpus=num_cpus_per_actor,
         num_gpus=num_gpus_per_actor,
         resources=resources_per_actor,
         scheduling_strategy=PlacementGroupSchedulingStrategy(
             placement_group=placement_group or DEFAULT_PG,
             placement_group_capture_child_tasks=True,
-        )).remote(
-            rank=rank,
-            num_actors=num_actors,
-            queue=queue,
-            checkpoint_frequency=checkpoint_frequency,
-            distributed_callbacks=distributed_callbacks)
+        ))
+
+    return actor_cls.remote(
+        rank=rank,
+        num_actors=num_actors,
+        queue=queue,
+        checkpoint_frequency=checkpoint_frequency,
+        distributed_callbacks=distributed_callbacks)
 
 
 def _trigger_data_load(actor, dtrain, evals):
