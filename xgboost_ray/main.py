@@ -1,7 +1,7 @@
 import platform
 from typing import Tuple, Dict, Any, List, Optional, Callable, Union, Sequence
 from dataclasses import dataclass, field
-from distutils.version import LooseVersion
+from packaging.version import Version
 
 import functools
 import multiprocessing
@@ -128,8 +128,8 @@ LEGACY_WARNING = (
     f"fully tested and supported for XGBoost >= 1.4. Please consider "
     f"upgrading your XGBoost version (`pip install -U xgboost`).")
 
-# XGBoost LooseVersion for comparisions
-XGBOOST_LOOSE_VERSION = LooseVersion(xgboost_version)
+# XGBoost Version for comparisions
+XGBOOST_VERSION = Version(xgboost_version)
 
 
 class RayXGBoostTrainingError(RuntimeError):
@@ -260,7 +260,7 @@ class _RabitContext:
 
 def _ray_get_actor_cpus():
     # Get through resource IDs
-    if LooseVersion(ray.__version__) < LooseVersion("2.0.0"):
+    if Version(ray.__version__) < Version("2.0.0"):
         # Remove after 2.2?
         resource_ids = ray.worker.get_resource_ids()
         if "CPU" in resource_ids:
