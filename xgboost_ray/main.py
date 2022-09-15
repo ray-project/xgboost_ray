@@ -315,6 +315,10 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
             "feature_types": data.feature_types,
             "missing": data.missing,
         }
+
+        if data.enable_categorical is not None:
+            dm_param["enable_categorical"] = data.enable_categorical
+
         param.update(dm_param)
         it = RayDataIter(**param)
         matrix = xgb.DeviceQuantileDMatrix(it, **dm_param)
