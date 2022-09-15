@@ -346,6 +346,9 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
         if "qid" not in inspect.signature(xgb.DMatrix).parameters:
             param.pop("qid", None)
 
+        if data.enable_categorical is not None:
+            param["enable_categorical"] = data.enable_categorical
+
         matrix = xgb.DMatrix(**param)
 
         if not LEGACY_MATRIX:
