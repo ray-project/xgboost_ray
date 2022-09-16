@@ -1331,7 +1331,7 @@ def train(
                          "Please disable elastic_training in RayParams in "
                          "order to use xgboost_ray with Tune.")
 
-    if added_tune_callback:
+    if added_tune_callback or get_current_placement_group():
         # Don't autodetect resources when used with Tune.
         cpus_per_actor = ray_params.cpus_per_actor
         gpus_per_actor = max(0, ray_params.gpus_per_actor)
