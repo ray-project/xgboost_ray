@@ -866,20 +866,16 @@ def _create_communication_processes(added_tune_callback: bool = False):
     node_ip = get_node_ip_address()
     # Have to explicitly set num_cpus to 0.
     placement_option = {"num_cpus": 0}
-    if added_tune_callback:
-        # If Tune is using placement groups, then we force Queue and
+    current_pg = get_current_placement_group()
+    if current_pg is not None:
+        # If we are already in a placement group, let's use it
+        # Also, if we are specifically in Tune, let's
+        # ensure that we force Queue and
         # StopEvent onto same bundle as the Trainable.
-        # This forces all 3 to be on the same node.
-        current_pg = get_current_placement_group()
-        if current_pg is None:
-            # This means the user is not using Tune PGs after all -
-            # e.g. via setting an environment variable.
-            placement_option.update({"resources": {f"node:{node_ip}": 0.01}})
-        else:
-            placement_option.update({
-                "placement_group": current_pg,
-                "placement_group_bundle_index": 0
-            })
+        placement_option.update({
+            "placement_group": current_pg,
+            "placement_group_bundle_index": 0 if added_tune_callback else -1
+        })
     else:
         placement_option.update({"resources": {f"node:{node_ip}": 0.01}})
     queue = Queue(actor_options=placement_option)  # Queue actor
