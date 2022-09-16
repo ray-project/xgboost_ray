@@ -862,8 +862,6 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
 
 
 def _create_communication_processes(added_tune_callback: bool = False):
-    # Create Queue and Event actors and make sure to colocate with driver node.
-    node_ip = get_node_ip_address()
     # Have to explicitly set num_cpus to 0.
     placement_option = {"num_cpus": 0}
     current_pg = get_current_placement_group()
@@ -877,6 +875,9 @@ def _create_communication_processes(added_tune_callback: bool = False):
             "placement_group_bundle_index": 0 if added_tune_callback else -1
         })
     else:
+        # Create Queue and Event actors and make sure to colocate with
+        # driver node.
+        node_ip = get_node_ip_address()
         placement_option.update({"resources": {f"node:{node_ip}": 0.01}})
     queue = Queue(actor_options=placement_option)  # Queue actor
     stop_event = Event(actor_options=placement_option)  # Stop event actor
