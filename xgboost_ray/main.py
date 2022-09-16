@@ -1412,7 +1412,7 @@ def train(
 
     placement_strategy = None
     if not ray_params.elastic_training:
-        if added_tune_callback:
+        if added_tune_callback or get_current_placement_group():
             # Tune is using placement groups, so the strategy has already
             # been set. Don't create an additional placement_group here.
             placement_strategy = None
