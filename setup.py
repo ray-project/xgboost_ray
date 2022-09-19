@@ -6,6 +6,7 @@ setup(
     version="0.1.11",
     author="Ray Team",
     description="A Ray backend for distributed XGBoost",
+    license="Apache 2.0",
     long_description="A distributed backend for XGBoost built on top of "
     "distributed computing framework Ray.",
     url="https://github.com/ray-project/xgboost_ray",
