@@ -83,6 +83,7 @@ class RayDataIter(DataIter):
             label_upper_bound: List[Optional[Data]],
             feature_names: Optional[List[str]],
             feature_types: Optional[List[np.dtype]],
+            enable_categorical: Optional[bool],
     ):
         super(RayDataIter, self).__init__()
 
@@ -98,6 +99,7 @@ class RayDataIter(DataIter):
         self._label_upper_bound = label_upper_bound
         self._feature_names = feature_names
         self._feature_types = feature_types
+        self.enable_categorical = enable_categorical
 
         self._iter = 0
 
@@ -129,7 +131,8 @@ class RayDataIter(DataIter):
             label_lower_bound=self._prop(self._label_lower_bound),
             label_upper_bound=self._prop(self._label_upper_bound),
             feature_names=self._feature_names,
-            feature_types=self._feature_types)
+            feature_types=self._feature_types,
+            enable_categorical=self._enable_categorical)
         self._iter += 1
         return 1
 
@@ -146,6 +149,7 @@ class _RayDMatrixLoader:
                  feature_names: Optional[List[str]] = None,
                  feature_types: Optional[List[np.dtype]] = None,
                  qid: Optional[Data] = None,
+                 enable_categorical: Optional[bool] = None,
                  filetype: Optional[RayFileType] = None,
                  ignore: Optional[List[str]] = None,
                  **kwargs):
@@ -159,6 +163,7 @@ class _RayDMatrixLoader:
         self.feature_names = feature_names
         self.feature_types = feature_types
         self.qid = qid
+        self.enable_categorical = enable_categorical
 
         self.data_source = None
         self.actor_shards = None
@@ -655,6 +660,7 @@ class RayDMatrix:
                  feature_names: Optional[List[str]] = None,
                  feature_types: Optional[List[np.dtype]] = None,
                  qid: Optional[Data] = None,
+                 enable_categorical: Optional[bool] = None,
                  num_actors: Optional[int] = None,
                  filetype: Optional[RayFileType] = None,
                  ignore: Optional[List[str]] = None,
@@ -677,6 +683,7 @@ class RayDMatrix:
         self.feature_names = feature_names
         self.feature_types = feature_types
         self.qid = qid
+        self.enable_categorical = enable_categorical
         self.missing = missing
 
         self.num_actors = num_actors
@@ -706,6 +713,7 @@ class RayDMatrix:
                 label_upper_bound=label_upper_bound,
                 feature_names=feature_names,
                 feature_types=feature_types,
+                enable_categorical=enable_categorical,
                 filetype=filetype,
                 ignore=ignore,
                 qid=qid,
@@ -721,6 +729,7 @@ class RayDMatrix:
                 label_upper_bound=label_upper_bound,
                 feature_names=feature_names,
                 feature_types=feature_types,
+                enable_categorical=enable_categorical,
                 filetype=filetype,
                 ignore=ignore,
                 qid=qid,
@@ -829,6 +838,7 @@ class RayDeviceQuantileDMatrix(RayDMatrix):
                  feature_names: Optional[List[str]] = None,
                  feature_types: Optional[List[np.dtype]] = None,
                  qid: Optional[Data] = None,
+                 enable_categorical: Optional[bool] = None,
                  *args,
                  **kwargs):
         if cp is None:
@@ -852,6 +862,7 @@ class RayDeviceQuantileDMatrix(RayDMatrix):
             feature_names=feature_names,
             feature_types=feature_types,
             qid=qid,
+            enable_categorical=enable_categorical,
             *args,
             **kwargs)
 
