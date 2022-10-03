@@ -228,7 +228,7 @@ class _RayDMatrixLoader:
 
         """
         # sort dataframe by qid if exists (required by DMatrix)
-        if self.qid and not local_data[self.qid].is_monotonic:
+        if self.qid is not None and not local_data[self.qid].is_monotonic:
             local_data = local_data.sort_values([self.qid])
 
         exclude_cols: Set[str] = set()  # Exclude these columns from `x`
