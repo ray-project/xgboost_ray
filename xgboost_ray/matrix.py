@@ -227,6 +227,10 @@ class _RayDMatrixLoader:
         `label_upper_bound`
 
         """
+        # sort dataframe by qid if exists (required by DMatrix)
+        if self.qid and not local_data[self.qid].is_monotonic:
+            local_data = local_data.sort_values([self.qid])
+
         exclude_cols: Set[str] = set()  # Exclude these columns from `x`
 
         label, exclude = data_source.get_column(local_data, self.label)
@@ -349,11 +353,6 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
         # yet. Instead, we'll be selecting the rows below.
         local_df = data_source.load_data(
             self.data, ignore=self.ignore, indices=None, **self.kwargs)
-
-        # sort dataframe by qid if exists (required by DMatrix)
-        if self.qid and not local_df[self.qid].is_monotonic:
-            local_df = local_df.sort_values([self.qid])
-
         x, y, w, b, ll, lu, qid = self._split_dataframe(
             local_df, data_source=data_source)
 
