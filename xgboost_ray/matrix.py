@@ -48,6 +48,25 @@ def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
     return pd.concat(filtered, ignore_index=True, copy=False)
 
 
+def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data) -> pd.DataFrame:
+    _qid = None
+    if isinstance(qid, str):
+        _qid = df[qid]
+    elif isinstance(qid, np.ndarray):
+        _qid = pd.Series(qid)
+    elif isinstance(qid, pd.DataFrame):
+        _qid = qid.iloc[:, 0]
+    elif isinstance(qid, pd.Series):
+        _qid = qid
+    if _qid.is_monotonic:
+        return df
+    else:
+        if isinstance(qid, str):
+            return df.sort_values([qid])
+        else:  # case when qid is not part of df
+            return df.set_index(_qid).sort_index().reset_index(drop=True)
+
+
 @PublicAPI(stability="beta")
 class RayShardingMode(Enum):
     """Enum for different modes of sharding the data.
@@ -228,8 +247,8 @@ class _RayDMatrixLoader:
 
         """
         # sort dataframe by qid if exists (required by DMatrix)
-        if self.qid is not None and not local_data[self.qid].is_monotonic:
-            local_data = local_data.sort_values([self.qid])
+        if self.qid is not None:
+            local_data = ensure_sorted_by_qid(local_data, self.qid)
 
         exclude_cols: Set[str] = set()  # Exclude these columns from `x`
 
