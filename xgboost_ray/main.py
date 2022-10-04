@@ -879,8 +879,21 @@ def _create_communication_processes(added_tune_callback: bool = False):
         # driver node.
         node_ip = get_node_ip_address()
         placement_option.update({"resources": {f"node:{node_ip}": 0.01}})
-    queue = Queue(actor_options=placement_option)  # Queue actor
-    stop_event = Event(actor_options=placement_option)  # Stop event actor
+    try:
+        queue = Queue(actor_options=placement_option)  # Queue actor
+        stop_event = Event(actor_options=placement_option)  # Stop event actor
+    except ValueError:
+        if "placement_group" in placement_option:
+            raise
+        # If we cannot schedule the actors on the head node, then
+        # use any viable node.
+        logger.warning(
+            "Could not schedule communication actors on the driver node. "
+            "Trying to schedule on any viable node instead."
+        )
+        placement_option.pop("resources", None)
+        queue = Queue(actor_options=placement_option)  # Queue actor
+        stop_event = Event(actor_options=placement_option)  # Stop event actor
     return queue, stop_event
 
 
