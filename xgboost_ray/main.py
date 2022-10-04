@@ -889,8 +889,7 @@ def _create_communication_processes(added_tune_callback: bool = False):
         # use any viable node.
         logger.warning(
             "Could not schedule communication actors on the driver node. "
-            "Trying to schedule on any viable node instead."
-        )
+            "Trying to schedule on any viable node instead.")
         placement_option.pop("resources", None)
         queue = Queue(actor_options=placement_option)  # Queue actor
         stop_event = Event(actor_options=placement_option)  # Stop event actor
