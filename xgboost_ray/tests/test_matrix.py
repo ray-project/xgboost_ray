@@ -356,6 +356,56 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             label_lower_bound=label_lower_bound,
             label_upper_bound=label_upper_bound)
 
+    def testQidSortedBehaviorXGBoost(self):
+        """Test that data with unsorted qid is sorted in RayDMatrix"""
+        in_x = self.x
+        in_y = self.y
+        unsorted_qid = np.array([1, 2] * 16)
+
+        from xgboost import DMatrix
+        with self.assertRaises(ValueError):
+            _ = DMatrix(**{
+                "data": in_x,
+                "label": in_y,
+                "qid": unsorted_qid
+            })
+        _ = DMatrix(**{
+            "data": in_x,
+            "label": in_y,
+            "qid": np.sort(unsorted_qid)
+        })  # no exception
+        # test RayDMatrix handles sorting automatically
+        mat = RayDMatrix(in_x, in_y, qid=unsorted_qid)
+        params = mat.get_data(rank=0, num_actors=1)
+        _ = DMatrix(**params)
+
+    def testQidSortedParquet(self):
+        from xgboost import DMatrix
+        with tempfile.TemporaryDirectory() as dir:
+            parquet_file1 = os.path.join(dir, "file1.parquet")
+            parquet_file2 = os.path.join(dir, "file2.parquet")
+
+            unsorted_qid1 = np.array([2, 4] * 16)
+            unsorted_qid2 = np.array([1, 3] * 16)
+
+            # parquet 1
+            data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
+            data_df["label"] = pd.Series(self.y)
+            data_df["group"] = pd.Series(unsorted_qid1)
+            data_df.to_parquet(parquet_file1)
+            # parquet 2
+            data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
+            data_df["label"] = pd.Series(self.y)
+            data_df["group"] = pd.Series(unsorted_qid2)
+            data_df.to_parquet(parquet_file2)
+            mat = RayDMatrix([parquet_file1, parquet_file2],
+                             columns=["a", "b", "c", "d",
+                                      "label", "group"],
+                             label="label",
+                             qid="group")
+            params = mat.get_data(rank=0, num_actors=1)
+            _ = DMatrix(**params)
+
 
 if __name__ == "__main__":
     import pytest

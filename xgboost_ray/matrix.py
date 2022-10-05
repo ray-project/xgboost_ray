@@ -48,8 +48,8 @@ def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
     return pd.concat(filtered, ignore_index=True, copy=False)
 
 
-def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data) -> pd.DataFrame:
-    _qid = None
+def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data) -> Tuple[Union[np.array, str], pd.DataFrame]:
+    _qid: pd.Series = None
     if isinstance(qid, str):
         _qid = df[qid]
     elif isinstance(qid, np.ndarray):
@@ -59,12 +59,13 @@ def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data) -> pd.DataFrame:
     elif isinstance(qid, pd.Series):
         _qid = qid
     if _qid.is_monotonic:
-        return df
+        return _qid, df
     else:
         if isinstance(qid, str):
-            return df.sort_values([qid])
+            return qid, df.sort_values([qid])
         else:  # case when qid is not part of df
-            return df.set_index(_qid).sort_index().reset_index(drop=True)
+            return _qid.sort_values(), \
+                   df.set_index(_qid).sort_index().reset_index(drop=True)
 
 
 @PublicAPI(stability="beta")
@@ -248,7 +249,9 @@ class _RayDMatrixLoader:
         """
         # sort dataframe by qid if exists (required by DMatrix)
         if self.qid is not None:
-            local_data = ensure_sorted_by_qid(local_data, self.qid)
+            _qid, local_data = ensure_sorted_by_qid(local_data, self.qid)
+            if not isinstance(self.qid, str):
+                self.qid = _qid
 
         exclude_cols: Set[str] = set()  # Exclude these columns from `x`
 
