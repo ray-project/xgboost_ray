@@ -359,7 +359,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             label_lower_bound=label_lower_bound,
             label_upper_bound=label_upper_bound)
 
-    @unittest.skipIf(XGBOOST_VERSION < Version("0.9.0"),
+    @unittest.skipIf(XGBOOST_VERSION <= Version("0.9.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def testQidSortedBehaviorXGBoost(self):
         """Test that data with unsorted qid is sorted in RayDMatrix"""
@@ -380,7 +380,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         params = mat.get_data(rank=0, num_actors=1)
         DMatrix(**params)
 
-    @unittest.skipIf(XGBOOST_VERSION < Version("0.9.0"),
+    @unittest.skipIf(XGBOOST_VERSION <= Version("0.9.0"),
                      f"not supported in xgb version {xgb.__version__}")
     def testQidSortedParquet(self):
         from xgboost import DMatrix
