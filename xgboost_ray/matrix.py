@@ -57,9 +57,9 @@ def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data
         _qid = pd.Series(qid)
     elif isinstance(qid, pd.DataFrame):
         if len(df.shape) != 2 and df.shape[1] != 1:
-            raise ValueError(
-                f"qid argument of type pd.DataFrame is expected to contains only 1 column of data "
-                f"but the qid passed in is of shape {df.shape}.")
+            raise ValueError(f"qid argument of type pd.DataFrame is expected"
+                             "to contains only 1 column of data "
+                             f"but the qid passed in is of shape {df.shape}.")
         _qid = qid.iloc[:, 0]
     elif isinstance(qid, pd.Series):
         _qid = qid
