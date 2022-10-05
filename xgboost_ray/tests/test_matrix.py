@@ -1,6 +1,8 @@
 import os
 import tempfile
 import unittest
+from packaging.version import Version
+import xgboost as xgb
 
 import numpy as np
 import pandas as pd
@@ -8,6 +10,7 @@ import pandas as pd
 import ray
 
 from xgboost_ray import RayDMatrix
+from xgboost_ray.main import XGBOOST_VERSION
 from xgboost_ray.matrix import (concat_dataframes, RayShardingMode,
                                 _get_sharding_indices)
 
@@ -356,6 +359,8 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             label_lower_bound=label_lower_bound,
             label_upper_bound=label_upper_bound)
 
+    @unittest.skipIf(XGBOOST_VERSION < Version("0.9.0"),
+                     f"not supported in xgb version {xgb.__version__}")
     def testQidSortedBehaviorXGBoost(self):
         """Test that data with unsorted qid is sorted in RayDMatrix"""
         in_x = self.x
@@ -375,6 +380,8 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         params = mat.get_data(rank=0, num_actors=1)
         DMatrix(**params)
 
+    @unittest.skipIf(XGBOOST_VERSION < Version("0.9.0"),
+                     f"not supported in xgb version {xgb.__version__}")
     def testQidSortedParquet(self):
         from xgboost import DMatrix
         with tempfile.TemporaryDirectory() as dir:
