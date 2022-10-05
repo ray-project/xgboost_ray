@@ -48,7 +48,8 @@ def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
     return pd.concat(filtered, ignore_index=True, copy=False)
 
 
-def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data) -> Tuple[Union[np.array, str], pd.DataFrame]:
+def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data
+                         ) -> Tuple[Union[np.array, str], pd.DataFrame]:
     _qid: pd.Series = None
     if isinstance(qid, str):
         _qid = df[qid]
@@ -58,8 +59,7 @@ def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data) -> Tuple[Union[np.array, s
         if len(df.shape) != 2 and df.shape[1] != 1:
             raise ValueError(
                 f"qid argument of type pd.DataFrame is expected to contains only 1 column of data "
-                f"but the qid passed in is of shape {df.shape}."
-            )
+                f"but the qid passed in is of shape {df.shape}.")
         _qid = qid.iloc[:, 0]
     elif isinstance(qid, pd.Series):
         _qid = qid

@@ -364,12 +364,8 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
         from xgboost import DMatrix
         with self.assertRaises(ValueError):
-            _ = DMatrix(**{
-                "data": in_x,
-                "label": in_y,
-                "qid": unsorted_qid
-            })
-        _ = DMatrix(**{
+            DMatrix(**{"data": in_x, "label": in_y, "qid": unsorted_qid})
+        DMatrix(**{
             "data": in_x,
             "label": in_y,
             "qid": np.sort(unsorted_qid)
@@ -377,7 +373,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         # test RayDMatrix handles sorting automatically
         mat = RayDMatrix(in_x, in_y, qid=unsorted_qid)
         params = mat.get_data(rank=0, num_actors=1)
-        _ = DMatrix(**params)
+        DMatrix(**params)
 
     def testQidSortedParquet(self):
         from xgboost import DMatrix
@@ -398,13 +394,13 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_df["label"] = pd.Series(self.y)
             data_df["group"] = pd.Series(unsorted_qid2)
             data_df.to_parquet(parquet_file2)
-            mat = RayDMatrix([parquet_file1, parquet_file2],
-                             columns=["a", "b", "c", "d",
-                                      "label", "group"],
-                             label="label",
-                             qid="group")
+            mat = RayDMatrix(
+                [parquet_file1, parquet_file2],
+                columns=["a", "b", "c", "d", "label", "group"],
+                label="label",
+                qid="group")
             params = mat.get_data(rank=0, num_actors=1)
-            _ = DMatrix(**params)
+            DMatrix(**params)
 
 
 if __name__ == "__main__":
