@@ -29,7 +29,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        ray.init(num_cpus=1, local_mode=True)
+        ray.init(local_mode=True)
 
     @classmethod
     def tearDownClass(cls):
