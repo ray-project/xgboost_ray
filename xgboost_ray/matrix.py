@@ -48,6 +48,31 @@ def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
     return pd.concat(filtered, ignore_index=True, copy=False)
 
 
+def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data
+                         ) -> Tuple[Union[np.array, str], pd.DataFrame]:
+    _qid: pd.Series = None
+    if isinstance(qid, str):
+        _qid = df[qid]
+    elif isinstance(qid, np.ndarray):
+        _qid = pd.Series(qid)
+    elif isinstance(qid, pd.DataFrame):
+        if len(df.shape) != 2 and df.shape[1] != 1:
+            raise ValueError(f"qid argument of type pd.DataFrame is expected"
+                             "to contains only 1 column of data "
+                             f"but the qid passed in is of shape {df.shape}.")
+        _qid = qid.iloc[:, 0]
+    elif isinstance(qid, pd.Series):
+        _qid = qid
+    if _qid.is_monotonic:
+        return _qid, df
+    else:
+        if isinstance(qid, str):
+            return qid, df.sort_values([qid])
+        else:  # case when qid is not part of df
+            return _qid.sort_values(), \
+                   df.set_index(_qid).sort_index().reset_index(drop=True)
+
+
 @PublicAPI(stability="beta")
 class RayShardingMode(Enum):
     """Enum for different modes of sharding the data.
@@ -227,6 +252,12 @@ class _RayDMatrixLoader:
         `label_upper_bound`
 
         """
+        # sort dataframe by qid if exists (required by DMatrix)
+        if self.qid is not None:
+            _qid, local_data = ensure_sorted_by_qid(local_data, self.qid)
+            if not isinstance(self.qid, str):
+                self.qid = _qid
+
         exclude_cols: Set[str] = set()  # Exclude these columns from `x`
 
         label, exclude = data_source.get_column(local_data, self.label)
