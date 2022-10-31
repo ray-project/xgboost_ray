@@ -266,7 +266,7 @@ class _RabitContextBase:
 # From xgboost>=1.7.0, rabit is replaced by a collective communicator
 if HAS_COLLECTIVE:
 
-    class _RabitContext(CommunicatorContext, _RabitContextBase):
+    class _RabitContext(_RabitContextBase, CommunicatorContext):
         pass
 
 else:
