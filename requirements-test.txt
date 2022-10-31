@@ -6,7 +6,7 @@ packaging
 petastorm
 pytest
 pyarrow
-ray[tune]
+ray[tune, data]
 scikit-learn
 modin
 dask
