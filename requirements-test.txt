@@ -12,4 +12,5 @@ modin
 dask
 
 #workaround for now
-tensorboardX==2.4.1
+tensorboardX==2.2
+protobuf==3.20.1
