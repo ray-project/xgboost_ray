@@ -12,4 +12,4 @@ modin
 dask
 
 #workaround for now
-tensorboardX==2.2
+tensorboardX==2.4.1
