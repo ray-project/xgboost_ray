@@ -63,7 +63,11 @@ def get_actor_rank() -> int:
 @PublicAPI
 def get_rabit_rank() -> int:
     import xgboost as xgb
-    return xgb.rabit.get_rank()
+    try:
+        # From xgboost>=1.7.0, rabit is replaced by a collective communicator
+        return xgb.collective.get_rank()
+    except (ImportError, AttributeError):
+        return xgb.rabit.get_rank()
 
 
 @PublicAPI

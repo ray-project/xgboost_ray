@@ -6,10 +6,11 @@ packaging
 petastorm
 pytest
 pyarrow
-ray[tune]
+ray[tune, data]
 scikit-learn
 modin
 dask
 
 #workaround for now
+protobuf<4.0.0
 tensorboardX==2.2
