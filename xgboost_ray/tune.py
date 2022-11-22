@@ -105,7 +105,8 @@ def _try_add_tune_callback(kwargs: Dict):
 
 def _get_tune_resources(num_actors: int, cpus_per_actor: int,
                         gpus_per_actor: int,
-                        resources_per_actor: Optional[Dict]):
+                        resources_per_actor: Optional[Dict],
+                        placement_options: Optional[Dict]):
     """Returns object to use for ``resources_per_trial`` with Ray Tune."""
     if TUNE_INSTALLED:
         from ray.tune import PlacementGroupFactory
@@ -119,8 +120,10 @@ def _get_tune_resources(num_actors: int, cpus_per_actor: int,
             **child_bundle_extra
         } for _ in range(num_actors)]
         bundles = [head_bundle] + child_bundles
+        placement_options = placement_options or {}
+        placement_options.setdefault("strategy", "PACK")
         placement_group_factory = PlacementGroupFactory(
-            bundles, strategy="PACK")
+            bundles, **placement_options)
 
         return placement_group_factory
     else:
