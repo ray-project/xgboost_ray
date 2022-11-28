@@ -49,8 +49,13 @@ class XGBoostRayTuneTest(unittest.TestCase):
             "num_boost_round": tune.choice([1, 3])
         }
 
-        def train_func(ray_params, callbacks=None, **kwargs):
+        def train_func(ray_params,
+                       callbacks=None,
+                       check_for_spread_strategy=False,
+                       **kwargs):
             def _inner_train(config, checkpoint_dir):
+                if check_for_spread_strategy:
+                    assert tune.get_trial_resources().strategy == "SPREAD"
                 train_set = RayDMatrix(x, y)
                 train(
                     config["xgb"],
@@ -98,6 +103,17 @@ class XGBoostRayTuneTest(unittest.TestCase):
         with ray_start_client_server():
             self.assertTrue(ray.util.client.ray.is_connected())
             self.testNumIters()
+
+    def testPlacementOptions(self):
+        ray_params = RayParams(
+            cpus_per_actor=1,
+            num_actors=1,
+            placement_options={"strategy": "SPREAD"})
+        tune.run(
+            self.train_func(ray_params, check_for_spread_strategy=True),
+            config=self.params,
+            resources_per_trial=ray_params.get_tune_resources(),
+            num_samples=1)
 
     def testElasticFails(self):
         """Test if error is thrown when using Tune with elastic training."""

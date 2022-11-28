@@ -406,6 +406,8 @@ class RayParams:
             to ``5`` (every 5th iteration).
         verbose (bool): Whether to output Ray-specific info messages
             during training/prediction.
+        placement_options (dict): Optional kwargs to pass to
+            ``PlacementGroupFactory`` in ``get_tune_resources()``.
     """
     # Actor scheduling
     num_actors: int = 0
@@ -423,6 +425,7 @@ class RayParams:
     distributed_callbacks: Optional[List[DistributedCallback]] = None
 
     verbose: Optional[bool] = None
+    placement_options: Dict[str, Any] = None
 
     def get_tune_resources(self):
         """Return the resources to use for xgboost_ray training with Tune."""
@@ -433,7 +436,8 @@ class RayParams:
             num_actors=self.num_actors,
             cpus_per_actor=self.cpus_per_actor,
             gpus_per_actor=max(0, self.gpus_per_actor),
-            resources_per_actor=self.resources_per_actor)
+            resources_per_actor=self.resources_per_actor,
+            placement_options=self.placement_options)
 
 
 @dataclass
