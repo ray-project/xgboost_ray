@@ -298,18 +298,18 @@ class XGBoostRaySklearnTest(unittest.TestCase):
     def test_num_parallel_tree(self):
         self._init_ray()
 
-        from sklearn.datasets import load_boston
+        from sklearn.datasets import fetch_california_housing
 
         reg = RayXGBRegressor(
             n_estimators=4, num_parallel_tree=4, tree_method="hist")
-        boston = load_boston()
-        bst = reg.fit(X=boston["data"], y=boston["target"])
+        ds = fetch_california_housing()
+        bst = reg.fit(X=ds["data"], y=ds["target"])
         dump = bst.get_booster().get_dump(dump_format="json")
         assert len(dump) == 16
 
         if XGBOOST_VERSION != Version("0.90"):
             reg = RayXGBRFRegressor(n_estimators=4)
-            bst = reg.fit(X=boston["data"], y=boston["target"])
+            bst = reg.fit(X=ds["data"], y=ds["target"])
             dump = bst.get_booster().get_dump(dump_format="json")
             assert len(dump) == 4
 
@@ -322,16 +322,16 @@ class XGBoostRaySklearnTest(unittest.TestCase):
                 assert (int(config["learner"]["gradient_booster"][
                     "gbtree_train_param"]["num_parallel_tree"]) == 4)
 
-    def test_boston_housing_regression(self):
+    def test_ds_housing_regression(self):
         self._init_ray()
 
         from sklearn.metrics import mean_squared_error
-        from sklearn.datasets import load_boston
+        from sklearn.datasets import fetch_california_housing
         from sklearn.model_selection import KFold
 
-        boston = load_boston()
-        y = boston["target"]
-        X = boston["data"]
+        ds = fetch_california_housing()
+        y = ds["target"]
+        X = ds["data"]
         kf = KFold(n_splits=2, shuffle=True, random_state=self.rng)
         for train_index, test_index in kf.split(X, y):
             xgb_model = RayXGBRegressor().fit(X[train_index], y[train_index])
@@ -353,12 +353,12 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
     @unittest.skipIf(XGBOOST_VERSION < Version("1.0.0"),
                      f"not supported in xgb version {xgb.__version__}")
-    def run_boston_housing_rf_regression(self, tree_method):
+    def run_ds_housing_rf_regression(self, tree_method):
         from sklearn.metrics import mean_squared_error
-        from sklearn.datasets import load_boston
+        from sklearn.datasets import fetch_california_housing
         from sklearn.model_selection import KFold
 
-        X, y = load_boston(return_X_y=True)
+        X, y = fetch_california_housing(return_X_y=True)
         kf = KFold(n_splits=2, shuffle=True, random_state=self.rng)
         for train_index, test_index in kf.split(X, y):
             xgb_model = RayXGBRFRegressor(
@@ -368,20 +368,20 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             labels = y[test_index]
             assert mean_squared_error(preds, labels) < 35
 
-    def test_boston_housing_rf_regression(self):
+    def test_ds_housing_rf_regression(self):
         self._init_ray()
 
-        self.run_boston_housing_rf_regression("hist")
+        self.run_ds_housing_rf_regression("hist")
 
     def test_parameter_tuning(self):
         self._init_ray()
 
         from sklearn.model_selection import GridSearchCV
-        from sklearn.datasets import load_boston
+        from sklearn.datasets import fetch_california_housing
 
-        boston = load_boston()
-        y = boston["target"]
-        X = boston["data"]
+        ds = fetch_california_housing()
+        y = ds["target"]
+        X = ds["data"]
         xgb_model = RayXGBRegressor(learning_rate=0.1)
         clf = GridSearchCV(
             xgb_model,
@@ -400,7 +400,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         self._init_ray()
 
         from sklearn.metrics import mean_squared_error
-        from sklearn.datasets import load_boston
+        from sklearn.datasets import fetch_california_housing
         from sklearn.model_selection import KFold
 
         def objective_ls(y_true, y_pred):
@@ -408,9 +408,9 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             hess = np.ones(len(y_true))
             return grad, hess
 
-        boston = load_boston()
-        y = boston["target"]
-        X = boston["data"]
+        ds = fetch_california_housing()
+        y = ds["target"]
+        X = ds["data"]
         kf = KFold(n_splits=2, shuffle=True, random_state=self.rng)
         for train_index, test_index in kf.split(X, y):
             xgb_model = RayXGBRegressor(objective=objective_ls).fit(
@@ -851,13 +851,13 @@ class XGBoostRaySklearnTest(unittest.TestCase):
     # def test_zzzzzzz_RFECV(self):
     #     self._init_ray()
 
-    #     from sklearn.datasets import load_boston
+    #     from sklearn.datasets import fetch_california_housing
     #     from sklearn.datasets import load_breast_cancer
     #     from sklearn.datasets import load_iris
     #     from sklearn.feature_selection import RFECV
 
     #     # Regression
-    #     X, y = load_boston(return_X_y=True)
+    #     X, y = fetch_california_housing(return_X_y=True)
     #     bst = RayXGBRegressor(
     #         booster="gblinear",
     #         learning_rate=0.1,
