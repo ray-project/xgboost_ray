@@ -322,7 +322,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
                 assert (int(config["learner"]["gradient_booster"][
                     "gbtree_train_param"]["num_parallel_tree"]) == 4)
 
-    def test_ds_housing_regression(self):
+    def test_california_housing_regression(self):
         self._init_ray()
 
         from sklearn.metrics import mean_squared_error
@@ -353,7 +353,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
     @unittest.skipIf(XGBOOST_VERSION < Version("1.0.0"),
                      f"not supported in xgb version {xgb.__version__}")
-    def run_ds_housing_rf_regression(self, tree_method):
+    def run_california_housing_rf_regression(self, tree_method):
         from sklearn.metrics import mean_squared_error
         from sklearn.datasets import fetch_california_housing
         from sklearn.model_selection import KFold
@@ -368,10 +368,10 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             labels = y[test_index]
             assert mean_squared_error(preds, labels) < 35
 
-    def test_ds_housing_rf_regression(self):
+    def test_california_housing_rf_regression(self):
         self._init_ray()
 
-        self.run_ds_housing_rf_regression("hist")
+        self.run_california_housing_rf_regression("hist")
 
     def test_parameter_tuning(self):
         self._init_ray()
