@@ -111,7 +111,7 @@ def _get_tune_resources(num_actors: int, cpus_per_actor: int,
     if TUNE_INSTALLED:
         from ray.tune import PlacementGroupFactory
 
-        head_bundle = {"CPU": 1}
+        head_bundle = {}
         child_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
         child_bundle_extra = {} if resources_per_actor is None else \
             resources_per_actor
