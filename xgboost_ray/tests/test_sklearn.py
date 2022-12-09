@@ -1072,8 +1072,13 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         clf_isotonic = CalibratedClassifierCV(
             model, cv="prefit", method="isotonic")
         clf_isotonic.fit(train, target)
+        try:
+            estimator = clf_isotonic.calibrated_classifiers_[0].base_estimator
+        except AttributeError:
+            # sklearn>=1.2
+            estimator = clf_isotonic.calibrated_classifiers_[0].estimator
         assert isinstance(
-            clf_isotonic.calibrated_classifiers_[0].base_estimator,
+            estimator,
             RayXGBClassifier,
         )
         self.assertTrue(
