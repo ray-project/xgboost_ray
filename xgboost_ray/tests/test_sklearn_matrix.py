@@ -130,11 +130,11 @@ class XGBoostRaySklearnMatrixTest(unittest.TestCase):
     def testRegressor(self):
         self._init_ray()
 
-        from sklearn.datasets import load_boston
+        from sklearn.datasets import fetch_california_housing
 
-        boston = load_boston()
-        y = boston["target"]
-        X = boston["data"]
+        ds = fetch_california_housing()
+        y = ds["target"]
+        X = ds["data"]
 
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.5)
