@@ -24,7 +24,7 @@ from xgboost_ray.data_sources import DataSource, data_sources, RayFileType
 
 try:
     from ray.data.dataset import Dataset as RayDataset
-except (ImportError, ModuleNotFoundError):
+except ImportError:
 
     class RayDataset:
         pass
@@ -916,6 +916,8 @@ def _can_load_distributed(source: Data) -> bool:
         return False
     elif Modin.is_data_type(source):
         return True
+    elif isinstance(source, RayDataset):
+        return True
     elif isinstance(source, str):
         # Strings should point to files or URLs
         # Usually parquet files point to directories
@@ -939,6 +941,8 @@ def _detect_distributed(source: Data) -> bool:
     if not _can_load_distributed(source):
         return False
     if Modin.is_data_type(source):
+        return True
+    if isinstance(source, RayDataset):
         return True
     if isinstance(source, Iterable) and not isinstance(source, str) and \
        not (isinstance(source, Sequence) and isinstance(source[0], str)):

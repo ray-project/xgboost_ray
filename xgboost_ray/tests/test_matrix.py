@@ -8,6 +8,11 @@ import numpy as np
 import pandas as pd
 
 import ray
+try:
+    import ray.data as ray_data
+except (ImportError, ModuleNotFoundError):
+
+    ray_data = None
 
 from xgboost_ray import RayDMatrix
 from xgboost_ray.matrix import (concat_dataframes, RayShardingMode,
@@ -29,7 +34,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        ray.init(local_mode=True)
+        ray.init()
 
     @classmethod
     def tearDownClass(cls):
@@ -314,6 +319,11 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
             mat = RayDMatrix([csv_file] * 3, lazy=True)
             self.assertTrue(mat.distributed)
+
+            if ray_data:
+                ds = ray_data.read_parquet(parquet_file)
+                mat = RayDMatrix(ds)
+                self.assertTrue(mat.distributed)
 
     def testTooManyActorsDistributed(self):
         """Test error when too many actors are passed"""
