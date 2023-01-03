@@ -600,7 +600,7 @@ class RayDMatrix:
     If this class is called without the ``num_actors`` argument, it will
     be lazy loaded. Thus, it will return immediately and only load the data
     and store it in the Ray object store after ``load_data(num_actors)`` or
-    ``get_data(rank, num_actors)`` is called.
+    ``get_data(rank, num_actors)`` is called at the beginning of training.
 
     If this class is instantiated with the ``num_actors`` argument, it will
     directly load the data and store them in the object store. If this should
@@ -628,7 +628,7 @@ class RayDMatrix:
             not None, data will be loaded and stored into the object store
             after initialization. If this is None, it will be set by
             the ``xgboost_ray.train()`` function, and it will be loaded and
-            stored in the object store then. Defaults to None (
+            stored in the object store then. Defaults to None.
         filetype (Optional[RayFileType]): Type of data to read.
             This is disregarded if a data object like a pandas dataframe
             is passed as the ``data`` argument. For filenames,
@@ -675,7 +675,7 @@ class RayDMatrix:
             files,
             num_actors=4,  # Will shard the data for four workers
             label="label_column",  # Will select this column as the label
-            columns=columns,  # Will be passed to `pandas.read_parquet()`
+            columns=columns,  # Will be passed to ``pandas.read_parquet()``
             filetype=RayFileType.PARQUET)
 
     """
