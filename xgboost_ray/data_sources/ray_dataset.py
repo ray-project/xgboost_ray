@@ -4,7 +4,6 @@ import pandas as pd
 
 import ray
 from ray.actor import ActorHandle
-from ray.data.dataset import Dataset
 
 from xgboost_ray.data_sources.data_source import DataSource, RayFileType
 from xgboost_ray.data_sources.pandas import Pandas
@@ -41,16 +40,15 @@ class RayDataset(DataSource):
         return isinstance(data, ray.data.dataset.Dataset)
 
     @staticmethod
-    def load_data(
-            data: Any,  # ray.data.dataset.Dataset
-            ignore: Optional[Sequence[str]] = None,
-            indices: Optional[Union[Sequence[int], Sequence[
-                Dataset]]] = None,
-            **kwargs) -> pd.DataFrame:
+    def load_data(data: "ray.data.dataset.Dataset",
+                  ignore: Optional[Sequence[str]] = None,
+                  indices: Optional[Union[Sequence[int], Sequence[
+                      "ray.data.dataset.Dataset"]]] = None,
+                  **kwargs) -> pd.DataFrame:
         _assert_ray_data_available()
 
         if indices is not None and len(indices) > 0 and isinstance(
-                indices[0], Dataset):
+                indices[0], ray.data.dataset.Dataset):
             # We got a list of ObjectRefs belonging to Ray dataset partition
             data = indices
             indices = None
@@ -61,18 +59,20 @@ class RayDataset(DataSource):
         return Pandas.load_data(pd.concat(local_df, copy=False), ignore=ignore)
 
     @staticmethod
-    def convert_to_series(data: Any) -> pd.Series:
+    def convert_to_series(data: Union["ray.data.dataset.Dataset", Sequence[
+            "ray.data.dataset.Dataset"]]) -> pd.Series:
         _assert_ray_data_available()
 
-        if isinstance(data, Dataset):
+        if isinstance(data, ray.data.dataset.Dataset):
             data = data.to_pandas(limit=float("inf"))
         else:
-            data = pd.concat([ds.to_pandas(limit=float("inf")) for ds in data], copy=False)
+            data = pd.concat(
+                [ds.to_pandas(limit=float("inf")) for ds in data], copy=False)
         return DataSource.convert_to_series(data)
 
     @staticmethod
     def get_actor_shards(
-            data: Any,  # ray.data.dataset.Dataset
+            data: "ray.data.dataset.Dataset",
             actors: Sequence[ActorHandle]) -> \
             Tuple[Any, Optional[Dict[int, Any]]]:
         _assert_ray_data_available()
@@ -84,7 +84,10 @@ class RayDataset(DataSource):
         )
 
         # Ray datasets should not be serialized
-        return None, {i: [dataset_split] for i, dataset_split in enumerate(dataset_splits)}
+        return None, {
+            i: [dataset_split]
+            for i, dataset_split in enumerate(dataset_splits)
+        }
 
     @staticmethod
     def get_n(data: Any):
