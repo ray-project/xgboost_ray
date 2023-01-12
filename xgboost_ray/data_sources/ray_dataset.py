@@ -14,6 +14,8 @@ try:
 except (ImportError, AttributeError):
     RAY_DATASET_AVAILABLE = False
 
+DATASET_TO_PANDAS_LIMIT = float("inf")
+
 
 def _assert_ray_data_available():
     if not RAY_DATASET_AVAILABLE:
@@ -47,15 +49,15 @@ class RayDataset(DataSource):
                   **kwargs) -> pd.DataFrame:
         _assert_ray_data_available()
 
-        if indices is not None and len(indices) > 0 and isinstance(
-                indices[0], ray.data.dataset.Dataset):
-            # We got a list of ObjectRefs belonging to Ray dataset partition
-            data = indices
-            indices = None
-
         if indices is not None:
-            data = [data[i] for i in indices]
-        local_df = [ds.to_pandas(limit=float("inf")) for ds in data]
+            if len(indices) > 0 and isinstance(indices[0],
+                                               ray.data.dataset.Dataset):
+                # We got a list of Datasets belonging a partition
+                data = indices
+            else:
+                data = [data[i] for i in indices]
+
+        local_df = [ds.to_pandas(limit=DATASET_TO_PANDAS_LIMIT) for ds in data]
         return Pandas.load_data(pd.concat(local_df, copy=False), ignore=ignore)
 
     @staticmethod
@@ -64,10 +66,11 @@ class RayDataset(DataSource):
         _assert_ray_data_available()
 
         if isinstance(data, ray.data.dataset.Dataset):
-            data = data.to_pandas(limit=float("inf"))
+            data = data.to_pandas(limit=DATASET_TO_PANDAS_LIMIT)
         else:
             data = pd.concat(
-                [ds.to_pandas(limit=float("inf")) for ds in data], copy=False)
+                [ds.to_pandas(limit=DATASET_TO_PANDAS_LIMIT) for ds in data],
+                copy=False)
         return DataSource.convert_to_series(data)
 
     @staticmethod
@@ -77,13 +80,15 @@ class RayDataset(DataSource):
             Tuple[Any, Optional[Dict[int, Any]]]:
         _assert_ray_data_available()
 
+        # We do not use our assign_partitions_to_actors as assignment of splits
+        # to actors is handled by locality_hints argument.
+
         dataset_splits = data.split(
             len(actors),
             equal=True,
             locality_hints=actors,
         )
 
-        # Ray datasets should not be serialized
         return None, {
             i: [dataset_split]
             for i, dataset_split in enumerate(dataset_splits)
