@@ -76,6 +76,14 @@ def softprob_obj(classes):
     return objective
 
 
+def get_basescore(model: xgb.XGBModel) -> float:
+    """Get base score from an XGBoost sklearn estimator."""
+    base_score = float(
+        json.loads(model.get_booster().save_config())["learner"][
+            "learner_model_param"]["base_score"])
+    return base_score
+
+
 class TemporaryDirectory(object):
     """Context manager for tempfile.mkdtemp()"""
 
@@ -628,7 +636,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         cls = RayXGBClassifier()
         assert cls.get_params()["base_score"] is None
         cls.fit(X[:4, ...], y[:4, ...])
-        assert cls.get_params()["base_score"] is not None
+        base_score = get_basescore(cls)
+        np.testing.assert_equal(base_score, 0.5)
 
     @unittest.skipIf(XGBOOST_VERSION < Version("1.1.0"),
                      f"not supported in xgb version {xgb.__version__}")
