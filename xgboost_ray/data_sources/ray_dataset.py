@@ -1,22 +1,20 @@
 from typing import Any, Optional, Sequence, Dict, Union, Tuple
 
-from collections import defaultdict
 import pandas as pd
 
 import ray
-from ray import ObjectRef
 from ray.actor import ActorHandle
 
-from xgboost_ray.data_sources._distributed import \
-    assign_partitions_to_actors, get_actor_rank_ips
 from xgboost_ray.data_sources.data_source import DataSource, RayFileType
-from xgboost_ray.data_sources.object_store import ObjectStore
+from xgboost_ray.data_sources.pandas import Pandas
 
 try:
     import ray.data.dataset  # noqa: F401
     RAY_DATASET_AVAILABLE = True
 except (ImportError, AttributeError):
     RAY_DATASET_AVAILABLE = False
+
+DATASET_TO_PANDAS_LIMIT = float("inf")
 
 
 def _assert_ray_data_available():
@@ -44,72 +42,57 @@ class RayDataset(DataSource):
         return isinstance(data, ray.data.dataset.Dataset)
 
     @staticmethod
-    def load_data(
-            data: Any,  # ray.data.dataset.Dataset
-            ignore: Optional[Sequence[str]] = None,
-            indices: Optional[Union[Sequence[int], Sequence[
-                ObjectRef]]] = None,
-            **kwargs) -> pd.DataFrame:
+    def load_data(data: "ray.data.dataset.Dataset",
+                  ignore: Optional[Sequence[str]] = None,
+                  indices: Optional[Union[Sequence[int], Sequence[
+                      "ray.data.dataset.Dataset"]]] = None,
+                  **kwargs) -> pd.DataFrame:
         _assert_ray_data_available()
 
-        if indices is not None and len(indices) > 0 and isinstance(
-                indices[0], ObjectRef):
-            # We got a list of ObjectRefs belonging to Ray dataset partitions
-            return ObjectStore.load_data(
-                data=indices, indices=None, ignore=ignore)
+        if indices is not None:
+            if len(indices) > 0 and isinstance(indices[0],
+                                               ray.data.dataset.Dataset):
+                # We got a list of Datasets belonging a partition
+                data = indices
+            else:
+                data = [data[i] for i in indices]
 
-        if hasattr(data, "to_pandas_refs"):
-            obj_refs = data.to_pandas_refs()
-        else:
-            # Legacy API
-            obj_refs = data.to_pandas()
-
-        ray.wait(obj_refs)
-        return ObjectStore.load_data(obj_refs, ignore=ignore, indices=indices)
+        local_df = [ds.to_pandas(limit=DATASET_TO_PANDAS_LIMIT) for ds in data]
+        return Pandas.load_data(pd.concat(local_df, copy=False), ignore=ignore)
 
     @staticmethod
-    def convert_to_series(data: Any) -> pd.Series:
+    def convert_to_series(data: Union["ray.data.dataset.Dataset", Sequence[
+            "ray.data.dataset.Dataset"]]) -> pd.Series:
         _assert_ray_data_available()
 
-        obj_refs = data.to_pandas()
-        return ObjectStore.convert_to_series(obj_refs)
+        if isinstance(data, ray.data.dataset.Dataset):
+            data = data.to_pandas(limit=DATASET_TO_PANDAS_LIMIT)
+        else:
+            data = pd.concat(
+                [ds.to_pandas(limit=DATASET_TO_PANDAS_LIMIT) for ds in data],
+                copy=False)
+        return DataSource.convert_to_series(data)
 
     @staticmethod
     def get_actor_shards(
-            data: Any,  # ray.data.dataset.Dataset
+            data: "ray.data.dataset.Dataset",
             actors: Sequence[ActorHandle]) -> \
             Tuple[Any, Optional[Dict[int, Any]]]:
         _assert_ray_data_available()
 
-        actor_rank_ips = get_actor_rank_ips(actors)
+        # We do not use our assign_partitions_to_actors as assignment of splits
+        # to actors is handled by locality_hints argument.
 
-        # Map node IDs to IP
-        node_id_to_ip = {
-            node["NodeID"]: node["NodeManagerAddress"]
-            for node in ray.nodes()
+        dataset_splits = data.split(
+            len(actors),
+            equal=True,
+            locality_hints=actors,
+        )
+
+        return None, {
+            i: [dataset_split]
+            for i, dataset_split in enumerate(dataset_splits)
         }
-
-        # Get object store locations
-        if hasattr(data, "to_pandas_refs"):
-            obj_refs = data.to_pandas_refs()
-        else:
-            # Legacy API
-            obj_refs = data.to_pandas()
-        ray.wait(obj_refs)
-
-        ip_to_parts = defaultdict(list)
-        for part_obj, location in ray.experimental.get_object_locations(
-                obj_refs).items():
-            if len(location["node_ids"]) == 0:
-                node_id = None
-            else:
-                node_id = location["node_ids"][0]
-
-            ip = node_id_to_ip.get(node_id, None)
-            ip_to_parts[ip].append(part_obj)
-
-        # Ray datasets should not be serialized
-        return None, assign_partitions_to_actors(ip_to_parts, actor_rank_ips)
 
     @staticmethod
     def get_n(data: Any):
