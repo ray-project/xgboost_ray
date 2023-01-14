@@ -9,8 +9,6 @@ import ray
 from ray import ObjectRef
 
 from xgboost_ray.data_sources import Modin, Dask, Partitioned
-from xgboost_ray.data_sources.ray_dataset import RAY_DATASET_AVAILABLE, \
-    RayDataset
 from xgboost_ray.main import _RemoteRayXGBoostActor
 
 from xgboost_ray.data_sources.modin import MODIN_INSTALLED
@@ -436,150 +434,9 @@ class DaskDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
                     f"partition {i} is not partition with ID {part_id}.")
 
 
-@unittest.skipIf(
-    not RAY_DATASET_AVAILABLE,
-    reason="Ray datasets are not available in this version of Ray")
-class RayDatasetSourceTest(_DistributedDataSourceTest, unittest.TestCase):
-    def _testAssignPartitions(self, part_nodes, actor_nodes,
-                              expected_actor_parts):
-        partitions = [
-            ray.put(
-                pd.DataFrame(p, columns=[str(x) for x in range(p.shape[1])]))
-            for p in np.array_split(self.x, len(part_nodes))
-        ]
-
-        # Dict from partition (obj ref) to node host
-        part_to_node = dict(zip(partitions, [f"node{n}" for n in part_nodes]))
-
-        actors_to_node = dict(enumerate(f"node{n}" for n in actor_nodes))
-
-        actor_to_parts = self._getActorToParts(actors_to_node, partitions,
-                                               part_to_node, part_nodes)
-
-        print(expected_actor_parts)
-        print(actor_to_parts)
-
-        for actor_rank, part_ids in expected_actor_parts.items():
-            for i, part_id in enumerate(part_ids):
-                self.assertEqual(
-                    actor_to_parts[actor_rank][i],
-                    partitions[part_id],
-                    msg=f"Assignment failed: Actor rank {actor_rank}, "
-                    f"partition {i} is not partition with ID {part_id}.")
-
-    def _getActorToParts(self, actors_to_node, partitions, part_to_node,
-                         part_nodes):
-        def get_object_locations(data, *args, **kwargs):
-            return {
-                partitions[i]: {
-                    "node_ids": [part_nodes[i]],
-                    "object_size": 1
-                }
-                for i in range(len(data))
-            }
-
-        def node_map():
-            return [{
-                "NodeID": n,
-                "NodeManagerAddress": f"node{n}"
-            } for n in range(4)]
-
-        def actor_ranks(actors):
-            return actors_to_node
-
-        with patch(
-                "ray.experimental.get_object_locations"
-        ) as mock_locations, patch("ray.nodes") as mock_nodes, patch(
-                "xgboost_ray.data_sources.ray_dataset.get_actor_rank_ips"
-        ) as mock_ranks:
-            mock_locations.side_effect = get_object_locations
-            mock_nodes.side_effect = node_map
-            mock_ranks.side_effect = actor_ranks
-
-            if hasattr(ray.data, "from_pandas_refs"):
-                data = ray.data.from_pandas_refs(list(part_to_node.keys()))
-            else:
-                # Legacy API
-                data = ray.data.from_pandas(list(part_to_node.keys()))
-
-            _, actor_to_parts = RayDataset.get_actor_shards(
-                data=data, actors=[])
-
-        return actor_to_parts
-
-    def _testDataSourceAssignment(self, part_nodes, actor_nodes,
-                                  expected_actor_parts):
-        node_ips = [
-            node["NodeManagerAddress"] for node in ray.nodes() if node["Alive"]
-        ]
-        if len(node_ips) < max(max(actor_nodes), max(part_nodes)) + 1:
-            print("Not running on cluster, skipping rest of this test.")
-            return
-
-        actor_node_ips = [node_ips[nid] for nid in actor_nodes]
-        part_node_ips = [node_ips[nid] for nid in part_nodes]
-
-        # Initialize data frames on remote nodes
-        # This way we can control which partition is on which node
-        @ray.remote(num_cpus=0.1)
-        def create_remote_df(arr):
-            return ray.put(pd.DataFrame(arr))
-
-        partitions = np.array_split(self.x, len(part_nodes))
-        node_dfs: List[ObjectRef] = ray.get([
-            create_remote_df.options(resources={
-                f"node:{pip}": 0.1
-            }).remote(partitions[pid]) for pid, pip in enumerate(part_node_ips)
-        ])
-
-        # Create Ray dataset from distributed partitions
-        if hasattr(ray.data, "from_pandas_refs"):
-            ray_ds = ray.data.from_pandas_refs(node_dfs)
-            df_objs = ray_ds.to_pandas_refs()
-        else:
-            # Legacy API
-            ray_ds = ray.data.from_pandas(node_dfs)
-            df_objs = ray_ds.to_pandas()
-
-        ray.wait(df_objs)
-        locations = ray.experimental.get_object_locations(df_objs)
-
-        try:
-            self.assertSequenceEqual(
-                [df[0][0] for df in partitions],
-                [df[0][0] for df in ray.get(list(df_objs))],
-                msg="Ray datasets mixed up the partition order")
-
-            self.assertSequenceEqual(
-                part_node_ips,
-                locations,
-                msg="Ray datasets moved partitions to different IPs")
-        except AssertionError as exc:
-            print(f"Ray dataset part of the test failed: {exc}")
-            print("This is a stochastic test failure. Ignoring the rest "
-                  "of this test.")
-            return
-
-        # Create ray actors
-        actors = [
-            _RemoteRayXGBoostActor.options(resources={
-                f"node:{nip}": 0.1
-            }).remote(rank=rank, num_actors=len(actor_nodes))
-            for rank, nip in enumerate(actor_node_ips)
-        ]
-
-        # Calculate shards
-        _, actor_to_parts = RayDataset.get_actor_shards(ray_ds, actors)
-
-        for actor_rank, part_ids in expected_actor_parts.items():
-            for i, part_id in enumerate(part_ids):
-                assigned_df = ray.get(actor_to_parts[actor_rank][i])
-                part_df = pd.DataFrame(partitions[part_id])
-
-                self.assertTrue(
-                    assigned_df.equals(part_df),
-                    msg=f"Assignment failed: Actor rank {actor_rank}, "
-                    f"partition {i} is not partition with ID {part_id}.")
+# Ray Datasets data source is not tested, as we do not make use of xgboost-ray
+# partition-to-actor assign logic. Furthermore, xgboost-ray with Ray Datasets
+# is tested in ray-project/ray.
 
 
 class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
