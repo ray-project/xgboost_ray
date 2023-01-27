@@ -878,16 +878,19 @@ def _create_placement_group(cpus_per_actor, gpus_per_actor,
     pg = placement_group(bundles, strategy=strategy)
     # Wait for placement group to get created.
     logger.debug("Waiting for placement group to start.")
-    ready, _ = ray.wait([pg.ready()], timeout=ENV.PLACEMENT_GROUP_TIMEOUT_S)
+    timeout = ENV.PLACEMENT_GROUP_TIMEOUT_S
+    ready, _ = ray.wait([pg.ready()], timeout=timeout)
     if ready:
         logger.debug("Placement group has started.")
     else:
-        raise TimeoutError("Placement group creation timed out. Make sure "
-                           "your cluster either has enough resources or use "
-                           "an autoscaling cluster. Current resources "
-                           "available: {}, resources requested by the "
-                           "placement group: {}".format(
-                               ray.available_resources(), pg.bundle_specs))
+        raise TimeoutError(
+            f"Placement group creation timed out after {timeout} seconds. "
+            "Make sure your cluster either has enough resources or use "
+            "an autoscaling cluster. Current resources "
+            f"available: {ray.available_resources()}, resources requested "
+            f"by the placement group: {pg.bundle_specs}. "
+            "You can change the timeout by setting the "
+            "RXGB_PLACEMENT_GROUP_TIMEOUT_S environment variable.")
     return pg
 
 
