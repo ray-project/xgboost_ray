@@ -102,6 +102,7 @@ class RayDataIter(DataIter):
             label: List[Optional[Data]],
             missing: Optional[float],
             weight: List[Optional[Data]],
+            feature_weights: List[Optional[Data]],
             qid: List[Optional[Data]],
             base_margin: List[Optional[Data]],
             label_lower_bound: List[Optional[Data]],
@@ -118,6 +119,7 @@ class RayDataIter(DataIter):
         self._label = label
         self._missing = missing
         self._weight = weight
+        self._feature_weights = feature_weights
         self._qid = qid
         self._base_margin = base_margin
         self._label_lower_bound = label_lower_bound
@@ -151,6 +153,7 @@ class RayDataIter(DataIter):
             data=self._prop(self._data),
             label=self._prop(self._label),
             weight=self._prop(self._weight),
+            feature_weights=self._prop(self._feature_weights),
             qid=self._prop(self._qid),
             group=None,
             label_lower_bound=self._prop(self._label_lower_bound),
@@ -168,6 +171,7 @@ class _RayDMatrixLoader:
                  label: Optional[Data] = None,
                  missing: Optional[float] = None,
                  weight: Optional[Data] = None,
+                 feature_weights: Optional[Data] = None,
                  base_margin: Optional[Data] = None,
                  label_lower_bound: Optional[Data] = None,
                  label_upper_bound: Optional[Data] = None,
@@ -182,6 +186,7 @@ class _RayDMatrixLoader:
         self.label = label
         self.missing = missing
         self.weight = weight
+        self.feature_weights = feature_weights
         self.base_margin = base_margin
         self.label_lower_bound = label_lower_bound
         self.label_upper_bound = label_upper_bound
@@ -248,8 +253,8 @@ class _RayDMatrixLoader:
         """
         Split dataframe into
 
-        `features`, `labels`, `weight`, `base_margin`, `label_lower_bound`,
-        `label_upper_bound`
+        `features`, `labels`, `weight`, `feature_weights`, `base_margin`, 
+        `label_lower_bound`, `label_upper_bound`
 
         """
         # sort dataframe by qid if exists (required by DMatrix)
@@ -265,6 +270,10 @@ class _RayDMatrixLoader:
             exclude_cols.add(exclude)
 
         weight, exclude = data_source.get_column(local_data, self.weight)
+        if exclude:
+            exclude_cols.add(exclude)
+
+        feature_weights, exclude = data_source.get_column(local_data, self.feature_weights)
         if exclude:
             exclude_cols.add(exclude)
 
@@ -291,7 +300,7 @@ class _RayDMatrixLoader:
         if exclude_cols:
             x = x[[col for col in x.columns if col not in exclude_cols]]
 
-        return x, label, weight, base_margin, label_lower_bound, \
+        return x, label, weight, feature_weights, base_margin, label_lower_bound, \
             label_upper_bound, qid
 
     def load_data(self,
@@ -380,7 +389,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
         # yet. Instead, we'll be selecting the rows below.
         local_df = data_source.load_data(
             self.data, ignore=self.ignore, indices=None, **self.kwargs)
-        x, y, w, b, ll, lu, qid = self._split_dataframe(
+        x, y, w, fw, b, ll, lu, qid = self._split_dataframe(
             local_df, data_source=data_source)
 
         if isinstance(x, list):
@@ -396,6 +405,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 "data": ray.put(x.iloc[indices]),
                 "label": ray.put(y.iloc[indices] if y is not None else None),
                 "weight": ray.put(w.iloc[indices] if w is not None else None),
+                "feature_weights": ray.put(fw),
                 "base_margin": ray.put(b.iloc[indices]
                                        if b is not None else None),
                 "label_lower_bound": ray.put(ll.iloc[indices]
@@ -545,7 +555,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 indices=rank_shards,
                 ignore=self.ignore,
                 **self.kwargs)
-            x, y, w, b, ll, lu, qid = self._split_dataframe(
+            x, y, w, fw, b, ll, lu, qid = self._split_dataframe(
                 local_df, data_source=data_source)
 
             if isinstance(x, list):
@@ -555,10 +565,10 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
         else:
             n = self._cached_n or data_source.get_n(self.data)
             indices = _get_sharding_indices(sharding, rank, num_actors, n)
-
+            
             if not indices:
-                x, y, w, b, ll, lu, qid = (None, None, None, None, None, None,
-                                           None)
+                x, y, w, fw, b, ll, lu, qid = (None, None, None, None, None, None,
+                                           None, None)
                 n = 0
             else:
                 local_df = data_source.load_data(
@@ -566,7 +576,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                     ignore=self.ignore,
                     indices=indices,
                     **self.kwargs)
-                x, y, w, b, ll, lu, qid = self._split_dataframe(
+                x, y, w, fw, b, ll, lu, qid = self._split_dataframe(
                     local_df, data_source=data_source)
 
                 if isinstance(x, list):
@@ -579,6 +589,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 "data": ray.put(x),
                 "label": ray.put(y),
                 "weight": ray.put(w),
+                "feature_weights": ray.put(fw),
                 "base_margin": ray.put(b),
                 "label_lower_bound": ray.put(ll),
                 "label_upper_bound": ray.put(lu),
@@ -684,6 +695,7 @@ class RayDMatrix:
                  data: Data,
                  label: Optional[Data] = None,
                  weight: Optional[Data] = None,
+                 feature_weights: Optional[Data] = None,
                  base_margin: Optional[Data] = None,
                  missing: Optional[float] = None,
                  label_lower_bound: Optional[Data] = None,
@@ -739,6 +751,7 @@ class RayDMatrix:
                 label=label,
                 missing=missing,
                 weight=weight,
+                feature_weights=feature_weights,
                 base_margin=base_margin,
                 label_lower_bound=label_lower_bound,
                 label_upper_bound=label_upper_bound,
@@ -755,6 +768,7 @@ class RayDMatrix:
                 label=label,
                 missing=missing,
                 weight=weight,
+                feature_weights=feature_weights,
                 base_margin=base_margin,
                 label_lower_bound=label_lower_bound,
                 label_upper_bound=label_upper_bound,
