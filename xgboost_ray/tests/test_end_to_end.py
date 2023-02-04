@@ -375,6 +375,45 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         auc_rec = evals_result["train"]["aucpr"]
         self.assertTrue((p <= q for p, q in zip(auc_rec, auc_rec[1:])))
 
+    @unittest.skipIf(xgb.__version__ < "1.3.0",
+                     f"not supported in xgb version {xgb.__version__}")
+    def testFeatureWeightsParam(self):
+        """Test the feature_weights parameter for xgb version >= 1.3.0. 
+        Adapted from the official demo codes:
+        https://xgboost.readthedocs.io/en/stable/python/examples/feature_weights.html"""
+
+        rng = np.random.RandomState(1994)
+
+        kRows = 1000
+        kCols = 10
+
+        X = rng.randn(kRows, kCols)
+        y = rng.randn(kRows)
+        fw = np.ones(shape=(kCols,))
+        for i in range(kCols):
+            fw[i] *= float(i)
+        train_set = RayDMatrix(X, y, feature_weights=fw)
+
+        evals_result = {}
+        bst = train(
+            {
+                "objective": "reg:squarederror",
+                "eval_metric": ["rmse", "error"],
+                'colsample_bynode': 0.2,
+            },
+            train_set,
+            evals_result=evals_result,
+            evals=[(train_set, "train")],
+            verbose_eval=False,
+            ray_params=RayParams(
+                num_actors=2,  # Number of remote actors
+                cpus_per_actor=4))
+
+        feature_map = bst.get_fscore()
+        # feature zero has 0 weight
+        self.assertTrue(feature_map.get('f0', None) is None)
+        self.assertTrue(max(feature_map.values()) == feature_map.get('f9'))
+
 
 if __name__ == "__main__":
     import pytest
