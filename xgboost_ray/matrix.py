@@ -253,7 +253,7 @@ class _RayDMatrixLoader:
         """
         Split dataframe into
 
-        `features`, `labels`, `weight`, `feature_weights`, `base_margin`, 
+        `features`, `labels`, `weight`, `feature_weights`, `base_margin`,
         `label_lower_bound`, `label_upper_bound`
 
         """
@@ -301,8 +301,8 @@ class _RayDMatrixLoader:
         if exclude_cols:
             x = x[[col for col in x.columns if col not in exclude_cols]]
 
-        return x, label, weight, feature_weights, base_margin, label_lower_bound, \
-            label_upper_bound, qid
+        return x, label, weight, feature_weights, base_margin, \
+        label_lower_bound, label_upper_bound, qid
 
     def load_data(self,
                   num_actors: int,

@@ -378,9 +378,9 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
     @unittest.skipIf(xgb.__version__ < "1.3.0",
                      f"not supported in xgb version {xgb.__version__}")
     def testFeatureWeightsParam(self):
-        """Test the feature_weights parameter for xgb version >= 1.3.0. 
+        """Test the feature_weights parameter for xgb version >= 1.3.0.
         Adapted from the official demo codes:
-        https://xgboost.readthedocs.io/en/stable/python/examples/feature_weights.html"""
+        xgboost.readthedocs.io/en/stable/python/examples/feature_weights.html"""
 
         rng = np.random.RandomState(1994)
 
@@ -399,7 +399,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             {
                 "objective": "reg:squarederror",
                 "eval_metric": ["rmse", "error"],
-                'colsample_bynode': 0.2,
+                "colsample_bynode": 0.2,
             },
             train_set,
             evals_result=evals_result,
@@ -411,8 +411,8 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
         feature_map = bst.get_fscore()
         # feature zero has 0 weight
-        self.assertTrue(feature_map.get('f0', None) is None)
-        self.assertTrue(max(feature_map.values()) == feature_map.get('f9'))
+        self.assertTrue(feature_map.get("f0", None) is None)
+        self.assertTrue(max(feature_map.values()) == feature_map.get("f9"))
 
 
 if __name__ == "__main__":
