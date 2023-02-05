@@ -378,11 +378,12 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
 
         if data.enable_categorical is not None:
             param["enable_categorical"] = data.enable_categorical
-    
+
         matrix = xgb.DMatrix(**param)
-        
+
         if not LEGACY_MATRIX:
-            matrix.set_info(label_lower_bound=ll, label_upper_bound=lu, feature_weights=fw)
+            matrix.set_info(
+                label_lower_bound=ll, label_upper_bound=lu, feature_weights=fw)
 
     data.update_matrix_properties(matrix)
     return matrix
@@ -509,7 +510,7 @@ class RayXGBoostActor:
             distributed_callbacks: Optional[List[DistributedCallback]] = None):
         self.queue = queue
         init_session(rank, self.queue)
-        
+
         self.rank = rank
         self.num_actors = num_actors
 
@@ -607,7 +608,7 @@ class RayXGBoostActor:
               evals: Tuple[RayDMatrix, str], *args,
               **kwargs) -> Dict[str, Any]:
         self._distributed_callbacks.before_train(self)
-        
+
         num_threads = _set_omp_num_threads()
 
         local_params = params.copy()
@@ -1289,7 +1290,7 @@ def train(
     Returns: An ``xgboost.Booster`` object.
     """
     os.environ.setdefault("RAY_IGNORE_UNHANDLED_ERRORS", "1")
-    
+
     if platform.system() == "Windows":
         raise RuntimeError("xgboost-ray training currently does not support "
                            "Windows.")
@@ -1305,7 +1306,7 @@ def train(
 
     if not ray.is_initialized():
         ray.init()
-    
+
     if _remote:
         # Run this function as a remote function to support Ray client mode.
         @ray.remote(num_cpus=0)
@@ -1338,7 +1339,7 @@ def train(
         if isinstance(additional_results, dict):
             additional_results.update(train_additional_results)
         return bst
-    
+
     _maybe_print_legacy_warning()
     # may raise TypeError
     _validate_kwargs_for_func(kwargs, xgb.train, "xgb.train()")
@@ -1358,7 +1359,7 @@ def train(
             "\nFIX THIS by instantiating a RayDMatrix first: "
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(
                 type(dtrain)))
-    
+
     added_tune_callback = _try_add_tune_callback(kwargs)
     # Tune currently does not support elastic training.
     if added_tune_callback and ray_params.elastic_training and not bool(
@@ -1379,7 +1380,7 @@ def train(
             and params["tree_method"].startswith("gpu"))
 
     tree_method = params.get("tree_method", "auto") or "auto"
-    
+
     # preemptively raise exceptions with bad params
     if tree_method == "exact":
         raise ValueError(
@@ -1432,7 +1433,7 @@ def train(
                 "for data you would like to evaluate on.")
         if not deval.loaded and not deval.distributed:
             deval.load_data(ray_params.num_actors)
-    
+
     bst = None
     train_evals_result = {}
     train_additional_results = {}
@@ -1445,7 +1446,7 @@ def train(
 
     # Create the Queue and Event actors.
     queue, stop_event = _create_communication_processes(added_tune_callback)
-    
+
     placement_strategy = None
     if not ray_params.elastic_training:
         if added_tune_callback or get_current_placement_group():
@@ -1463,7 +1464,7 @@ def train(
         pg = None
 
     start_actor_ranks = set(range(ray_params.num_actors))  # Start these
-    
+
     total_training_time = 0.
     boost_rounds_left = num_boost_round
     last_checkpoint_value = checkpoint.value
@@ -1574,7 +1575,7 @@ def train(
             tries += 1
 
     total_time = time.time() - start_time
-    
+
     train_additional_results["training_time_s"] = total_training_time
     train_additional_results["total_time_s"] = total_time
 

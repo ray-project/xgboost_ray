@@ -273,7 +273,8 @@ class _RayDMatrixLoader:
         if exclude:
             exclude_cols.add(exclude)
 
-        feature_weights, exclude = data_source.get_column(local_data, self.feature_weights)
+        feature_weights, exclude = data_source.get_column(
+            local_data, self.feature_weights)
         if exclude:
             exclude_cols.add(exclude)
 
@@ -565,10 +566,10 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
         else:
             n = self._cached_n or data_source.get_n(self.data)
             indices = _get_sharding_indices(sharding, rank, num_actors, n)
-            
+
             if not indices:
-                x, y, w, fw, b, ll, lu, qid = (None, None, None, None, None, None,
-                                           None, None)
+                x, y, w, fw, b, ll, lu, qid = (None, None, None, None, None,
+                                               None, None, None)
                 n = 0
             else:
                 local_df = data_source.load_data(

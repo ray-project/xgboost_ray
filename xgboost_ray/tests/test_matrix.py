@@ -375,10 +375,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         in_x = self.x
         in_y = self.y
         feature_weights = np.arange(len(in_y))
-        self._testMatrixCreation(
-            in_x,
-            in_y,
-            feature_weights=feature_weights)
+        self._testMatrixCreation(in_x, in_y, feature_weights=feature_weights)
 
     @unittest.skipIf("qid" not in inspect.signature(xgb.DMatrix).parameters,
                      f"not supported in xgb version {xgb.__version__}")

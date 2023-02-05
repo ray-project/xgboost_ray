@@ -389,7 +389,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
         X = rng.randn(kRows, kCols)
         y = rng.randn(kRows)
-        fw = np.ones(shape=(kCols,))
+        fw = np.ones(shape=(kCols, ))
         for i in range(kCols):
             fw[i] *= float(i)
         train_set = RayDMatrix(X, y, feature_weights=fw)
