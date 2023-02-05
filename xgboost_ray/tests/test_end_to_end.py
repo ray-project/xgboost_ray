@@ -380,7 +380,8 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
     def testFeatureWeightsParam(self):
         """Test the feature_weights parameter for xgb version >= 1.3.0.
         Adapted from the official demo codes:
-        xgboost.readthedocs.io/en/stable/python/examples/feature_weights.html"""
+        http://xgboost.readthedocs.io/en/stable/python/examples/
+        feature_weights.html"""
 
         rng = np.random.RandomState(1994)
 

@@ -302,7 +302,7 @@ class _RayDMatrixLoader:
             x = x[[col for col in x.columns if col not in exclude_cols]]
 
         return x, label, weight, feature_weights, base_margin, \
-        label_lower_bound, label_upper_bound, qid
+            label_lower_bound, label_upper_bound, qid
 
     def load_data(self,
                   num_actors: int,
