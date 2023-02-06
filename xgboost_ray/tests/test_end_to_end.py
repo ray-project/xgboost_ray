@@ -400,10 +400,10 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             {
                 "objective": "reg:squarederror",
                 "eval_metric": ["rmse", "error"],
-                "colsample_bynode": 0.2,
+                "colsample_bynode": 0.1,
             },
             train_set,
-            num_boost_round=50,
+            num_boost_round=250,
             evals_result=evals_result,
             evals=[(train_set, "train")],
             verbose_eval=False,
