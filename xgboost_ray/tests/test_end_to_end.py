@@ -403,6 +403,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
                 "colsample_bynode": 0.2,
             },
             train_set,
+            num_boost_round=50,
             evals_result=evals_result,
             evals=[(train_set, "train")],
             verbose_eval=False,
