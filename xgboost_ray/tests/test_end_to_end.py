@@ -408,7 +408,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             verbose_eval=False,
             ray_params=RayParams(
                 num_actors=2,  # Number of remote actors
-                cpus_per_actor=4))
+                cpus_per_actor=1))
 
         feature_map = bst.get_fscore()
         # feature zero has 0 weight
