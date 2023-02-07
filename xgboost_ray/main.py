@@ -328,6 +328,8 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
                 param["label"] = [param["label"]]
             if not isinstance(param["weight"], list):
                 param["weight"] = [param["weight"]]
+            if not isinstance(param["feature_weights"], list):
+                param["feature_weights"] = [param["feature_weights"]]
             if not isinstance(param["qid"], list):
                 param["qid"] = [param["qid"]]
             if not isinstance(param["data"], list):
@@ -354,6 +356,7 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
                 "data": concat_dataframes(param["data"]),
                 "label": concat_dataframes(param["label"]),
                 "weight": concat_dataframes(param["weight"]),
+                "feature_weights": concat_dataframes(param["feature_weights"]),
                 "qid": concat_dataframes(param["qid"]),
                 "base_margin": concat_dataframes(param["base_margin"]),
                 "label_lower_bound": concat_dataframes(
@@ -365,6 +368,7 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
 
         ll = param.pop("label_lower_bound", None)
         lu = param.pop("label_upper_bound", None)
+        fw = param.pop("feature_weights", None)
 
         if LEGACY_MATRIX:
             param.pop("base_margin", None)
@@ -378,7 +382,8 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
         matrix = xgb.DMatrix(**param)
 
         if not LEGACY_MATRIX:
-            matrix.set_info(label_lower_bound=ll, label_upper_bound=lu)
+            matrix.set_info(
+                label_lower_bound=ll, label_upper_bound=lu, feature_weights=fw)
 
     data.update_matrix_properties(matrix)
     return matrix

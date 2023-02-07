@@ -91,3 +91,6 @@ project-id
 *.csv
 *.csv.gz
 *.parquet
+
+# Byte-compiled files
+__pycache__/

@@ -368,6 +368,15 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             label_lower_bound=label_lower_bound,
             label_upper_bound=label_upper_bound)
 
+    @unittest.skipIf(xgb.__version__ < "1.3.0",
+                     f"not supported in xgb version {xgb.__version__}")
+    def testFeatureWeightsParam(self):
+        """Test the feature_weights parameter for xgb version >= 1.3.0"""
+        in_x = self.x
+        in_y = self.y
+        feature_weights = np.arange(len(in_y))
+        self._testMatrixCreation(in_x, in_y, feature_weights=feature_weights)
+
     @unittest.skipIf("qid" not in inspect.signature(xgb.DMatrix).parameters,
                      f"not supported in xgb version {xgb.__version__}")
     def testQidSortedBehaviorXGBoost(self):
