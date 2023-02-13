@@ -17,8 +17,9 @@ try:
     from modin.config.envvars import Engine
     from packaging.version import Version
     from modin.pandas import DataFrame as ModinDataFrame, \
-        Series as ModinSeries
-    from modin.distributed.dataframe.pandas import unwrap_partitions
+        Series as ModinSeries  # noqa: F401
+    from modin.distributed.dataframe.pandas import \
+        unwrap_partitions  # noqa: F401
     MODIN_INSTALLED = Version(modin.__version__) >= Version("0.9.0")
 
     # Check if importing the Ray engine leads to errors
@@ -26,9 +27,6 @@ try:
 
 except (ImportError, AttributeError):
     MODIN_INSTALLED = False
-    ModinDataFrame = None
-    ModinSeries = None
-    unwrap_partitions = None
 
 
 def _assert_modin_installed():
@@ -62,6 +60,9 @@ class Modin(DataSource):
                      filetype: Optional[RayFileType] = None) -> bool:
         if not MODIN_INSTALLED:
             return False
+        # Has to be imported again.
+        from modin.pandas import DataFrame as ModinDataFrame, \
+            Series as ModinSeries  # noqa: F811
 
         return isinstance(data, (ModinDataFrame, ModinSeries))
 
@@ -94,6 +95,9 @@ class Modin(DataSource):
     @staticmethod
     def convert_to_series(data: Any) -> pd.Series:
         _assert_modin_installed()
+        # Has to be imported again.
+        from modin.pandas import DataFrame as ModinDataFrame, \
+            Series as ModinSeries  # noqa: F811
 
         if isinstance(data, ModinDataFrame):
             return pd.Series(data._to_pandas().squeeze())
@@ -108,6 +112,10 @@ class Modin(DataSource):
             actors: Sequence[ActorHandle]) -> \
             Tuple[Any, Optional[Dict[int, Any]]]:
         _assert_modin_installed()
+
+        # Has to be imported again.
+        from modin.distributed.dataframe.pandas import \
+            unwrap_partitions  # noqa: F811
 
         actor_rank_ips = get_actor_rank_ips(actors)
 
