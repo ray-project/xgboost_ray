@@ -57,8 +57,13 @@ class RayDataset(DataSource):
             else:
                 data = [data[i] for i in indices]
 
-        local_df = [ds.to_pandas(limit=DATASET_TO_PANDAS_LIMIT) for ds in data]
-        return Pandas.load_data(pd.concat(local_df, copy=False), ignore=ignore)
+        if isinstance(data, ray.data.dataset.Dataset):
+            local_df = data.to_pandas(limit=DATASET_TO_PANDAS_LIMIT)
+        else:
+            local_df = pd.concat(
+                [ds.to_pandas(limit=DATASET_TO_PANDAS_LIMIT) for ds in data],
+                copy=False)
+        return Pandas.load_data(local_df, ignore=ignore)
 
     @staticmethod
     def convert_to_series(data: Union["ray.data.dataset.Dataset", Sequence[
