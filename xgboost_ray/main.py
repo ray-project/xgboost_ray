@@ -293,7 +293,10 @@ def _ray_get_actor_cpus():
             return sum(cpu[1] for cpu in resource_ids["CPU"])
     else:
         resource_ids = ray.get_runtime_context().get_assigned_resources()
-        return resource_ids.get("CPU")
+        for key in resource_ids.keys():
+            if key.startswith("CPU"):
+                return resource_ids[key]
+        return None
 
 
 def _ray_get_cluster_cpus():
@@ -599,6 +602,8 @@ class RayXGBoostActor:
         else:
             self._local_n[data] = len(param["data"])
 
+        # set nthread for dmatrix conversion
+        param["nthread"] = int(_ray_get_actor_cpus())
         self._data[data] = param
 
         self._distributed_callbacks.after_data_loading(self, data)
