@@ -50,6 +50,7 @@ def test_simple_modin(start_client_server_5_cpus):
 def test_client_actor_cpus(start_client_server_5_cpus):
     assert ray.util.client.ray.is_connected()
     from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+
     @ray.remote
     class DummyTrainActor():
         def test(self):
@@ -61,8 +62,10 @@ def test_client_actor_cpus(start_client_server_5_cpus):
 
     pg = ray.util.placement_group([{"CPU": 2}])
     ray.get(pg.ready())
-    actor2 = DummyTrainActor.options(num_cpus=2,
-        scheduling_strategy=PlacementGroupSchedulingStrategy(placement_group=pg)).remote()
+    actor2 = DummyTrainActor.options(
+        num_cpus=2,
+        scheduling_strategy=PlacementGroupSchedulingStrategy(
+            placement_group=pg)).remote()
     assert ray.get(actor2.test.remote()) == 2
 
 

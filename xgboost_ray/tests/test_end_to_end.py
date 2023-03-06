@@ -8,6 +8,7 @@ import xgboost as xgb
 
 import ray
 from ray.exceptions import RayActorError, RayTaskError
+from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
 from scipy.sparse import csr_matrix
 
@@ -138,7 +139,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
     def test_client_actor_cpus(self):
         ray.init(num_cpus=5, num_gpus=0)
-        from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+
         @ray.remote
         class DummyTrainActor():
             def test(self):
@@ -150,8 +151,10 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
         pg = ray.util.placement_group([{"CPU": 2}])
         ray.get(pg.ready())
-        actor2 = DummyTrainActor.options(num_cpus=2,
-            scheduling_strategy=PlacementGroupSchedulingStrategy(placement_group=pg)).remote()
+        actor2 = DummyTrainActor.options(
+            num_cpus=2,
+            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                placement_group=pg)).remote()
         assert ray.get(actor2.test.remote()) == 2
 
     def _testJointTraining(self,
