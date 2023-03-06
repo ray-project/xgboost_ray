@@ -296,7 +296,7 @@ def _ray_get_actor_cpus():
         for key in resource_ids.keys():
             if key.startswith("CPU"):
                 return resource_ids[key]
-        return None
+        return 1
 
 
 def _ray_get_cluster_cpus():

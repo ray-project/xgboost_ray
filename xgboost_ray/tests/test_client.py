@@ -47,6 +47,25 @@ def test_simple_modin(start_client_server_5_cpus):
     main(cpus_per_actor=1, num_actors=4)
 
 
+def test_client_actor_cpus(start_client_server_5_cpus):
+    assert ray.util.client.ray.is_connected()
+    from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+    @ray.remote
+    class DummyTrainActor():
+        def test(self):
+            import xgboost_ray
+            return xgboost_ray.main._ray_get_actor_cpus()
+
+    actor = DummyTrainActor.options(num_cpus=2).remote()
+    assert ray.get(actor.test.remote()) == 2
+
+    pg = ray.util.placement_group([{"CPU": 2}])
+    ray.get(pg.ready())
+    actor2 = DummyTrainActor.options(num_cpus=2,
+        scheduling_strategy=PlacementGroupSchedulingStrategy(placement_group=pg)).remote()
+    assert ray.get(actor2.test.remote()) == 2
+
+
 @pytest.mark.skipif(
     not RAY_DATASET_AVAILABLE,
     reason="Ray datasets are not available in this version of Ray")
