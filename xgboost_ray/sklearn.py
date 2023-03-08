@@ -231,10 +231,11 @@ def _get_doc(object):
 
 def _treat_estimator_doc(doc: str) -> str:
     """Helper function to make nececssary changes in estimator docstrings"""
-    doc = doc.replace(*_N_JOBS_DOC_REPLACE).replace(
-        "scikit-learn API for XGBoost",
-        "scikit-learn API for Ray-distributed XGBoost").replace(
-            ":doc:`tree method\n        </treemethod>`", "tree method")
+    if doc:
+        doc = doc.replace(*_N_JOBS_DOC_REPLACE).replace(
+            "scikit-learn API for XGBoost",
+            "scikit-learn API for Ray-distributed XGBoost").replace(
+                ":doc:`tree method\n        </treemethod>`", "tree method")
     return doc
 
 
