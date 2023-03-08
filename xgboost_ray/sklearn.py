@@ -213,7 +213,7 @@ _N_JOBS_DOC_REPLACE = (
 )
 
 
-def _get_doc(object):
+def _get_doc(object: Any) -> Optional[str]:
     """Same as ``inspect.getdoc``, but without ``cleandoc`` applied."""
     try:
         doc = object.__doc__
@@ -229,7 +229,7 @@ def _get_doc(object):
     return doc
 
 
-def _treat_estimator_doc(doc: str) -> str:
+def _treat_estimator_doc(doc: Optional[str]) -> Optional[str]:
     """Helper function to make nececssary changes in estimator docstrings"""
     if doc:
         doc = doc.replace(*_N_JOBS_DOC_REPLACE).replace(
@@ -239,7 +239,7 @@ def _treat_estimator_doc(doc: str) -> str:
     return doc
 
 
-def _treat_X_doc(doc: str) -> str:
+def _treat_X_doc(doc: Optional[str]) -> Optional[str]:
     if doc:
         doc = doc.replace(
             "Data to predict with.",
