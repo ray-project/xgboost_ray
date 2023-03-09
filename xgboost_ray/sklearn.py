@@ -32,6 +32,7 @@ import numpy as np
 import warnings
 import functools
 import inspect
+from inspect import _finddoc
 
 from ray.util.annotations import PublicAPI, DeveloperAPI
 
@@ -212,22 +213,41 @@ _N_JOBS_DOC_REPLACE = (
 )
 
 
-def _treat_estimator_doc(doc: str) -> str:
-    """Helper function to make nececssary changes in estimator docstrings"""
-    doc = doc.replace(*_N_JOBS_DOC_REPLACE).replace(
-        "scikit-learn API for XGBoost",
-        "scikit-learn API for Ray-distributed XGBoost").replace(
-            ":doc:`tree method\n        </treemethod>`", "tree method")
+def _get_doc(object: Any) -> Optional[str]:
+    """Same as ``inspect.getdoc``, but without ``cleandoc`` applied."""
+    try:
+        doc = object.__doc__
+    except AttributeError:
+        return None
+    if doc is None:
+        try:
+            doc = _finddoc(object)
+        except (AttributeError, TypeError):
+            return None
+    if not isinstance(doc, str):
+        return None
     return doc
 
 
-def _treat_X_doc(doc: str) -> str:
-    doc = doc.replace("Data to predict with.",
-                      "Data to predict with. Can also be a ``RayDMatrix``.")
-    doc = doc.replace("Feature matrix.",
-                      "Feature matrix. Can also be a ``RayDMatrix``.")
-    doc = doc.replace("Feature matrix",
-                      "Feature matrix. Can also be a ``RayDMatrix``.")
+def _treat_estimator_doc(doc: Optional[str]) -> Optional[str]:
+    """Helper function to make nececssary changes in estimator docstrings"""
+    if doc:
+        doc = doc.replace(*_N_JOBS_DOC_REPLACE).replace(
+            "scikit-learn API for XGBoost",
+            "scikit-learn API for Ray-distributed XGBoost").replace(
+                ":doc:`tree method\n        </treemethod>`", "tree method")
+    return doc
+
+
+def _treat_X_doc(doc: Optional[str]) -> Optional[str]:
+    if doc:
+        doc = doc.replace(
+            "Data to predict with.",
+            "Data to predict with. Can also be a ``RayDMatrix``.")
+        doc = doc.replace("Feature matrix.",
+                          "Feature matrix. Can also be a ``RayDMatrix``.")
+        doc = doc.replace("Feature matrix",
+                          "Feature matrix. Can also be a ``RayDMatrix``.")
     return doc
 
 
@@ -514,7 +534,7 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
         self._set_evaluation_result(evals_result)
         return self
 
-    fit.__doc__ = _treat_X_doc(XGBRegressor.fit.__doc__) + _RAY_PARAMS_DOC
+    fit.__doc__ = _treat_X_doc(_get_doc(XGBRegressor.fit)) + _RAY_PARAMS_DOC
 
     def _can_use_inplace_predict(self) -> bool:
         return False
@@ -542,8 +562,8 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
             _remote=_remote,
             ray_dmatrix_params=ray_dmatrix_params)
 
-    predict.__doc__ = _treat_X_doc(
-        XGBRegressor.predict.__doc__) + _RAY_PARAMS_DOC
+    predict.__doc__ = _treat_X_doc(_get_doc(
+        XGBRegressor.predict)) + _RAY_PARAMS_DOC
 
     def load_model(self, fname):
         if not hasattr(self, "_Booster"):
@@ -551,7 +571,7 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
         return super().load_model(fname)
 
 
-RayXGBRegressor.__doc__ = _treat_estimator_doc(XGBRegressor.__doc__)
+RayXGBRegressor.__doc__ = _treat_estimator_doc(_get_doc(XGBRegressor))
 
 
 class RayXGBRFRegressor(RayXGBRegressor):
@@ -589,7 +609,7 @@ class RayXGBRFRegressor(RayXGBRegressor):
         return 1
 
 
-RayXGBRFRegressor.__doc__ = _treat_estimator_doc(XGBRFRegressor.__doc__)
+RayXGBRFRegressor.__doc__ = _treat_estimator_doc(_get_doc(XGBRFRegressor))
 
 
 @PublicAPI(stability="beta")
@@ -734,7 +754,7 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
         self._set_evaluation_result(evals_result)
         return self
 
-    fit.__doc__ = _treat_X_doc(XGBClassifier.fit.__doc__) + _RAY_PARAMS_DOC
+    fit.__doc__ = _treat_X_doc(_get_doc(XGBClassifier.fit)) + _RAY_PARAMS_DOC
 
     def _ray_fit_preprocess(self, y) -> Callable:
         """This has been separated out so that it can be easily overwritten
@@ -838,7 +858,8 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
             return self._le.inverse_transform(column_indexes)
         return column_indexes
 
-    predict.__doc__ = _treat_X_doc(XGBModel.predict.__doc__) + _RAY_PARAMS_DOC
+    predict.__doc__ = _treat_X_doc(_get_doc(
+        XGBModel.predict)) + _RAY_PARAMS_DOC
 
     def predict_proba(
             self,
@@ -872,10 +893,10 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
         return super().load_model(fname)
 
     predict_proba.__doc__ = (
-        _treat_X_doc(XGBClassifier.predict_proba.__doc__) + _RAY_PARAMS_DOC)
+        _treat_X_doc(_get_doc(XGBClassifier.predict_proba)) + _RAY_PARAMS_DOC)
 
 
-RayXGBClassifier.__doc__ = _treat_estimator_doc(XGBClassifier.__doc__)
+RayXGBClassifier.__doc__ = _treat_estimator_doc(_get_doc(XGBClassifier))
 
 
 class RayXGBRFClassifier(RayXGBClassifier):
@@ -935,7 +956,7 @@ class RayXGBRFClassifier(RayXGBClassifier):
         return 1
 
 
-RayXGBRFClassifier.__doc__ = _treat_estimator_doc(XGBRFClassifier.__doc__)
+RayXGBRFClassifier.__doc__ = _treat_estimator_doc(_get_doc(XGBRFClassifier))
 
 
 @PublicAPI(stability="beta")
@@ -1053,7 +1074,7 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
         self._set_evaluation_result(evals_result)
         return self
 
-    fit.__doc__ = _treat_X_doc(XGBRanker.fit.__doc__) + _RAY_PARAMS_DOC
+    fit.__doc__ = _treat_X_doc(_get_doc(XGBRanker.fit)) + _RAY_PARAMS_DOC
 
     def _can_use_inplace_predict(self) -> bool:
         return False
@@ -1081,7 +1102,8 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
             _remote=_remote,
             ray_dmatrix_params=ray_dmatrix_params)
 
-    predict.__doc__ = _treat_X_doc(XGBRanker.predict.__doc__) + _RAY_PARAMS_DOC
+    predict.__doc__ = _treat_X_doc(_get_doc(
+        XGBRanker.predict)) + _RAY_PARAMS_DOC
 
     def load_model(self, fname):
         if not hasattr(self, "_Booster"):
@@ -1089,4 +1111,4 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
         return super().load_model(fname)
 
 
-RayXGBRanker.__doc__ = _treat_estimator_doc(XGBRanker.__doc__)
+RayXGBRanker.__doc__ = _treat_estimator_doc(_get_doc(XGBRanker))
