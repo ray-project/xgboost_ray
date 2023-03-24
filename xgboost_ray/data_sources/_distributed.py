@@ -11,14 +11,12 @@ def get_actor_rank_ips(actors: Sequence[ActorHandle]) -> Dict[int, str]:
     """Get a dict mapping from actor ranks to their IPs"""
     no_obj = ray.put(None)
     # Build a dict mapping actor ranks to their IP addresses
-    actor_rank_ips: Dict[int, str] = {
-        rank: ip
-        for rank, ip in enumerate(
+    actor_rank_ips: Dict[int, str] = dict(
+        enumerate(
             ray.get([
                 actor.ip.remote() if actor is not None else no_obj
                 for actor in actors
-            ]))
-    }
+            ])))
     return actor_rank_ips
 
 
