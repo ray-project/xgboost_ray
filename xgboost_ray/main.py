@@ -675,7 +675,6 @@ class RayXGBoostActor:
                 with _RabitContext(str(id(self)), rabit_args):
 
                     local_dtrain = _get_dmatrix(dtrain, self._data[dtrain])
-                    del self._data[dtrain]
 
                     if not local_dtrain.get_label().size:
                         raise RuntimeError(
@@ -687,9 +686,7 @@ class RayXGBoostActor:
                     local_evals = []
                     for deval, name in evals:
                         local_evals.append((_get_dmatrix(
-                            deval, self._data[deval], local_dtrain), name))
-                        del self._data[deval]
-
+                            deval, self._data[deval]), name))
                     if LEGACY_CALLBACK:
                         for xgb_callback in kwargs.get("callbacks", []):
                             if isinstance(xgb_callback, TrainingCallback):

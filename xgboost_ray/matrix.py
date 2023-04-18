@@ -503,6 +503,11 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
     def assert_enough_shards_for_actors(self, num_actors: int):
         data_source = self.get_data_source()
 
+        # Ray Datasets will be automatically split to match the number
+        # of actors.
+        if isinstance(data_source, RayDataset):
+            return
+
         max_num_shards = self._cached_n or data_source.get_n(self.data)
         if num_actors > max_num_shards:
             raise RuntimeError(
