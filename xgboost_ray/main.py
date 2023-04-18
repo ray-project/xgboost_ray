@@ -75,7 +75,7 @@ from xgboost_ray.tune import _try_add_tune_callback, _get_tune_resources, \
 
 from xgboost_ray.matrix import RayDMatrix, combine_data, \
     RayDeviceQuantileDMatrix, RayDataIter, concat_dataframes, \
-    LEGACY_MATRIX
+    LEGACY_MATRIX, QUANTILE_AVAILABLE, RayQuantileDMatrix
 from xgboost_ray.session import init_session, put_queue, \
     set_session_queue, get_rabit_rank
 
@@ -321,6 +321,24 @@ def _set_omp_num_threads():
 
 
 def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
+    if QUANTILE_AVAILABLE and isinstance(data, RayQuantileDMatrix):
+        if isinstance(param["data"], list):
+            qdm_param = {
+                "data": concat_dataframes(param["data"]),
+                "label": concat_dataframes(param["label"]),
+                "weight": concat_dataframes(param["weight"]),
+                "feature_weights": concat_dataframes(param["feature_weights"]),
+                "qid": concat_dataframes(param["qid"]),
+                "base_margin": concat_dataframes(param["base_margin"]),
+                "label_lower_bound": concat_dataframes(
+                    param["label_lower_bound"]),
+                "label_upper_bound": concat_dataframes(
+                    param["label_upper_bound"]),
+            }
+            param.update(qdm_param)
+        if data.enable_categorical is not None:
+            param["enable_categorical"] = data.enable_categorical
+        matrix = xgb.QuantileDMatrix(**param)
     if not LEGACY_MATRIX and isinstance(data, RayDeviceQuantileDMatrix):
         # If we only got a single data shard, create a list so we can
         # iterate over it
@@ -657,6 +675,7 @@ class RayXGBoostActor:
                 with _RabitContext(str(id(self)), rabit_args):
 
                     local_dtrain = _get_dmatrix(dtrain, self._data[dtrain])
+                    del self._data[dtrain]
 
                     if not local_dtrain.get_label().size:
                         raise RuntimeError(
@@ -668,7 +687,8 @@ class RayXGBoostActor:
                     local_evals = []
                     for deval, name in evals:
                         local_evals.append((_get_dmatrix(
-                            deval, self._data[deval]), name))
+                            deval, self._data[deval], local_dtrain), name))
+                        del self._data[deval]
 
                     if LEGACY_CALLBACK:
                         for xgb_callback in kwargs.get("callbacks", []):
