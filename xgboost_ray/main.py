@@ -319,22 +319,26 @@ def _set_omp_num_threads():
             del os.environ["OMP_NUM_THREADS"]
     return int(float(os.environ.get("OMP_NUM_THREADS", "0.0")))
 
+def _prepare_dmatrix_params(param: Dict) -> Dict:
+    dm_param = {
+        "data": concat_dataframes(param["data"]),
+        "label": concat_dataframes(param["label"]),
+        "weight": concat_dataframes(param["weight"]),
+        "feature_weights": concat_dataframes(param["feature_weights"]),
+        "qid": concat_dataframes(param["qid"]),
+        "base_margin": concat_dataframes(param["base_margin"]),
+        "label_lower_bound": concat_dataframes(
+            param["label_lower_bound"]),
+        "label_upper_bound": concat_dataframes(
+            param["label_upper_bound"]),
+    }
+    return dm_param
+
 
 def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
     if QUANTILE_AVAILABLE and isinstance(data, RayQuantileDMatrix):
         if isinstance(param["data"], list):
-            qdm_param = {
-                "data": concat_dataframes(param["data"]),
-                "label": concat_dataframes(param["label"]),
-                "weight": concat_dataframes(param["weight"]),
-                "feature_weights": concat_dataframes(param["feature_weights"]),
-                "qid": concat_dataframes(param["qid"]),
-                "base_margin": concat_dataframes(param["base_margin"]),
-                "label_lower_bound": concat_dataframes(
-                    param["label_lower_bound"]),
-                "label_upper_bound": concat_dataframes(
-                    param["label_upper_bound"]),
-            }
+            qdm_param = _prepare_dmatrix_params(param)
             param.update(qdm_param)
         if data.enable_categorical is not None:
             param["enable_categorical"] = data.enable_categorical
@@ -373,18 +377,7 @@ def _get_dmatrix(data: RayDMatrix, param: Dict) -> xgb.DMatrix:
         matrix = xgb.DeviceQuantileDMatrix(it, **dm_param)
     else:
         if isinstance(param["data"], list):
-            dm_param = {
-                "data": concat_dataframes(param["data"]),
-                "label": concat_dataframes(param["label"]),
-                "weight": concat_dataframes(param["weight"]),
-                "feature_weights": concat_dataframes(param["feature_weights"]),
-                "qid": concat_dataframes(param["qid"]),
-                "base_margin": concat_dataframes(param["base_margin"]),
-                "label_lower_bound": concat_dataframes(
-                    param["label_lower_bound"]),
-                "label_upper_bound": concat_dataframes(
-                    param["label_upper_bound"]),
-            }
+            dm_param = _prepare_dmatrix_params(param)
             param.update(dm_param)
 
         ll = param.pop("label_lower_bound", None)
