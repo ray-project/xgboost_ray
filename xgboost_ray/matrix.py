@@ -37,6 +37,13 @@ except ImportError:
     DataIter = object
     LEGACY_MATRIX = True
 
+try:
+    from xgboost.core import QuantileDmatrix
+    QUANTILE_AVAILABLE = True
+except ImportError:
+    QuantileDmatrix = object
+    QUANTILE_AVAILABLE = False
+
 if TYPE_CHECKING:
     from xgboost_ray.xgb import xgboost as xgb
 
@@ -873,6 +880,11 @@ class RayDMatrix:
 
     def __eq__(self, other):
         return self.__hash__() == other.__hash__()
+
+
+class RayQuantileDMatrix(RayDMatrix):
+    """Currently just a thin wrapper for type detection"""
+    pass
 
 
 class RayDeviceQuantileDMatrix(RayDMatrix):
