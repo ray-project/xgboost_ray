@@ -1,7 +1,6 @@
 from typing import Any, Optional, Sequence
 
 import pandas as pd
-
 import ray
 from ray import ObjectRef
 
@@ -13,17 +12,18 @@ class ObjectStore(DataSource):
     """Read pandas dataframes and series from ray object store."""
 
     @staticmethod
-    def is_data_type(data: Any,
-                     filetype: Optional[RayFileType] = None) -> bool:
+    def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:
         if isinstance(data, Sequence):
             return all(isinstance(d, ObjectRef) for d in data)
         return isinstance(data, ObjectRef)
 
     @staticmethod
-    def load_data(data: Sequence[ObjectRef],
-                  ignore: Optional[Sequence[str]] = None,
-                  indices: Optional[Sequence[int]] = None,
-                  **kwargs) -> pd.DataFrame:
+    def load_data(
+        data: Sequence[ObjectRef],
+        ignore: Optional[Sequence[str]] = None,
+        indices: Optional[Sequence[int]] = None,
+        **kwargs
+    ) -> pd.DataFrame:
         if indices is not None:
             data = [data[i] for i in indices]
 

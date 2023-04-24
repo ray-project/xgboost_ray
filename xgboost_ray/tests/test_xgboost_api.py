@@ -1,14 +1,12 @@
+import unittest
 from typing import Tuple
 
-import unittest
-
 import numpy as np
-import xgboost as xgb
-from xgboost_ray.compat import TrainingCallback
-
 import ray
+import xgboost as xgb
 
-from xgboost_ray import RayDMatrix, train, RayParams
+from xgboost_ray import RayDMatrix, RayParams, train
+from xgboost_ray.compat import TrainingCallback
 
 # From XGBoost documentation:
 # https://xgboost.readthedocs.io/en/latest/tutorials/custom_metric_obj.html
@@ -22,11 +20,12 @@ def gradient(predt: np.ndarray, dtrain: xgb.DMatrix) -> np.ndarray:
 
 def hessian(predt: np.ndarray, dtrain: xgb.DMatrix) -> np.ndarray:
     y = dtrain.get_label()
-    return ((-np.log1p(predt) + np.log1p(y) + 1) / np.power(predt + 1, 2))
+    return (-np.log1p(predt) + np.log1p(y) + 1) / np.power(predt + 1, 2)
 
 
-def squared_log(predt: np.ndarray,
-                dtrain: xgb.DMatrix) -> Tuple[np.ndarray, np.ndarray]:
+def squared_log(
+    predt: np.ndarray, dtrain: xgb.DMatrix
+) -> Tuple[np.ndarray, np.ndarray]:
     predt[predt < -1] = -1 + 1e-6
     grad = gradient(predt, dtrain)
     hess = hessian(predt, dtrain)
@@ -45,12 +44,15 @@ class XGBoostAPITest(unittest.TestCase):
 
     def setUp(self):
         repeat = 8  # Repeat data a couple of times for stability
-        self.x = np.array([
-            [1, 0, 0, 0],  # Feature 0 -> Label 0
-            [0, 1, 0, 0],  # Feature 1 -> Label 1
-            [0, 0, 1, 1],  # Feature 2+3 -> Label 0
-            [0, 0, 1, 0],  # Feature 2+!3 -> Label 1
-        ] * repeat)
+        self.x = np.array(
+            [
+                [1, 0, 0, 0],  # Feature 0 -> Label 0
+                [0, 1, 0, 0],  # Feature 1 -> Label 1
+                [0, 0, 1, 1],  # Feature 2+3 -> Label 0
+                [0, 0, 1, 0],  # Feature 2+!3 -> Label 1
+            ]
+            * repeat
+        )
         self.y = np.array([0, 1, 0, 1] * repeat)
 
         self.params = {
@@ -59,7 +61,7 @@ class XGBoostAPITest(unittest.TestCase):
             "nthread": 1,
             "max_depth": 2,
             "objective": "binary:logistic",
-            "seed": 1000
+            "seed": 1000,
         }
 
         self.kwargs = {}
@@ -82,15 +84,15 @@ class XGBoostAPITest(unittest.TestCase):
         params = self.params.copy()
         params.pop("objective", None)
 
-        bst_xgb = xgb.train(
-            params, xgb.DMatrix(self.x, self.y), obj=squared_log)
+        bst_xgb = xgb.train(params, xgb.DMatrix(self.x, self.y), obj=squared_log)
 
         bst_ray = train(
             params,
             RayDMatrix(self.x, self.y),
             ray_params=RayParams(num_actors=2),
             obj=squared_log,
-            **self.kwargs)
+            **self.kwargs,
+        )
 
         x_mat = xgb.DMatrix(self.x)
         pred_y_xgb = np.round(bst_xgb.predict(x_mat))
@@ -118,7 +120,8 @@ class XGBoostAPITest(unittest.TestCase):
             obj=squared_log,
             feval=rmsle,
             evals=[(dtrain_xgb, "dtrain")],
-            evals_result=evals_result_xgb)
+            evals_result=evals_result_xgb,
+        )
 
         dtrain_ray = RayDMatrix(self.x, self.y)
         evals_result_ray = {}
@@ -130,7 +133,8 @@ class XGBoostAPITest(unittest.TestCase):
             feval=rmsle,
             evals=[(dtrain_ray, "dtrain")],
             evals_result=evals_result_ray,
-            **self.kwargs)
+            **self.kwargs,
+        )
 
         x_mat = xgb.DMatrix(self.x)
         pred_y_xgb = np.round(bst_xgb.predict(x_mat))
@@ -143,7 +147,9 @@ class XGBoostAPITest(unittest.TestCase):
             np.allclose(
                 evals_result_xgb["dtrain"]["PyRMSLE"],
                 evals_result_ray["dtrain"]["PyRMSLE"],
-                atol=0.1))
+                atol=0.1,
+            )
+        )
 
     def testCallbacks(self):
         class _Callback(TrainingCallback):
@@ -160,18 +166,21 @@ class XGBoostAPITest(unittest.TestCase):
             ray_params=RayParams(num_actors=2),
             callbacks=[callback],
             additional_results=additional_results,
-            **self.kwargs)
+            **self.kwargs,
+        )
 
         self.assertEqual(len(additional_results["callback_returns"]), 2)
         self.assertTrue(
-            all(rank == 0
-                for (_, rank) in additional_results["callback_returns"][0]))
+            all(rank == 0 for (_, rank) in additional_results["callback_returns"][0])
+        )
         self.assertTrue(
-            all(rank == 1
-                for (_, rank) in additional_results["callback_returns"][1]))
+            all(rank == 1 for (_, rank) in additional_results["callback_returns"][1])
+        )
 
 
 if __name__ == "__main__":
-    import pytest
     import sys
+
+    import pytest
+
     sys.exit(pytest.main(["-v", __file__]))

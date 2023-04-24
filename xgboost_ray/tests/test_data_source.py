@@ -1,18 +1,16 @@
 import unittest
-from typing import Sequence, List
+from typing import List, Sequence
 from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
-
 import ray
 from ray import ObjectRef
 
-from xgboost_ray.data_sources import Modin, Dask, Partitioned
-from xgboost_ray.main import _RemoteRayXGBoostActor
-
-from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+from xgboost_ray.data_sources import Dask, Modin, Partitioned
 from xgboost_ray.data_sources.dask import DASK_INSTALLED
+from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+from xgboost_ray.main import _RemoteRayXGBoostActor
 
 
 class _DistributedDataSourceTest:
@@ -31,12 +29,10 @@ class _DistributedDataSourceTest:
         if not ray.is_initialized():
             ray.init(num_cpus=1)
 
-    def _testAssignPartitions(self, part_nodes, actor_nodes,
-                              expected_actor_parts):
+    def _testAssignPartitions(self, part_nodes, actor_nodes, expected_actor_parts):
         raise NotImplementedError
 
-    def _testDataSourceAssignment(self, part_nodes, actor_nodes,
-                                  expected_actor_parts):
+    def _testDataSourceAssignment(self, part_nodes, actor_nodes, expected_actor_parts):
         raise NotImplementedError
 
     def testAssignEvenTrivial(self):
@@ -54,10 +50,8 @@ class _DistributedDataSourceTest:
             2: [4, 5],
             3: [6, 7],
         }
-        self._testAssignPartitions(part_nodes, actor_nodes,
-                                   expected_actor_parts)
-        self._testDataSourceAssignment(part_nodes, actor_nodes,
-                                       expected_actor_parts)
+        self._testAssignPartitions(part_nodes, actor_nodes, expected_actor_parts)
+        self._testDataSourceAssignment(part_nodes, actor_nodes, expected_actor_parts)
 
     def testAssignEvenRedistributeOne(self):
         """Assign actors to co-located partitions, non-trivial case.
@@ -75,10 +69,8 @@ class _DistributedDataSourceTest:
             2: [3, 4],
             3: [6, 7],
         }
-        self._testAssignPartitions(part_nodes, actor_nodes,
-                                   expected_actor_parts)
-        self._testDataSourceAssignment(part_nodes, actor_nodes,
-                                       expected_actor_parts)
+        self._testAssignPartitions(part_nodes, actor_nodes, expected_actor_parts)
+        self._testDataSourceAssignment(part_nodes, actor_nodes, expected_actor_parts)
 
     def testAssignEvenRedistributeMost(self):
         """Assign actors to co-located partitions, redistribute case.
@@ -94,8 +86,7 @@ class _DistributedDataSourceTest:
             2: [3, 6],
             3: [4, 7],
         }
-        self._testAssignPartitions(part_nodes, actor_nodes,
-                                   expected_actor_parts)
+        self._testAssignPartitions(part_nodes, actor_nodes, expected_actor_parts)
 
         # This part of the test never works - Modin materializes partitions
         # onto different nodes while unwrapping.
@@ -115,10 +106,8 @@ class _DistributedDataSourceTest:
             1: [3, 4],
             2: [5, 6, 7],
         }
-        self._testAssignPartitions(part_nodes, actor_nodes,
-                                   expected_actor_parts)
-        self._testDataSourceAssignment(part_nodes, actor_nodes,
-                                       expected_actor_parts)
+        self._testAssignPartitions(part_nodes, actor_nodes, expected_actor_parts)
+        self._testDataSourceAssignment(part_nodes, actor_nodes, expected_actor_parts)
 
     def testAssignUnevenRedistribute(self):
         """Assign actors to co-located partitions, redistribute uneven case.
@@ -134,10 +123,8 @@ class _DistributedDataSourceTest:
             1: [2, 3, 4],
             2: [6, 7],
         }
-        self._testAssignPartitions(part_nodes, actor_nodes,
-                                   expected_actor_parts)
-        self._testDataSourceAssignment(part_nodes, actor_nodes,
-                                       expected_actor_parts)
+        self._testAssignPartitions(part_nodes, actor_nodes, expected_actor_parts)
+        self._testDataSourceAssignment(part_nodes, actor_nodes, expected_actor_parts)
 
     def testAssignUnevenRedistributeColocated(self):
         """Assign actors to co-located partitions, redistribute uneven case.
@@ -153,10 +140,8 @@ class _DistributedDataSourceTest:
             1: [1, 3],
             2: [5, 6],
         }
-        self._testAssignPartitions(part_nodes, actor_nodes,
-                                   expected_actor_parts)
-        self._testDataSourceAssignment(part_nodes, actor_nodes,
-                                       expected_actor_parts)
+        self._testAssignPartitions(part_nodes, actor_nodes, expected_actor_parts)
+        self._testDataSourceAssignment(part_nodes, actor_nodes, expected_actor_parts)
 
     def testAssignUnevenRedistributeAll(self):
         """Assign actors to co-located partitions, redistribute uneven case.
@@ -172,23 +157,18 @@ class _DistributedDataSourceTest:
             1: [1, 3],
             2: [5, 6],
         }
-        self._testAssignPartitions(part_nodes, actor_nodes,
-                                   expected_actor_parts)
-        self._testDataSourceAssignment(part_nodes, actor_nodes,
-                                       expected_actor_parts)
+        self._testAssignPartitions(part_nodes, actor_nodes, expected_actor_parts)
+        self._testDataSourceAssignment(part_nodes, actor_nodes, expected_actor_parts)
 
 
 @unittest.skipIf(
-    not MODIN_INSTALLED,
-    reason="Modin is not installed in a supported version.")
+    not MODIN_INSTALLED, reason="Modin is not installed in a supported version."
+)
 class ModinDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
     """This test suite validates core RayDMatrix functionality."""
 
-    def _testAssignPartitions(self, part_nodes, actor_nodes,
-                              expected_actor_parts):
-        partitions = [
-            ray.put(p) for p in np.array_split(self.x, len(part_nodes))
-        ]
+    def _testAssignPartitions(self, part_nodes, actor_nodes, expected_actor_parts):
+        partitions = [ray.put(p) for p in np.array_split(self.x, len(part_nodes))]
 
         # Dict from partition (obj ref) to node host
         part_to_node = dict(zip(partitions, [f"node{n}" for n in part_nodes]))
@@ -204,7 +184,8 @@ class ModinDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
                     actor_to_parts[actor_rank][i],
                     partitions[part_id],
                     msg=f"Assignment failed: Actor rank {actor_rank}, "
-                    f"partition {i} is not partition with ID {part_id}.")
+                    f"partition {i} is not partition with ID {part_id}.",
+                )
 
     def _getActorToParts(self, actors_to_node, node_to_part):
         def unwrap(data, *args, **kwargs):
@@ -213,23 +194,20 @@ class ModinDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
         def actor_ranks(actors):
             return actors_to_node
 
-        with patch("modin.distributed.dataframe.pandas.unwrap_partitions"
-                   ) as mock_unwrap, patch(
-                       "xgboost_ray.data_sources.modin.get_actor_rank_ips"
-                   ) as mock_ranks:
+        with patch(
+            "modin.distributed.dataframe.pandas.unwrap_partitions"
+        ) as mock_unwrap, patch(
+            "xgboost_ray.data_sources.modin.get_actor_rank_ips"
+        ) as mock_ranks:
             mock_unwrap.side_effect = unwrap
             mock_ranks.side_effect = actor_ranks
 
-            _, actor_to_parts = Modin.get_actor_shards(
-                data=node_to_part, actors=[])
+            _, actor_to_parts = Modin.get_actor_shards(data=node_to_part, actors=[])
 
         return actor_to_parts
 
-    def _testDataSourceAssignment(self, part_nodes, actor_nodes,
-                                  expected_actor_parts):
-        node_ips = [
-            node["NodeManagerAddress"] for node in ray.nodes() if node["Alive"]
-        ]
+    def _testDataSourceAssignment(self, part_nodes, actor_nodes, expected_actor_parts):
+        node_ips = [node["NodeManagerAddress"] for node in ray.nodes() if node["Alive"]]
         if len(node_ips) < max(max(actor_nodes), max(part_nodes)) + 1:
             print("Not running on cluster, skipping rest of this test.")
             return
@@ -244,17 +222,25 @@ class ModinDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
             return ray.put(pd.DataFrame(arr))
 
         partitions = np.array_split(self.x, len(part_nodes))
-        node_dfs: Sequence[ObjectRef] = ray.get([
-            create_remote_df.options(resources={
-                f"node:{pip}": 0.1
-            }).remote(partitions[pid]) for pid, pip in enumerate(part_node_ips)
-        ])
-        node_ip_dfs = [(ray.put(part_node_ips[pid]), node_df)
-                       for pid, node_df in enumerate(node_dfs)]
+        node_dfs: Sequence[ObjectRef] = ray.get(
+            [
+                create_remote_df.options(resources={f"node:{pip}": 0.1}).remote(
+                    partitions[pid]
+                )
+                for pid, pip in enumerate(part_node_ips)
+            ]
+        )
+        node_ip_dfs = [
+            (ray.put(part_node_ips[pid]), node_df)
+            for pid, node_df in enumerate(node_dfs)
+        ]
 
         # Create modin dataframe from distributed partitions
-        from modin.distributed.dataframe.pandas import (from_partitions,
-                                                        unwrap_partitions)
+        from modin.distributed.dataframe.pandas import (
+            from_partitions,
+            unwrap_partitions,
+        )
+
         modin_df = from_partitions(node_ip_dfs, axis=0)
 
         # Sanity check
@@ -265,23 +251,26 @@ class ModinDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
             self.assertSequenceEqual(
                 [df[0][0] for df in partitions],
                 [df[0][0] for df in ray.get(list(df_objs))],
-                msg="Modin mixed up the partition order")
+                msg="Modin mixed up the partition order",
+            )
 
             self.assertSequenceEqual(
                 part_node_ips,
                 ray.get(list(ip_objs)),
-                msg="Modin moved partitions to different IPs")
+                msg="Modin moved partitions to different IPs",
+            )
         except AssertionError as exc:
             print(f"Modin part of the test failed: {exc}")
-            print("This is a stochastic test failure. Ignoring the rest "
-                  "of this test.")
+            print(
+                "This is a stochastic test failure. Ignoring the rest " "of this test."
+            )
             return
 
         # Create ray actors
         actors = [
-            _RemoteRayXGBoostActor.options(resources={
-                f"node:{nip}": 0.1
-            }).remote(rank=rank, num_actors=len(actor_nodes))
+            _RemoteRayXGBoostActor.options(resources={f"node:{nip}": 0.1}).remote(
+                rank=rank, num_actors=len(actor_nodes)
+            )
             for rank, nip in enumerate(actor_node_ips)
         ]
 
@@ -296,21 +285,23 @@ class ModinDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
                 self.assertTrue(
                     assigned_df.equals(part_df),
                     msg=f"Assignment failed: Actor rank {actor_rank}, "
-                    f"partition {i} is not partition with ID {part_id}.")
+                    f"partition {i} is not partition with ID {part_id}.",
+                )
 
 
 @unittest.skipIf(
-    not DASK_INSTALLED, reason="Dask is not installed in a supported version.")
+    not DASK_INSTALLED, reason="Dask is not installed in a supported version."
+)
 class DaskDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
     """This test suite validates core RayDMatrix functionality."""
 
-    def _testAssignPartitions(self, part_nodes, actor_nodes,
-                              expected_actor_parts):
+    def _testAssignPartitions(self, part_nodes, actor_nodes, expected_actor_parts):
         partitions = list(range(len(part_nodes)))
 
         # Dict from partition (id) to node host
         part_to_node = dict(
-            zip(range(len(partitions)), [f"node{n}" for n in part_nodes]))
+            zip(range(len(partitions)), [f"node{n}" for n in part_nodes])
+        )
         node_to_part = [(n, p) for p, n in part_to_node.items()]
 
         actors_to_node = dict(enumerate(f"node{n}" for n in actor_nodes))
@@ -323,11 +314,13 @@ class DaskDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
                     actor_to_parts[actor_rank][i],
                     partitions[part_id],
                     msg=f"Assignment failed: Actor rank {actor_rank}, "
-                    f"partition {i} is not partition with ID {part_id}.")
+                    f"partition {i} is not partition with ID {part_id}.",
+                )
 
     def _getActorToParts(self, actors_to_node, node_to_part):
         def ip_to_parts(data, *args, **kwargs):
             from collections import defaultdict
+
             ip_to_parts_dict = defaultdict(list)
             for node, pid in data:
                 ip_to_parts_dict[node].append(pid)
@@ -336,31 +329,28 @@ class DaskDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
         def actor_ranks(actors):
             return actors_to_node
 
-        with patch("xgboost_ray.data_sources.dask.get_ip_to_parts"
-                   ) as mock_parts, patch(
-                       "xgboost_ray.data_sources.dask.get_actor_rank_ips"
-                   ) as mock_ranks:
+        with patch(
+            "xgboost_ray.data_sources.dask.get_ip_to_parts"
+        ) as mock_parts, patch(
+            "xgboost_ray.data_sources.dask.get_actor_rank_ips"
+        ) as mock_ranks:
             mock_parts.side_effect = ip_to_parts
             mock_ranks.side_effect = actor_ranks
 
-            _, actor_to_parts = Dask.get_actor_shards(
-                data=node_to_part, actors=[])
+            _, actor_to_parts = Dask.get_actor_shards(data=node_to_part, actors=[])
 
         return actor_to_parts
 
-    def _testDataSourceAssignment(self, part_nodes, actor_nodes,
-                                  expected_actor_parts):
-        self.skipTest(
-            "Data-locality aware scheduling using Dask is currently broken.")
+    def _testDataSourceAssignment(self, part_nodes, actor_nodes, expected_actor_parts):
+        self.skipTest("Data-locality aware scheduling using Dask is currently broken.")
 
         import dask
         import dask.dataframe as dd
         from ray.util.dask import ray_dask_get
+
         dask.config.set(scheduler=ray_dask_get)
 
-        node_ips = [
-            node["NodeManagerAddress"] for node in ray.nodes() if node["Alive"]
-        ]
+        node_ips = [node["NodeManagerAddress"] for node in ray.nodes() if node["Alive"]]
         if len(node_ips) < max(max(actor_nodes), max(part_nodes)) + 1:
             print("Not running on cluster, skipping rest of this test.")
             return
@@ -375,17 +365,20 @@ class DaskDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
             return dd.from_array(arr)
 
         partitions = np.array_split(self.x, len(part_nodes))
-        node_dfs: List[dd.DataFrame] = ray.get([
-            create_remote_df.options(resources={
-                f"node:{pip}": 0.1
-            }).remote(partitions[pid]) for pid, pip in enumerate(part_node_ips)
-        ])
+        node_dfs: List[dd.DataFrame] = ray.get(
+            [
+                create_remote_df.options(resources={f"node:{pip}": 0.1}).remote(
+                    partitions[pid]
+                )
+                for pid, pip in enumerate(part_node_ips)
+            ]
+        )
         node_dfs_concat = dd.concat(node_dfs).persist()
 
         # Get node IPs
         partition_locations_df = node_dfs_concat.map_partitions(
-            lambda df: pd.DataFrame([ray.util.get_node_ip_address()]
-                                    )).compute()
+            lambda df: pd.DataFrame([ray.util.get_node_ip_address()])
+        ).compute()
         partition_locations = [
             partition_locations_df[0].iloc[i]
             for i in range(partition_locations_df.size)
@@ -400,23 +393,26 @@ class DaskDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
             self.assertSequenceEqual(
                 [df[0][0] for df in partitions],
                 [df[0][0] for df in dask_df.partitions.compute()],
-                msg="Dask mixed up the partition order")
+                msg="Dask mixed up the partition order",
+            )
 
             self.assertSequenceEqual(
                 part_node_ips,
                 partition_locations,
-                msg="Dask moved partitions to different IPs")
+                msg="Dask moved partitions to different IPs",
+            )
         except AssertionError as exc:
             print(f"Dask part of the test failed: {exc}")
-            print("This is a stochastic test failure. Ignoring the rest "
-                  "of this test.")
+            print(
+                "This is a stochastic test failure. Ignoring the rest " "of this test."
+            )
             return
 
         # Create ray actors
         actors = [
-            _RemoteRayXGBoostActor.options(resources={
-                f"node:{nip}": 0.1
-            }).remote(rank=rank, num_actors=len(actor_nodes))
+            _RemoteRayXGBoostActor.options(resources={f"node:{nip}": 0.1}).remote(
+                rank=rank, num_actors=len(actor_nodes)
+            )
             for rank, nip in enumerate(actor_node_ips)
         ]
 
@@ -431,7 +427,8 @@ class DaskDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
                 self.assertTrue(
                     assigned_df.equals(part_df),
                     msg=f"Assignment failed: Actor rank {actor_rank}, "
-                    f"partition {i} is not partition with ID {part_id}.")
+                    f"partition {i} is not partition with ID {part_id}.",
+                )
 
 
 # Ray Datasets data source is not tested, as we do not make use of xgboost-ray
@@ -440,11 +437,9 @@ class DaskDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
 
 
 class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
-    def _testAssignPartitions(self, part_nodes, actor_nodes,
-                              expected_actor_parts):
+    def _testAssignPartitions(self, part_nodes, actor_nodes, expected_actor_parts):
         partitions = [
-            ray.put(pd.DataFrame(p))
-            for p in np.array_split(self.x, len(part_nodes))
+            ray.put(pd.DataFrame(p)) for p in np.array_split(self.x, len(part_nodes))
         ]
 
         # Dict from partition (obj ref) to node host
@@ -452,8 +447,9 @@ class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
 
         actors_to_node = dict(enumerate(f"node{n}" for n in actor_nodes))
 
-        actor_to_parts = self._getActorToParts(actors_to_node, partitions,
-                                               part_to_node, part_nodes)
+        actor_to_parts = self._getActorToParts(
+            actors_to_node, partitions, part_to_node, part_nodes
+        )
 
         for actor_rank, part_ids in expected_actor_parts.items():
             for i, part_id in enumerate(part_ids):
@@ -461,12 +457,12 @@ class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
                     actor_to_parts[actor_rank][i],
                     partitions[part_id],
                     msg=f"Assignment failed: Actor rank {actor_rank}, "
-                    f"partition {i} is not partition with ID {part_id}.")
+                    f"partition {i} is not partition with ID {part_id}.",
+                )
 
     def _mk_partitioned(self, part_to_node, nr, nc, shapes):
         class Parted:
-            """Class exposing __partitioned__
-            """
+            """Class exposing __partitioned__"""
 
             def __init__(self, parted):
                 self.__partitioned__ = parted
@@ -476,7 +472,7 @@ class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
             "shape": (nr, nc),
             "partition_tiling": (num_parts, 1),
             "get": lambda x: ray.get(x),
-            "partitions": {}
+            "partitions": {},
         }
         startx = 0
         for i, pn in enumerate(part_to_node.items()):
@@ -491,31 +487,26 @@ class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
 
         return Parted(data)
 
-    def _getActorToParts(self, actors_to_node, partitions, part_to_node,
-                         part_nodes):
+    def _getActorToParts(self, actors_to_node, partitions, part_to_node, part_nodes):
         def actor_ranks(actors):
             return actors_to_node
 
-        with patch("xgboost_ray.data_sources.partitioned.get_actor_rank_ips"
-                   ) as mock_ranks:
+        with patch(
+            "xgboost_ray.data_sources.partitioned.get_actor_rank_ips"
+        ) as mock_ranks:
             mock_ranks.side_effect = actor_ranks
 
             nr, nc = self.x.shape
             data = self._mk_partitioned(
-                part_to_node, nr, nc,
-                {p: ray.get(p).shape
-                 for p in partitions})
+                part_to_node, nr, nc, {p: ray.get(p).shape for p in partitions}
+            )
 
-            _, actor_to_parts = Partitioned.get_actor_shards(
-                data=data, actors=[])
+            _, actor_to_parts = Partitioned.get_actor_shards(data=data, actors=[])
 
         return actor_to_parts
 
-    def _testDataSourceAssignment(self, part_nodes, actor_nodes,
-                                  expected_actor_parts):
-        node_ips = [
-            node["NodeManagerAddress"] for node in ray.nodes() if node["Alive"]
-        ]
+    def _testDataSourceAssignment(self, part_nodes, actor_nodes, expected_actor_parts):
+        node_ips = [node["NodeManagerAddress"] for node in ray.nodes() if node["Alive"]]
         if len(node_ips) < max(max(actor_nodes), max(part_nodes)) + 1:
             print("Not running on cluster, skipping rest of this test.")
             return
@@ -533,9 +524,10 @@ class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
         node_dfs, shapes = {}, {}
         for pid, pip in enumerate(part_node_ips):
             pref = ray.get(
-                create_remote_df.options(resources={
-                    f"node:{pip}": 0.1
-                }).remote(partitions[pid]))
+                create_remote_df.options(resources={f"node:{pip}": 0.1}).remote(
+                    partitions[pid]
+                )
+            )
             node_dfs[pref] = pip
             shapes[pref] = partitions[pid].shape
 
@@ -545,9 +537,9 @@ class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
 
         # Create ray actors
         actors = [
-            _RemoteRayXGBoostActor.options(resources={
-                f"node:{nip}": 0.1
-            }).remote(rank=rank, num_actors=len(actor_nodes))
+            _RemoteRayXGBoostActor.options(resources={f"node:{nip}": 0.1}).remote(
+                rank=rank, num_actors=len(actor_nodes)
+            )
             for rank, nip in enumerate(actor_node_ips)
         ]
 
@@ -561,10 +553,13 @@ class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
                 self.assertTrue(
                     assigned_df.equals(part_df),
                     msg=f"Assignment failed: Actor rank {actor_rank}, "
-                    f"partition {i} is not partition with ID {part_id}.")
+                    f"partition {i} is not partition with ID {part_id}.",
+                )
 
 
 if __name__ == "__main__":
-    import pytest
     import sys
+
+    import pytest
+
     sys.exit(pytest.main(["-v", __file__]))

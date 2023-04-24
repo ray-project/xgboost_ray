@@ -1,7 +1,7 @@
 import itertools
 import math
 from collections import defaultdict
-from typing import Dict, Any, Sequence
+from typing import Any, Dict, Sequence
 
 import ray
 from ray.actor import ActorHandle
@@ -13,16 +13,17 @@ def get_actor_rank_ips(actors: Sequence[ActorHandle]) -> Dict[int, str]:
     # Build a dict mapping actor ranks to their IP addresses
     actor_rank_ips: Dict[int, str] = dict(
         enumerate(
-            ray.get([
-                actor.ip.remote() if actor is not None else no_obj
-                for actor in actors
-            ])))
+            ray.get(
+                [actor.ip.remote() if actor is not None else no_obj for actor in actors]
+            )
+        )
+    )
     return actor_rank_ips
 
 
 def assign_partitions_to_actors(
-        ip_to_parts: Dict[int, Any],
-        actor_rank_ips: Dict[int, str]) -> Dict[int, Sequence[Any]]:
+    ip_to_parts: Dict[int, Any], actor_rank_ips: Dict[int, str]
+) -> Dict[int, Sequence[Any]]:
     """Assign partitions from a distributed dataframe to actors.
 
     This function collects distributed partitions and evenly distributes
@@ -72,8 +73,7 @@ def assign_partitions_to_actors(
             num_parts_left_on_ip = len(ip_to_parts[actor_ip])
             num_actor_parts = len(actor_to_partitions[rank])
 
-            if num_parts_left_on_ip > 0 and \
-               num_actor_parts < max_parts_per_actor:
+            if num_parts_left_on_ip > 0 and num_actor_parts < max_parts_per_actor:
                 if num_actor_parts >= min_parts_per_actor:
                     # Only allow up to `num_actors_with_max_parts actors to
                     # have the maximum number of partitions assigned.
@@ -106,6 +106,7 @@ def assign_partitions_to_actors(
         raise RuntimeError(
             "There are still partitions left to assign, but no actor "
             "has capacity for more. This is probably a bug. Please go "
-            "to https://github.com/ray-project/xgboost_ray to report it.")
+            "to https://github.com/ray-project/xgboost_ray to report it."
+        )
 
     return actor_to_partitions

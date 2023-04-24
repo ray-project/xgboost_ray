@@ -1,19 +1,29 @@
 import time
-from typing import Optional, Dict, List, Tuple, Callable
+from typing import Callable, Dict, List, Optional, Tuple
 
 import ray
 
-from xgboost_ray.main import RayParams, _TrainingState, \
-    logger, ActorHandle, _PrepareActorTask, _create_actor, \
-    RayXGBoostActorAvailable, ENV
-
+from xgboost_ray.main import (
+    ENV,
+    ActorHandle,
+    RayParams,
+    RayXGBoostActorAvailable,
+    _create_actor,
+    _PrepareActorTask,
+    _TrainingState,
+    logger,
+)
 from xgboost_ray.matrix import RayDMatrix
 
 
 def _maybe_schedule_new_actors(
-        training_state: _TrainingState, num_cpus_per_actor: int,
-        num_gpus_per_actor: int, resources_per_actor: Optional[Dict],
-        ray_params: RayParams, load_data: List[RayDMatrix]) -> bool:
+    training_state: _TrainingState,
+    num_cpus_per_actor: int,
+    num_gpus_per_actor: int,
+    resources_per_actor: Optional[Dict],
+    ray_params: RayParams,
+    load_data: List[RayDMatrix],
+) -> bool:
     """Schedule new actors for elastic training if resources are available.
 
     Potentially starts new actors and triggers data loading."""
@@ -23,7 +33,8 @@ def _maybe_schedule_new_actors(
         return False
 
     missing_actor_ranks = [
-        rank for rank, actor in enumerate(training_state.actors)
+        rank
+        for rank, actor in enumerate(training_state.actors)
         if actor is None and rank not in training_state.pending_actors
     ]
 
@@ -34,8 +45,10 @@ def _maybe_schedule_new_actors(
     now = time.time()
 
     # Check periodically every n seconds.
-    if now < training_state.last_resource_check_at + \
-            ENV.ELASTIC_RESTART_RESOURCE_CHECK_S:
+    if (
+        now
+        < training_state.last_resource_check_at + ENV.ELASTIC_RESTART_RESOURCE_CHECK_S
+    ):
         return False
 
     training_state.last_resource_check_at = now
@@ -43,8 +56,7 @@ def _maybe_schedule_new_actors(
     new_pending_actors: Dict[int, Tuple[ActorHandle, _PrepareActorTask]] = {}
     for rank in missing_actor_ranks:
         # Actor rank should not be already pending
-        if rank in training_state.pending_actors \
-                or rank in new_pending_actors:
+        if rank in training_state.pending_actors or rank in new_pending_actors:
             continue
 
         # Try to schedule this actor
@@ -57,23 +69,29 @@ def _maybe_schedule_new_actors(
             placement_group=training_state.placement_group,
             queue=training_state.queue,
             checkpoint_frequency=ray_params.checkpoint_frequency,
-            distributed_callbacks=ray_params.distributed_callbacks)
+            distributed_callbacks=ray_params.distributed_callbacks,
+        )
 
         task = _PrepareActorTask(
             actor,
             queue=training_state.queue,
             stop_event=training_state.stop_event,
-            load_data=load_data)
+            load_data=load_data,
+        )
 
         new_pending_actors[rank] = (actor, task)
-        logger.debug(f"Re-scheduled actor with rank {rank}. Waiting for "
-                     f"placement and data loading before promoting it "
-                     f"to training.")
+        logger.debug(
+            f"Re-scheduled actor with rank {rank}. Waiting for "
+            f"placement and data loading before promoting it "
+            f"to training."
+        )
     if new_pending_actors:
         training_state.pending_actors.update(new_pending_actors)
-        logger.info(f"Re-scheduled {len(new_pending_actors)} actors for "
-                    f"training. Once data loading finished, they will be "
-                    f"integrated into training again.")
+        logger.info(
+            f"Re-scheduled {len(new_pending_actors)} actors for "
+            f"training. Once data loading finished, they will be "
+            f"integrated into training again."
+        )
     return bool(new_pending_actors)
 
 
@@ -102,7 +120,7 @@ def _update_scheduled_actor_states(training_state: _TrainingState):
     if actor_became_ready:
         if not training_state.pending_actors:
             # No other actors are pending, so let's restart right away.
-            training_state.restart_training_at = now - 1.
+            training_state.restart_training_at = now - 1.0
 
         # If an actor became ready but other actors are pending, we wait
         # for n seconds before restarting, as chances are that they become
@@ -111,7 +129,8 @@ def _update_scheduled_actor_states(training_state: _TrainingState):
         if training_state.restart_training_at is None:
             logger.debug(
                 f"A RayXGBoostActor became ready for training. Waiting "
-                f"{grace_period} seconds before triggering training restart.")
+                f"{grace_period} seconds before triggering training restart."
+            )
             training_state.restart_training_at = now + grace_period
 
     if training_state.restart_training_at is not None:
@@ -119,12 +138,14 @@ def _update_scheduled_actor_states(training_state: _TrainingState):
             training_state.restart_training_at = None
             raise RayXGBoostActorAvailable(
                 "A new RayXGBoostActor became available for training. "
-                "Triggering restart.")
+                "Triggering restart."
+            )
 
 
-def _get_actor_alive_status(actors: List[ActorHandle],
-                            callback: Callable[[ActorHandle], None]):
-    """Loop through all actors. Invoke a callback on dead actors. """
+def _get_actor_alive_status(
+    actors: List[ActorHandle], callback: Callable[[ActorHandle], None]
+):
+    """Loop through all actors. Invoke a callback on dead actors."""
     obj_to_rank = {}
 
     alive = 0
@@ -152,7 +173,6 @@ def _get_actor_alive_status(actors: List[ActorHandle],
                 logger.debug(f"Actor {actors[rank]} is _not_ alive.")
                 dead += 1
                 callback(actors[rank])
-    logger.info(f"Actor status: {alive} alive, {dead} dead "
-                f"({alive+dead} total)")
+    logger.info(f"Actor status: {alive} alive, {dead} dead " f"({alive+dead} total)")
 
     return alive, dead

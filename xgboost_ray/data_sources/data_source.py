@@ -1,9 +1,7 @@
-from typing import Any, Optional, Sequence, Tuple, Dict, List, TYPE_CHECKING
-
 from enum import Enum
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
-
 from ray.actor import ActorHandle
 from ray.util.annotations import PublicAPI
 
@@ -14,6 +12,7 @@ if TYPE_CHECKING:
 @PublicAPI(stability="beta")
 class RayFileType(Enum):
     """Enum for different file types (used for overrides)."""
+
     CSV = 1
     PARQUET = 2
     PETASTORM = 3
@@ -32,12 +31,12 @@ class DataSource:
     ``DataSource`` classes are not instantiated. Instead, static and
     class methods are called directly.
     """
+
     supports_central_loading = True
     supports_distributed_loading = False
 
     @staticmethod
-    def is_data_type(data: Any,
-                     filetype: Optional[RayFileType] = None) -> bool:
+    def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:
         """Check if the supplied data matches this data source.
 
         Args:
@@ -70,10 +69,12 @@ class DataSource:
         return None
 
     @staticmethod
-    def load_data(data: Any,
-                  ignore: Optional[Sequence[str]] = None,
-                  indices: Optional[Sequence[Any]] = None,
-                  **kwargs) -> pd.DataFrame:
+    def load_data(
+        data: Any,
+        ignore: Optional[Sequence[str]] = None,
+        indices: Optional[Sequence[Any]] = None,
+        **kwargs
+    ) -> pd.DataFrame:
         """
         Load data into a pandas dataframe.
 
@@ -91,8 +92,7 @@ class DataSource:
         raise NotImplementedError
 
     @staticmethod
-    def update_feature_names(matrix: "xgb.DMatrix",
-                             feature_names: Optional[List[str]]):
+    def update_feature_names(matrix: "xgb.DMatrix", feature_names: Optional[List[str]]):
         """Optionally update feature names before training/prediction
 
         Args:
@@ -115,8 +115,9 @@ class DataSource:
         return data
 
     @classmethod
-    def get_column(cls, data: pd.DataFrame,
-                   column: Any) -> Tuple[pd.Series, Optional[str]]:
+    def get_column(
+        cls, data: pd.DataFrame, column: Any
+    ) -> Tuple[pd.Series, Optional[str]]:
         """Helper method wrapping around convert to series.
 
         This method should usually not be overwritten.
@@ -134,9 +135,8 @@ class DataSource:
 
     @staticmethod
     def get_actor_shards(
-            data: Any,
-            actors: Sequence[ActorHandle]) -> \
-            Tuple[Any, Optional[Dict[int, Any]]]:
+        data: Any, actors: Sequence[ActorHandle]
+    ) -> Tuple[Any, Optional[Dict[int, Any]]]:
         """Get a dict mapping actor ranks to shards.
 
         Args:

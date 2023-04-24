@@ -5,17 +5,20 @@ import unittest
 from unittest.mock import patch
 
 import numpy as np
-
 import ray
 from ray import tune
 from ray.tune import TuneError
-from ray.tune.integration.xgboost import \
-    TuneReportCallback as OrigTuneReportCallback, \
-    TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback
+from ray.tune.integration.xgboost import TuneReportCallback as OrigTuneReportCallback
+from ray.tune.integration.xgboost import (
+    TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback,
+)
 
-from xgboost_ray import RayDMatrix, train, RayParams
-from xgboost_ray.tune import TuneReportCallback,\
-    TuneReportCheckpointCallback, _try_add_tune_callback
+from xgboost_ray import RayDMatrix, RayParams, train
+from xgboost_ray.tune import (
+    TuneReportCallback,
+    TuneReportCheckpointCallback,
+    _try_add_tune_callback,
+)
 
 try:
     from ray.air import Checkpoint
@@ -29,12 +32,15 @@ class XGBoostRayTuneTest(unittest.TestCase):
     def setUp(self):
         ray.init(num_cpus=4)
         repeat = 8  # Repeat data a couple of times for stability
-        x = np.array([
-            [1, 0, 0, 0],  # Feature 0 -> Label 0
-            [0, 1, 0, 0],  # Feature 1 -> Label 1
-            [0, 0, 1, 1],  # Feature 2+3 -> Label 2
-            [0, 0, 1, 0],  # Feature 2+!3 -> Label 3
-        ] * repeat)
+        x = np.array(
+            [
+                [1, 0, 0, 0],  # Feature 0 -> Label 0
+                [0, 1, 0, 0],  # Feature 1 -> Label 1
+                [0, 0, 1, 1],  # Feature 2+3 -> Label 2
+                [0, 0, 1, 0],  # Feature 2+!3 -> Label 3
+            ]
+            * repeat
+        )
         y = np.array([0, 1, 2, 3] * repeat)
 
         self.params = {
@@ -46,13 +52,12 @@ class XGBoostRayTuneTest(unittest.TestCase):
                 "num_class": 4,
                 "eval_metric": ["mlogloss", "merror"],
             },
-            "num_boost_round": tune.choice([1, 3])
+            "num_boost_round": tune.choice([1, 3]),
         }
 
-        def train_func(ray_params,
-                       callbacks=None,
-                       check_for_spread_strategy=False,
-                       **kwargs):
+        def train_func(
+            ray_params, callbacks=None, check_for_spread_strategy=False, **kwargs
+        ):
             def _inner_train(config, checkpoint_dir):
                 if check_for_spread_strategy:
                     assert tune.get_trial_resources().strategy == "SPREAD"
@@ -64,7 +69,8 @@ class XGBoostRayTuneTest(unittest.TestCase):
                     num_boost_round=config["num_boost_round"],
                     evals=[(train_set, "train")],
                     callbacks=callbacks,
-                    **kwargs)
+                    **kwargs
+                )
 
             return _inner_train
 
@@ -86,11 +92,13 @@ class XGBoostRayTuneTest(unittest.TestCase):
             self.train_func(ray_params),
             config=self.params,
             resources_per_trial=ray_params.get_tune_resources(),
-            num_samples=1)
+            num_samples=1,
+        )
 
         self.assertSequenceEqual(
             list(analysis.results_df["training_iteration"]),
-            list(analysis.results_df["config/num_boost_round"]))
+            list(analysis.results_df["config/num_boost_round"]),
+        )
 
     def testNumItersClient(self):
         """Test ray client mode"""
@@ -106,25 +114,25 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
     def testPlacementOptions(self):
         ray_params = RayParams(
-            cpus_per_actor=1,
-            num_actors=1,
-            placement_options={"strategy": "SPREAD"})
+            cpus_per_actor=1, num_actors=1, placement_options={"strategy": "SPREAD"}
+        )
         tune.run(
             self.train_func(ray_params, check_for_spread_strategy=True),
             config=self.params,
             resources_per_trial=ray_params.get_tune_resources(),
-            num_samples=1)
+            num_samples=1,
+        )
 
     def testElasticFails(self):
         """Test if error is thrown when using Tune with elastic training."""
-        ray_params = RayParams(
-            cpus_per_actor=1, num_actors=1, elastic_training=True)
+        ray_params = RayParams(cpus_per_actor=1, num_actors=1, elastic_training=True)
         with self.assertRaises(TuneError):
             tune.run(
                 self.train_func(ray_params),
                 config=self.params,
                 resources_per_trial=ray_params.get_tune_resources(),
-                num_samples=1)
+                num_samples=1,
+            )
 
     def testReplaceTuneCheckpoints(self):
         """Test if ray.tune.integration.xgboost callbacks are replaced"""
@@ -141,9 +149,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
         self.assertSequenceEqual(replaced._metrics, ["met"])
 
         # Report and checkpointing callback
-        in_cp = [
-            OrigTuneReportCheckpointCallback(metrics="met", filename="test")
-        ]
+        in_cp = [OrigTuneReportCheckpointCallback(metrics="met", filename="test")]
         in_dict = {"callbacks": in_cp}
 
         with patch("xgboost_ray.tune.is_session_enabled") as mocked:
@@ -159,15 +165,16 @@ class XGBoostRayTuneTest(unittest.TestCase):
         ray_params = RayParams(cpus_per_actor=1, num_actors=2)
         analysis = tune.run(
             self.train_func(
-                ray_params,
-                callbacks=[TuneReportCheckpointCallback(frequency=1)]),
+                ray_params, callbacks=[TuneReportCheckpointCallback(frequency=1)]
+            ),
             config=self.params,
             resources_per_trial=ray_params.get_tune_resources(),
             num_samples=1,
             metric="train-mlogloss",
             mode="min",
             log_to_file=True,
-            local_dir=self.experiment_dir)
+            local_dir=self.experiment_dir,
+        )
 
         if isinstance(analysis.best_checkpoint, Checkpoint):
             self.assertTrue(analysis.best_checkpoint)
@@ -178,15 +185,16 @@ class XGBoostRayTuneTest(unittest.TestCase):
         ray_params = RayParams(cpus_per_actor=1, num_actors=2)
         analysis = tune.run(
             self.train_func(
-                ray_params,
-                callbacks=[OrigTuneReportCheckpointCallback(frequency=1)]),
+                ray_params, callbacks=[OrigTuneReportCheckpointCallback(frequency=1)]
+            ),
             config=self.params,
             resources_per_trial=ray_params.get_tune_resources(),
             num_samples=1,
             metric="train-mlogloss",
             mode="min",
             log_to_file=True,
-            local_dir=self.experiment_dir)
+            local_dir=self.experiment_dir,
+        )
 
         if isinstance(analysis.best_checkpoint, Checkpoint):
             self.assertTrue(analysis.best_checkpoint)
@@ -195,6 +203,8 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import pytest
     import sys
+
+    import pytest
+
     sys.exit(pytest.main(["-v", __file__]))

@@ -10,6 +10,8 @@ class XGBoostDistributedAPITest(XGBoostAPITest):
 
 
 if __name__ == "__main__":
-    import pytest
     import sys
+
+    import pytest
+
     sys.exit(pytest.main(["-v", f"{__file__}::XGBoostDistributedAPITest"]))

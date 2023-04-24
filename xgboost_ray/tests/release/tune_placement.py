@@ -17,25 +17,22 @@ on the same nodes. In practice we check that each node IP address only
 hosts actors of the same Ray Tune trial.
 """
 
+import argparse
 import json
 import os
-
-import argparse
 import shutil
 import time
 from collections import defaultdict
 
-from xgboost_ray.compat import TrainingCallback
-
 import ray
-
+from benchmark_cpu_gpu import train_ray
 from ray import tune
-from ray.tune.session import get_trial_id
 from ray.tune.integration.docker import DockerSyncer
+from ray.tune.session import get_trial_id
 from ray.util import get_node_ip_address
 
-from benchmark_cpu_gpu import train_ray
 from xgboost_ray import RayParams
+from xgboost_ray.compat import TrainingCallback
 from xgboost_ray.session import put_queue
 from xgboost_ray.tests.utils import create_parquet
 from xgboost_ray.tune import TuneReportCallback
@@ -59,21 +56,24 @@ class PlacementCallback(TrainingCallback):
             time.sleep(8)
 
 
-def tune_test(path,
-              num_trials,
-              num_workers,
-              num_boost_rounds,
-              num_files=0,
-              regression=False,
-              use_gpu=False,
-              fake_data=False,
-              smoke_test=False):
+def tune_test(
+    path,
+    num_trials,
+    num_workers,
+    num_boost_rounds,
+    num_files=0,
+    regression=False,
+    use_gpu=False,
+    fake_data=False,
+    smoke_test=False,
+):
     ray_params = RayParams(
         elastic_training=False,
         max_actor_restarts=0,
         num_actors=num_workers,
         cpus_per_actor=1,
-        gpus_per_actor=0 if not use_gpu else 1)
+        gpus_per_actor=0 if not use_gpu else 1,
+    )
 
     def local_train(config):
         temp_dir = None
@@ -90,23 +90,27 @@ def tune_test(path,
                 num_rows=args.num_workers * 500,
                 num_features=4,
                 num_classes=2,
-                num_partitions=args.num_workers * 10)
+                num_partitions=args.num_workers * 10,
+            )
         else:
             if not os.path.exists(path):
                 raise ValueError(
                     f"Benchmarking data not found: {path}."
                     f"\nFIX THIS by running `python create_test_data.py` "
-                    f"on all nodes first.")
+                    f"on all nodes first."
+                )
             local_path = path
 
         xgboost_params = {
             "tree_method": "hist" if not use_gpu else "gpu_hist",
         }
 
-        xgboost_params.update({
-            "objective": "binary:logistic",
-            "eval_metric": ["logloss", "error"],
-        })
+        xgboost_params.update(
+            {
+                "objective": "binary:logistic",
+                "eval_metric": ["logloss", "error"],
+            }
+        )
 
         xgboost_params.update(config)
 
@@ -124,8 +128,8 @@ def tune_test(path,
             xgboost_params=xgboost_params,
             # kwargs
             additional_results=additional_results,
-            callbacks=[PlacementCallback(),
-                       TuneReportCallback()])
+            callbacks=[PlacementCallback(), TuneReportCallback()],
+        )
 
         bst.save_model("tuned.xgb")
 
@@ -136,9 +140,7 @@ def tune_test(path,
 
         tune_trial = get_trial_id()
         with tune.checkpoint_dir(num_boost_rounds + 1) as checkpoint_dir:
-            with open(
-                    os.path.join(checkpoint_dir, "callback_returns.json"),
-                    "wt") as f:
+            with open(os.path.join(checkpoint_dir, "callback_returns.json"), "wt") as f:
                 json.dump({tune_trial: trial_ips}, f)
 
         if temp_dir:
@@ -147,7 +149,7 @@ def tune_test(path,
     search_space = {
         "eta": tune.loguniform(1e-4, 1e-1),
         "subsample": tune.uniform(0.5, 1.0),
-        "max_depth": tune.randint(1, 9)
+        "max_depth": tune.randint(1, 9),
     }
 
     analysis = tune.run(
@@ -155,7 +157,8 @@ def tune_test(path,
         config=search_space,
         num_samples=num_trials,
         sync_config=tune.SyncConfig(sync_to_driver=DockerSyncer),
-        resources_per_trial=ray_params.get_tune_resources())
+        resources_per_trial=ray_params.get_tune_resources(),
+    )
 
     # In our PACK scheduling, we expect that each IP hosts only workers
     # for one Ray Tune trial.
@@ -163,8 +166,8 @@ def tune_test(path,
     for trial in analysis.trials:
         trial = trial
         with open(
-                os.path.join(trial.checkpoint.value, "callback_returns.json"),
-                "rt") as f:
+            os.path.join(trial.checkpoint.value, "callback_returns.json"), "rt"
+        ) as f:
             trial_to_ips = json.load(f)
         for tune_trial, ips in trial_to_ips.items():
             for node_ip in ips:
@@ -182,29 +185,30 @@ def tune_test(path,
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Test Ray Tune placement "
-                                     "strategy")
+    parser = argparse.ArgumentParser(description="Test Ray Tune placement " "strategy")
 
     parser.add_argument("num_trials", type=int, help="num trials")
-    parser.add_argument(
-        "num_workers", type=int, help="num workers (per trial)")
+    parser.add_argument("num_workers", type=int, help="num workers (per trial)")
     parser.add_argument("num_rounds", type=int, help="num boost rounds")
     parser.add_argument("num_files", type=int, help="num files (per trial)")
 
     parser.add_argument(
-        "--file", default="/data/parted.parquet", type=str, help="data file")
+        "--file", default="/data/parted.parquet", type=str, help="data file"
+    )
 
     parser.add_argument(
-        "--regression", action="store_true", default=False, help="regression")
+        "--regression", action="store_true", default=False, help="regression"
+    )
+
+    parser.add_argument("--gpu", action="store_true", default=False, help="gpu")
 
     parser.add_argument(
-        "--gpu", action="store_true", default=False, help="gpu")
+        "--fake-data", action="store_true", default=False, help="fake data"
+    )
 
     parser.add_argument(
-        "--fake-data", action="store_true", default=False, help="fake data")
-
-    parser.add_argument(
-        "--smoke-test", action="store_true", default=False, help="smoke test")
+        "--smoke-test", action="store_true", default=False, help="smoke test"
+    )
 
     args = parser.parse_args()
 
@@ -233,6 +237,7 @@ if __name__ == "__main__":
         regression=args.regression,
         use_gpu=use_gpu,
         fake_data=args.fake_data,
-        smoke_test=args.smoke_test)
+        smoke_test=args.smoke_test,
+    )
     full_taken = time.time() - full_start
     print(f"TOTAL TIME TAKEN: {full_taken:.2f} seconds ")

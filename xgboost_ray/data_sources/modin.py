@@ -1,28 +1,26 @@
-from typing import Any, Optional, Sequence, Dict, Union, Tuple
-
 from collections import defaultdict
-import pandas as pd
+from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
+import pandas as pd
 import ray
 from ray import ObjectRef
 from ray.actor import ActorHandle
 
-from xgboost_ray.data_sources._distributed import \
-    assign_partitions_to_actors, get_actor_rank_ips
+from xgboost_ray.data_sources._distributed import (
+    assign_partitions_to_actors,
+    get_actor_rank_ips,
+)
 from xgboost_ray.data_sources.data_source import DataSource, RayFileType
 from xgboost_ray.data_sources.object_store import ObjectStore
 
 try:
     import modin  # noqa: F401
     from modin.config.envvars import Engine
+    from modin.distributed.dataframe.pandas import unwrap_partitions  # noqa: F401
+    from modin.pandas import DataFrame as ModinDataFrame  # noqa: F401
+    from modin.pandas import Series as ModinSeries  # noqa: F401
     from packaging.version import Version
-    from modin.pandas import (  # noqa: F401
-        DataFrame as ModinDataFrame,  # noqa: F401
-        Series as ModinSeries  # noqa: F401
-    )
-    from modin.distributed.dataframe.pandas import (  # noqa: F401
-        unwrap_partitions  # noqa: F401
-    )
+
     MODIN_INSTALLED = Version(modin.__version__) >= Version("0.9.0")
 
     # Check if importing the Ray engine leads to errors
@@ -43,7 +41,8 @@ def _assert_modin_installed():
             "supported by modin."
             "\nPlease also raise an issue on our GitHub: "
             "https://github.com/ray-project/xgboost_ray as this part of "
-            "the code should not have been reached.")
+            "the code should not have been reached."
+        )
 
 
 class Modin(DataSource):
@@ -55,36 +54,36 @@ class Modin(DataSource):
     Modin dataframes are stored on multiple actors, making them
     suitable for distributed loading.
     """
+
     supports_central_loading = True
     supports_distributed_loading = True
 
     @staticmethod
-    def is_data_type(data: Any,
-                     filetype: Optional[RayFileType] = None) -> bool:
+    def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:
         if not MODIN_INSTALLED:
             return False
         # Has to be imported again.
-        from modin.pandas import (  # noqa: F811
-            DataFrame as ModinDataFrame,  # noqa: F811
-            Series as ModinSeries  # noqa: F811
-        )
+        from modin.pandas import DataFrame as ModinDataFrame  # noqa: F811
+        from modin.pandas import Series as ModinSeries  # noqa: F811
 
         return isinstance(data, (ModinDataFrame, ModinSeries))
 
     @staticmethod
     def load_data(
-            data: Any,  # modin.pandas.DataFrame
-            ignore: Optional[Sequence[str]] = None,
-            indices: Optional[Union[Sequence[int], Sequence[
-                ObjectRef]]] = None,
-            **kwargs) -> pd.DataFrame:
+        data: Any,  # modin.pandas.DataFrame
+        ignore: Optional[Sequence[str]] = None,
+        indices: Optional[Union[Sequence[int], Sequence[ObjectRef]]] = None,
+        **kwargs
+    ) -> pd.DataFrame:
         _assert_modin_installed()
 
-        if indices is not None and len(indices) > 0 and isinstance(
-                indices[0], ObjectRef):
+        if (
+            indices is not None
+            and len(indices) > 0
+            and isinstance(indices[0], ObjectRef)
+        ):
             # We got a list of ObjectRefs belonging to Modin partitions
-            return ObjectStore.load_data(
-                data=indices, indices=None, ignore=ignore)
+            return ObjectStore.load_data(data=indices, indices=None, ignore=ignore)
 
         local_df = data
         if indices:
@@ -101,10 +100,8 @@ class Modin(DataSource):
     def convert_to_series(data: Any) -> pd.Series:
         _assert_modin_installed()
         # Has to be imported again.
-        from modin.pandas import (  # noqa: F811
-            DataFrame as ModinDataFrame,  # noqa: F811
-            Series as ModinSeries  # noqa: F811
-        )
+        from modin.pandas import DataFrame as ModinDataFrame  # noqa: F811
+        from modin.pandas import Series as ModinSeries  # noqa: F811
 
         if isinstance(data, ModinDataFrame):
             return pd.Series(data._to_pandas().squeeze())
@@ -115,15 +112,12 @@ class Modin(DataSource):
 
     @staticmethod
     def get_actor_shards(
-            data: Any,  # modin.pandas.DataFrame
-            actors: Sequence[ActorHandle]) -> \
-            Tuple[Any, Optional[Dict[int, Any]]]:
+        data: Any, actors: Sequence[ActorHandle]  # modin.pandas.DataFrame
+    ) -> Tuple[Any, Optional[Dict[int, Any]]]:
         _assert_modin_installed()
 
         # Has to be imported again.
-        from modin.distributed.dataframe.pandas import (  # noqa: F811
-            unwrap_partitions  # noqa: F811
-        )
+        from modin.distributed.dataframe.pandas import unwrap_partitions  # noqa: F811
 
         actor_rank_ips = get_actor_rank_ips(actors)
 

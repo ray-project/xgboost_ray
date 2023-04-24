@@ -1,19 +1,21 @@
 from collections import defaultdict
-from typing import Any, List, Optional, Sequence, Dict, Union, Tuple
-import wrapt
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import pandas as pd
-
 import ray
+import wrapt
 from ray.actor import ActorHandle
 
-from xgboost_ray.data_sources._distributed import \
-    assign_partitions_to_actors, get_actor_rank_ips
+from xgboost_ray.data_sources._distributed import (
+    assign_partitions_to_actors,
+    get_actor_rank_ips,
+)
 from xgboost_ray.data_sources.data_source import DataSource, RayFileType
 
 try:
     import dask  # noqa: F401
     from ray.util.dask import ray_dask_get
+
     DASK_INSTALLED = True
 except ImportError:
     DASK_INSTALLED = False
@@ -27,12 +29,14 @@ def _assert_dask_installed():
             "\nFIX THIS by installing dask: `pip install dask`. "
             "\nPlease also raise an issue on our GitHub: "
             "https://github.com/ray-project/xgboost_ray as this part of "
-            "the code should not have been reached.")
+            "the code should not have been reached."
+        )
 
 
 @wrapt.decorator
-def ensure_ray_dask_initialized(func: Any, instance: Any, args: List[Any],
-                                kwargs: Any) -> Any:
+def ensure_ray_dask_initialized(
+    func: Any, instance: Any, args: List[Any], kwargs: Any
+) -> Any:
     _assert_dask_installed()
     dask.config.set(scheduler=ray_dask_get)
     return func(*args, **kwargs)
@@ -47,35 +51,34 @@ class Dask(DataSource):
     Dask dataframes are stored on multiple actors, making them
     suitable for distributed loading.
     """
+
     supports_central_loading = True
     supports_distributed_loading = True
 
     @staticmethod
-    def is_data_type(data: Any,
-                     filetype: Optional[RayFileType] = None) -> bool:
+    def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:
         if not DASK_INSTALLED:
             return False
-        from dask.dataframe import DataFrame as DaskDataFrame, \
-            Series as DaskSeries
+        from dask.dataframe import DataFrame as DaskDataFrame
+        from dask.dataframe import Series as DaskSeries
 
         return isinstance(data, (DaskDataFrame, DaskSeries))
 
     @ensure_ray_dask_initialized
     @staticmethod
     def load_data(
-            data: Any,  # dask.pandas.DataFrame
-            ignore: Optional[Sequence[str]] = None,
-            indices: Optional[Union[Sequence[int], Sequence[int]]] = None,
-            **kwargs) -> pd.DataFrame:
+        data: Any,  # dask.pandas.DataFrame
+        ignore: Optional[Sequence[str]] = None,
+        indices: Optional[Union[Sequence[int], Sequence[int]]] = None,
+        **kwargs
+    ) -> pd.DataFrame:
         _assert_dask_installed()
 
         import dask.dataframe as dd
 
-        if indices is not None and len(indices) > 0 and isinstance(
-                indices[0], Tuple):
+        if indices is not None and len(indices) > 0 and isinstance(indices[0], Tuple):
             # We got a list of partition IDs belonging to Dask partitions
-            return dd.concat(
-                [data.partitions[i] for (i, ) in indices]).compute()
+            return dd.concat([data.partitions[i] for (i,) in indices]).compute()
 
         # Dask does not support iloc() for row selection, so we have to
         # compute a local pandas dataframe first
@@ -93,9 +96,9 @@ class Dask(DataSource):
     @staticmethod
     def convert_to_series(data: Any) -> pd.Series:
         _assert_dask_installed()
-        from dask.dataframe import DataFrame as DaskDataFrame, \
-            Series as DaskSeries
         from dask.array import Array as DaskArray
+        from dask.dataframe import DataFrame as DaskDataFrame
+        from dask.dataframe import Series as DaskSeries
 
         if isinstance(data, DaskDataFrame):
             return pd.Series(data.compute().squeeze())
@@ -109,9 +112,8 @@ class Dask(DataSource):
     @ensure_ray_dask_initialized
     @staticmethod
     def get_actor_shards(
-            data: Any,  # dask.dataframe.DataFrame
-            actors: Sequence[ActorHandle]) -> \
-            Tuple[Any, Optional[Dict[int, Any]]]:
+        data: Any, actors: Sequence[ActorHandle]  # dask.dataframe.DataFrame
+    ) -> Tuple[Any, Optional[Dict[int, Any]]]:
         _assert_dask_installed()
 
         actor_rank_ips = get_actor_rank_ips(actors)
@@ -141,16 +143,15 @@ def get_ip_to_parts(data: Any) -> Dict[int, Sequence[Any]]:
     # 100% accurate as the map task could get scheduled on a different node
     # (though Ray tries to keep locality). We need to use that until
     # ray.state.objects() or something like it is available again.
-    partition_locations_df = persisted.map_partitions(lambda df: pd.DataFrame(
-        [ray.get_runtime_context().node_id.hex()])).compute()
+    partition_locations_df = persisted.map_partitions(
+        lambda df: pd.DataFrame([ray.get_runtime_context().node_id.hex()])
+    ).compute()
     partition_locations = [
-        partition_locations_df[0].iloc[i]
-        for i in range(partition_locations_df.size)
+        partition_locations_df[0].iloc[i] for i in range(partition_locations_df.size)
     ]
 
     ip_to_parts = defaultdict(list)
-    for (obj_name,
-         pid), obj_ref in dask.base.collections_to_dsk([persisted]).items():
+    for (obj_name, pid), obj_ref in dask.base.collections_to_dsk([persisted]).items():
         assert obj_name == name
 
         if isinstance(obj_ref, ray.ObjectRef):
@@ -161,6 +162,6 @@ def get_ip_to_parts(data: Any) -> Dict[int, Sequence[Any]]:
             ip = "_no_ip"
 
         # Pass tuples here (integers can be misinterpreted as row numbers)
-        ip_to_parts[ip].append((pid, ))
+        ip_to_parts[ip].append((pid,))
 
     return ip_to_parts

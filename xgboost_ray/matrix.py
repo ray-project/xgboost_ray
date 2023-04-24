@@ -1,8 +1,19 @@
 import glob
 import uuid
 from enum import Enum
-from typing import Union, Optional, Tuple, Iterable, List, Dict, Sequence, \
-    Callable, Type, TYPE_CHECKING, Set
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    Union,
+)
 
 from ray.actor import ActorHandle
 
@@ -11,16 +22,15 @@ try:
 except ImportError:
     cp = None
 
-import numpy as np
-import pandas as pd
-
 import os
 
+import numpy as np
+import pandas as pd
 import ray
 from ray import logger
-from ray.util.annotations import PublicAPI, DeveloperAPI
+from ray.util.annotations import DeveloperAPI, PublicAPI
 
-from xgboost_ray.data_sources import DataSource, data_sources, RayFileType
+from xgboost_ray.data_sources import DataSource, RayFileType, data_sources
 
 try:
     from ray.data.dataset import Dataset as RayDataset
@@ -32,6 +42,7 @@ except ImportError:
 
 try:
     from xgboost.core import DataIter
+
     LEGACY_MATRIX = False
 except ImportError:
     DataIter = object
@@ -39,6 +50,7 @@ except ImportError:
 
 try:
     from xgboost.core import QuantileDmatrix
+
     QUANTILE_AVAILABLE = True
 except ImportError:
     QuantileDmatrix = object
@@ -55,8 +67,9 @@ def concat_dataframes(dfs: List[Optional[pd.DataFrame]]):
     return pd.concat(filtered, ignore_index=True, copy=False)
 
 
-def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data
-                         ) -> Tuple[Union[np.array, str], pd.DataFrame]:
+def ensure_sorted_by_qid(
+    df: pd.DataFrame, qid: Data
+) -> Tuple[Union[np.array, str], pd.DataFrame]:
     _qid: pd.Series = None
     if isinstance(qid, str):
         _qid = df[qid]
@@ -64,9 +77,11 @@ def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data
         _qid = pd.Series(qid)
     elif isinstance(qid, pd.DataFrame):
         if len(df.shape) != 2 and df.shape[1] != 1:
-            raise ValueError(f"qid argument of type pd.DataFrame is expected"
-                             "to contains only 1 column of data "
-                             f"but the qid passed in is of shape {df.shape}.")
+            raise ValueError(
+                f"qid argument of type pd.DataFrame is expected"
+                "to contains only 1 column of data "
+                f"but the qid passed in is of shape {df.shape}."
+            )
         _qid = qid.iloc[:, 0]
     elif isinstance(qid, pd.Series):
         _qid = qid
@@ -76,8 +91,9 @@ def ensure_sorted_by_qid(df: pd.DataFrame, qid: Data
         if isinstance(qid, str):
             return qid, df.sort_values([qid])
         else:  # case when qid is not part of df
-            return _qid.sort_values(), \
-                   df.set_index(_qid).sort_index().reset_index(drop=True)
+            return _qid.sort_values(), df.set_index(_qid).sort_index().reset_index(
+                drop=True
+            )
 
 
 @PublicAPI(stability="beta")
@@ -96,6 +112,7 @@ class RayShardingMode(Enum):
     data source that assigns actors to specific data shards on initialization
     and then keeps these fixed.
     """
+
     INTERLEAVED = 1
     BATCH = 2
     FIXED = 3
@@ -104,19 +121,19 @@ class RayShardingMode(Enum):
 @DeveloperAPI
 class RayDataIter(DataIter):
     def __init__(
-            self,
-            data: List[Data],
-            label: List[Optional[Data]],
-            missing: Optional[float],
-            weight: List[Optional[Data]],
-            feature_weights: List[Optional[Data]],
-            qid: List[Optional[Data]],
-            base_margin: List[Optional[Data]],
-            label_lower_bound: List[Optional[Data]],
-            label_upper_bound: List[Optional[Data]],
-            feature_names: Optional[List[str]],
-            feature_types: Optional[List[np.dtype]],
-            enable_categorical: Optional[bool],
+        self,
+        data: List[Data],
+        label: List[Optional[Data]],
+        missing: Optional[float],
+        weight: List[Optional[Data]],
+        feature_weights: List[Optional[Data]],
+        qid: List[Optional[Data]],
+        base_margin: List[Optional[Data]],
+        label_lower_bound: List[Optional[Data]],
+        label_upper_bound: List[Optional[Data]],
+        feature_names: Optional[List[str]],
+        feature_types: Optional[List[np.dtype]],
+        enable_categorical: Optional[bool],
     ):
         super(RayDataIter, self).__init__()
 
@@ -167,28 +184,31 @@ class RayDataIter(DataIter):
             label_upper_bound=self._prop(self._label_upper_bound),
             feature_names=self._feature_names,
             feature_types=self._feature_types,
-            enable_categorical=self._enable_categorical)
+            enable_categorical=self._enable_categorical,
+        )
         self._iter += 1
         return 1
 
 
 class _RayDMatrixLoader:
-    def __init__(self,
-                 data: Data,
-                 label: Optional[Data] = None,
-                 missing: Optional[float] = None,
-                 weight: Optional[Data] = None,
-                 feature_weights: Optional[Data] = None,
-                 base_margin: Optional[Data] = None,
-                 label_lower_bound: Optional[Data] = None,
-                 label_upper_bound: Optional[Data] = None,
-                 feature_names: Optional[List[str]] = None,
-                 feature_types: Optional[List[np.dtype]] = None,
-                 qid: Optional[Data] = None,
-                 enable_categorical: Optional[bool] = None,
-                 filetype: Optional[RayFileType] = None,
-                 ignore: Optional[List[str]] = None,
-                 **kwargs):
+    def __init__(
+        self,
+        data: Data,
+        label: Optional[Data] = None,
+        missing: Optional[float] = None,
+        weight: Optional[Data] = None,
+        feature_weights: Optional[Data] = None,
+        base_margin: Optional[Data] = None,
+        label_lower_bound: Optional[Data] = None,
+        label_upper_bound: Optional[Data] = None,
+        feature_names: Optional[List[str]] = None,
+        feature_types: Optional[List[np.dtype]] = None,
+        qid: Optional[Data] = None,
+        enable_categorical: Optional[bool] = None,
+        filetype: Optional[RayFileType] = None,
+        ignore: Optional[List[str]] = None,
+        **kwargs,
+    ):
         self.data = data
         self.label = label
         self.missing = missing
@@ -230,7 +250,8 @@ class _RayDMatrixLoader:
                         "but filetype could not be detected. "
                         "\nFIX THIS by passing "
                         "the `filetype` parameter to the RayDMatrix. Use the "
-                        "`RayFileType` enum for this.")
+                        "`RayFileType` enum for this."
+                    )
 
     def get_data_source(self) -> Type[DataSource]:
         raise NotImplementedError
@@ -254,9 +275,15 @@ class _RayDMatrixLoader:
         return False
 
     def _split_dataframe(
-            self, local_data: pd.DataFrame, data_source: Type[DataSource]
-    ) -> Tuple[pd.DataFrame, Optional[pd.Series], Optional[pd.Series],
-               Optional[pd.Series], Optional[pd.Series], Optional[pd.Series]]:
+        self, local_data: pd.DataFrame, data_source: Type[DataSource]
+    ) -> Tuple[
+        pd.DataFrame,
+        Optional[pd.Series],
+        Optional[pd.Series],
+        Optional[pd.Series],
+        Optional[pd.Series],
+        Optional[pd.Series],
+    ]:
         """
         Split dataframe into
 
@@ -281,7 +308,8 @@ class _RayDMatrixLoader:
             exclude_cols.add(exclude)
 
         feature_weights, exclude = data_source.get_column(
-            local_data, self.feature_weights)
+            local_data, self.feature_weights
+        )
         if exclude:
             exclude_cols.add(exclude)
 
@@ -289,18 +317,19 @@ class _RayDMatrixLoader:
         if exclude:
             exclude_cols.add(exclude)
 
-        base_margin, exclude = data_source.get_column(local_data,
-                                                      self.base_margin)
+        base_margin, exclude = data_source.get_column(local_data, self.base_margin)
         if exclude:
             exclude_cols.add(exclude)
 
         label_lower_bound, exclude = data_source.get_column(
-            local_data, self.label_lower_bound)
+            local_data, self.label_lower_bound
+        )
         if exclude:
             exclude_cols.add(exclude)
 
         label_upper_bound, exclude = data_source.get_column(
-            local_data, self.label_upper_bound)
+            local_data, self.label_upper_bound
+        )
         if exclude:
             exclude_cols.add(exclude)
 
@@ -308,13 +337,20 @@ class _RayDMatrixLoader:
         if exclude_cols:
             x = x[[col for col in x.columns if col not in exclude_cols]]
 
-        return x, label, weight, feature_weights, base_margin, \
-            label_lower_bound, label_upper_bound, qid
+        return (
+            x,
+            label,
+            weight,
+            feature_weights,
+            base_margin,
+            label_lower_bound,
+            label_upper_bound,
+            qid,
+        )
 
-    def load_data(self,
-                  num_actors: int,
-                  sharding: RayShardingMode,
-                  rank: Optional[int] = None) -> Tuple[Dict, int]:
+    def load_data(
+        self, num_actors: int, sharding: RayShardingMode, rank: Optional[int] = None
+    ) -> Tuple[Dict, int]:
         raise NotImplementedError
 
 
@@ -339,7 +375,8 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 # is not available.
                 logger.warning(
                     f"Checking data source {source.__name__} failed "
-                    f"with exception: {exc}")
+                    f"with exception: {exc}"
+                )
                 continue
 
         if not data_source:
@@ -352,10 +389,15 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 "specify the type of the source. Use the `RayFileType` "
                 "enum for that. If using Modin, Dask, or Petastorm, "
                 "make sure the library is installed.".format(
-                    type(self.data), self.filetype))
+                    type(self.data), self.filetype
+                )
+            )
 
-        if self.label is not None and not isinstance(self.label, str) and \
-                not type(self.data) != type(self.label):  # noqa: E721:
+        if (
+            self.label is not None
+            and not isinstance(self.label, str)
+            and not type(self.data) != type(self.label)  # noqa: E721
+        ):  # noqa: E721:
             # Label is an object of a different type than the main data.
             # We have to make sure they are compatible
             if not data_source.is_data_type(self.label):
@@ -365,16 +407,17 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                     "`RayDMatrix` - e.g. a `pandas.DataFrame` as `data` "
                     "and `label`. The `label` can always be a string. Got "
                     "{} for the main data and {} for the label.".format(
-                        type(self.data), type(self.label)))
+                        type(self.data), type(self.label)
+                    )
+                )
 
         self.data_source = data_source
         self._cached_n = data_source.get_n(self.data)
         return self.data_source
 
-    def load_data(self,
-                  num_actors: int,
-                  sharding: RayShardingMode,
-                  rank: Optional[int] = None) -> Tuple[Dict, int]:
+    def load_data(
+        self, num_actors: int, sharding: RayShardingMode, rank: Optional[int] = None
+    ) -> Tuple[Dict, int]:
         """
         Load data into memory
         """
@@ -391,14 +434,17 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
             raise RuntimeError(
                 f"Trying to shard data for {num_actors} actors, but the "
                 f"maximum number of shards (i.e. the number of data rows) "
-                f"is {max_num_shards}. Consider using fewer actors.")
+                f"is {max_num_shards}. Consider using fewer actors."
+            )
 
         # We're doing central data loading here, so we don't pass any indices,
         # yet. Instead, we'll be selecting the rows below.
         local_df = data_source.load_data(
-            self.data, ignore=self.ignore, indices=None, **self.kwargs)
+            self.data, ignore=self.ignore, indices=None, **self.kwargs
+        )
         x, y, w, fw, b, ll, lu, qid = self._split_dataframe(
-            local_df, data_source=data_source)
+            local_df, data_source=data_source
+        )
 
         if isinstance(x, list):
             n = sum(len(a) for a in x)
@@ -414,12 +460,13 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
                 "label": ray.put(y.iloc[indices] if y is not None else None),
                 "weight": ray.put(w.iloc[indices] if w is not None else None),
                 "feature_weights": ray.put(fw),
-                "base_margin": ray.put(b.iloc[indices]
-                                       if b is not None else None),
-                "label_lower_bound": ray.put(ll.iloc[indices]
-                                             if ll is not None else None),
-                "label_upper_bound": ray.put(lu.iloc[indices]
-                                             if lu is not None else None),
+                "base_margin": ray.put(b.iloc[indices] if b is not None else None),
+                "label_lower_bound": ray.put(
+                    ll.iloc[indices] if ll is not None else None
+                ),
+                "label_upper_bound": ray.put(
+                    lu.iloc[indices] if lu is not None else None
+                ),
                 "qid": ray.put(qid.iloc[indices] if qid is not None else None),
             }
             refs[i] = actor_refs
@@ -452,22 +499,29 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
 
         # Todo (krfricke): It would be good to have a more general way to
         # check for compatibility here. Combine with test below?
-        if not (isinstance(self.data, (Iterable, RayDataset))
-                or hasattr(self.data, "__partitioned__")) or invalid_data:
+        if (
+            not (
+                isinstance(self.data, (Iterable, RayDataset))
+                or hasattr(self.data, "__partitioned__")
+            )
+            or invalid_data
+        ):
             raise ValueError(
                 f"Distributed data loading only works with already "
                 f"distributed datasets. These should be specified through a "
                 f"list of locations (or a single string). "
                 f"Got: {type(self.data)}."
                 f"\nFIX THIS by passing a list of files (e.g. on S3) to the "
-                f"RayDMatrix.")
+                f"RayDMatrix."
+            )
 
         if self.label is not None and not isinstance(self.label, str):
             raise ValueError(
                 f"Invalid `label` value for distributed datasets: "
                 f"{self.label}. Only strings are supported. "
                 f"\nFIX THIS by passing a string indicating the label "
-                f"column of the dataset as the `label` argument.")
+                f"column of the dataset as the `label` argument."
+            )
 
         data_source = None
         for source in data_sources:
@@ -483,7 +537,8 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 # is not available.
                 logger.warning(
                     f"Checking data source {source.__name__} failed "
-                    f"with exception: {exc}")
+                    f"with exception: {exc}"
+                )
                 continue
 
         if not data_source:
@@ -494,7 +549,8 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 "data types for distributed datasets are a list of "
                 "CSV or Parquet sources. If using "
                 "Modin, Dask, or Petastorm, make sure the library is "
-                "installed.")
+                "installed."
+            )
 
         self.data_source = data_source
         self._cached_n = data_source.get_n(self.data)
@@ -516,7 +572,8 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 f"want to shard the dataset by rows, consider "
                 f"centralized loading by passing `distributed=False` to "
                 f"the `RayDMatrix`. Otherwise consider using fewer actors "
-                f"or re-partitioning your data.")
+                f"or re-partitioning your data."
+            )
 
     def assign_shards_to_actors(self, actors: Sequence[ActorHandle]) -> bool:
         if not isinstance(self.label, str):
@@ -537,10 +594,9 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
         self.actor_shards = actor_shards
         return True
 
-    def load_data(self,
-                  num_actors: int,
-                  sharding: RayShardingMode,
-                  rank: Optional[int] = None) -> Tuple[Dict, int]:
+    def load_data(
+        self, num_actors: int, sharding: RayShardingMode, rank: Optional[int] = None
+    ) -> Tuple[Dict, int]:
         """
         Load data into memory
         """
@@ -550,7 +606,8 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 "driver program. "
                 "\nFIX THIS by refraining from calling `RayDMatrix.load()` "
                 "manually for distributed datasets. Hint: You can check if "
-                "`RayDMatrix.distributed` is set to True or False.")
+                "`RayDMatrix.distributed` is set to True or False."
+            )
 
         if "OMP_NUM_THREADS" in os.environ:
             del os.environ["OMP_NUM_THREADS"]
@@ -560,16 +617,15 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
         if self.actor_shards:
             if rank is None:
                 raise RuntimeError(
-                    "Distributed loading requires a rank to be passed, "
-                    "got None")
+                    "Distributed loading requires a rank to be passed, " "got None"
+                )
             rank_shards = self.actor_shards[rank]
             local_df = data_source.load_data(
-                self.data,
-                indices=rank_shards,
-                ignore=self.ignore,
-                **self.kwargs)
+                self.data, indices=rank_shards, ignore=self.ignore, **self.kwargs
+            )
             x, y, w, fw, b, ll, lu, qid = self._split_dataframe(
-                local_df, data_source=data_source)
+                local_df, data_source=data_source
+            )
 
             if isinstance(x, list):
                 n = sum(len(a) for a in x)
@@ -580,17 +636,24 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             indices = _get_sharding_indices(sharding, rank, num_actors, n)
 
             if not indices:
-                x, y, w, fw, b, ll, lu, qid = (None, None, None, None, None,
-                                               None, None, None)
+                x, y, w, fw, b, ll, lu, qid = (
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 n = 0
             else:
                 local_df = data_source.load_data(
-                    self.data,
-                    ignore=self.ignore,
-                    indices=indices,
-                    **self.kwargs)
+                    self.data, ignore=self.ignore, indices=indices, **self.kwargs
+                )
                 x, y, w, fw, b, ll, lu, qid = self._split_dataframe(
-                    local_df, data_source=data_source)
+                    local_df, data_source=data_source
+                )
 
                 if isinstance(x, list):
                     n = sum(len(a) for a in x)
@@ -704,32 +767,35 @@ class RayDMatrix:
 
     """
 
-    def __init__(self,
-                 data: Data,
-                 label: Optional[Data] = None,
-                 weight: Optional[Data] = None,
-                 feature_weights: Optional[Data] = None,
-                 base_margin: Optional[Data] = None,
-                 missing: Optional[float] = None,
-                 label_lower_bound: Optional[Data] = None,
-                 label_upper_bound: Optional[Data] = None,
-                 feature_names: Optional[List[str]] = None,
-                 feature_types: Optional[List[np.dtype]] = None,
-                 qid: Optional[Data] = None,
-                 enable_categorical: Optional[bool] = None,
-                 num_actors: Optional[int] = None,
-                 filetype: Optional[RayFileType] = None,
-                 ignore: Optional[List[str]] = None,
-                 distributed: Optional[bool] = None,
-                 sharding: RayShardingMode = RayShardingMode.INTERLEAVED,
-                 lazy: bool = False,
-                 **kwargs):
+    def __init__(
+        self,
+        data: Data,
+        label: Optional[Data] = None,
+        weight: Optional[Data] = None,
+        feature_weights: Optional[Data] = None,
+        base_margin: Optional[Data] = None,
+        missing: Optional[float] = None,
+        label_lower_bound: Optional[Data] = None,
+        label_upper_bound: Optional[Data] = None,
+        feature_names: Optional[List[str]] = None,
+        feature_types: Optional[List[np.dtype]] = None,
+        qid: Optional[Data] = None,
+        enable_categorical: Optional[bool] = None,
+        num_actors: Optional[int] = None,
+        filetype: Optional[RayFileType] = None,
+        ignore: Optional[List[str]] = None,
+        distributed: Optional[bool] = None,
+        sharding: RayShardingMode = RayShardingMode.INTERLEAVED,
+        lazy: bool = False,
+        **kwargs,
+    ):
 
         if kwargs.get("group", None) is not None:
             raise ValueError(
                 "`group` parameter is not supported. "
                 "If you are using XGBoost-Ray, use `qid` parameter instead. "
-                "If you are using LightGBM-Ray, ranking is not yet supported.")
+                "If you are using LightGBM-Ray, ranking is not yet supported."
+            )
 
         if qid is not None and weight is not None:
             raise NotImplementedError("per-group weight is not implemented.")
@@ -754,7 +820,8 @@ class RayDMatrix:
                     f"the specified data source of type {type(data)} cannot "
                     f"be loaded in a distributed fashion. "
                     f"\nFIX THIS by passing a list of sources (e.g. parquet "
-                    f"files stored in a network location) instead.")
+                    f"files stored in a network location) instead."
+                )
 
         self.distributed = distributed
 
@@ -774,7 +841,8 @@ class RayDMatrix:
                 filetype=filetype,
                 ignore=ignore,
                 qid=qid,
-                **kwargs)
+                **kwargs,
+            )
         else:
             self.loader = _CentralRayDMatrixLoader(
                 data=data,
@@ -791,7 +859,8 @@ class RayDMatrix:
                 filetype=filetype,
                 ignore=ignore,
                 qid=qid,
-                **kwargs)
+                **kwargs,
+            )
 
         self.refs: Dict[int, Dict[str, ray.ObjectRef]] = {}
         self.n = None
@@ -814,9 +883,7 @@ class RayDMatrix:
     def assert_enough_shards_for_actors(self, num_actors: int):
         self.loader.assert_enough_shards_for_actors(num_actors=num_actors)
 
-    def load_data(self,
-                  num_actors: Optional[int] = None,
-                  rank: Optional[int] = None):
+    def load_data(self, num_actors: Optional[int] = None, rank: Optional[int] = None):
         """Load data, putting it into the Ray object store.
 
         If a rank is given, only data for this rank is loaded (for
@@ -824,8 +891,7 @@ class RayDMatrix:
         """
         if not self.loaded:
             if num_actors is not None:
-                if self.num_actors is not None \
-                        and num_actors != self.num_actors:
+                if self.num_actors is not None and num_actors != self.num_actors:
                     raise ValueError(
                         f"The `RayDMatrix` was initialized or `load_data()`"
                         f"has been called with a different numbers of"
@@ -834,21 +900,24 @@ class RayDMatrix:
                         f"\nFIX THIS by not instantiating the matrix with "
                         f"`num_actors` and making sure calls to `load_data()` "
                         f"or `get_data()` use the same numbers of actors "
-                        f"at each call.")
+                        f"at each call."
+                    )
                 self.num_actors = num_actors
             if self.num_actors is None:
                 raise ValueError(
                     "Trying to load data for `RayDMatrix` object, but "
                     "`num_actors` is not set."
                     "\nFIX THIS by passing `num_actors` on instantiation "
-                    "of the `RayDMatrix` or when calling `load_data()`.")
+                    "of the `RayDMatrix` or when calling `load_data()`."
+                )
             refs, self.n = self.loader.load_data(
-                self.num_actors, self.sharding, rank=rank)
+                self.num_actors, self.sharding, rank=rank
+            )
             self.refs.update(refs)
             self.loaded = True
 
     def get_data(
-            self, rank: int, num_actors: Optional[int] = None
+        self, rank: int, num_actors: Optional[int] = None
     ) -> Dict[str, Union[None, pd.DataFrame, List[Optional[pd.DataFrame]]]]:
         """Get data, i.e. return dataframe for a specific actor.
 
@@ -884,36 +953,41 @@ class RayDMatrix:
 
 class RayQuantileDMatrix(RayDMatrix):
     """Currently just a thin wrapper for type detection"""
+
     pass
 
 
 class RayDeviceQuantileDMatrix(RayDMatrix):
     """Currently just a thin wrapper for type detection"""
 
-    def __init__(self,
-                 data: Data,
-                 label: Optional[Data] = None,
-                 weight: Optional[Data] = None,
-                 base_margin: Optional[Data] = None,
-                 missing: Optional[float] = None,
-                 label_lower_bound: Optional[Data] = None,
-                 label_upper_bound: Optional[Data] = None,
-                 feature_names: Optional[List[str]] = None,
-                 feature_types: Optional[List[np.dtype]] = None,
-                 qid: Optional[Data] = None,
-                 enable_categorical: Optional[bool] = None,
-                 *args,
-                 **kwargs):
+    def __init__(
+        self,
+        data: Data,
+        label: Optional[Data] = None,
+        weight: Optional[Data] = None,
+        base_margin: Optional[Data] = None,
+        missing: Optional[float] = None,
+        label_lower_bound: Optional[Data] = None,
+        label_upper_bound: Optional[Data] = None,
+        feature_names: Optional[List[str]] = None,
+        feature_types: Optional[List[np.dtype]] = None,
+        qid: Optional[Data] = None,
+        enable_categorical: Optional[bool] = None,
+        *args,
+        **kwargs,
+    ):
         if cp is None:
             raise RuntimeError(
                 "RayDeviceQuantileDMatrix requires cupy to be installed."
                 "\nFIX THIS by installing cupy: `pip install cupy-cudaXYZ` "
-                "where XYZ is your local CUDA version.")
+                "where XYZ is your local CUDA version."
+            )
         if label_lower_bound or label_upper_bound:
             raise RuntimeError(
                 "RayDeviceQuantileDMatrix does not support "
                 "`label_lower_bound` and `label_upper_bound` (just as the "
-                "xgboost.DeviceQuantileDMatrix). Please pass None instead.")
+                "xgboost.DeviceQuantileDMatrix). Please pass None instead."
+            )
         super(RayDeviceQuantileDMatrix, self).__init__(
             data=data,
             label=label,
@@ -927,13 +1001,15 @@ class RayDeviceQuantileDMatrix(RayDMatrix):
             qid=qid,
             enable_categorical=enable_categorical,
             *args,
-            **kwargs)
+            **kwargs,
+        )
 
     def get_data(
-            self, rank: int, num_actors: Optional[int] = None
+        self, rank: int, num_actors: Optional[int] = None
     ) -> Dict[str, Union[None, pd.DataFrame, List[Optional[pd.DataFrame]]]]:
         data_dict = super(RayDeviceQuantileDMatrix, self).get_data(
-            rank=rank, num_actors=num_actors)
+            rank=rank, num_actors=num_actors
+        )
         # Remove some dict keys here that are generated automatically
         data_dict.pop("label_lower_bound", None)
         data_dict.pop("label_upper_bound", None)
@@ -970,14 +1046,18 @@ def _can_load_distributed(source: Data) -> bool:
 def _detect_distributed(source: Data) -> bool:
     """Returns True if we should try to use distributed data loading"""
     from xgboost_ray.data_sources.modin import Modin
+
     if not _can_load_distributed(source):
         return False
     if Modin.is_data_type(source):
         return True
     if isinstance(source, RayDataset):
         return True
-    if isinstance(source, Iterable) and not isinstance(source, str) and \
-       not (isinstance(source, Sequence) and isinstance(source[0], str)):
+    if (
+        isinstance(source, Iterable)
+        and not isinstance(source, str)
+        and not (isinstance(source, Sequence) and isinstance(source[0], str))
+    ):
         # This is an iterable but not a Sequence of strings, and not a
         # pandas dataframe, series, or numpy array.
         # Detect False per default, can be overridden by passing
@@ -988,35 +1068,41 @@ def _detect_distributed(source: Data) -> bool:
     return True
 
 
-def _get_sharding_indices(sharding: RayShardingMode, rank: int,
-                          num_actors: int, n: int):
+def _get_sharding_indices(
+    sharding: RayShardingMode, rank: int, num_actors: int, n: int
+):
     """Return indices that belong to worker with rank `rank`"""
     if sharding == RayShardingMode.BATCH:
         # based on numpy.array_split
         # github.com/numpy/numpy/blob/v1.21.0/numpy/lib/shape_base.py
         n_per_actor, extras = divmod(n, num_actors)
-        div_points = np.array([0] + extras * [n_per_actor + 1] +
-                              (num_actors - extras) * [n_per_actor]).cumsum()
+        div_points = np.array(
+            [0] + extras * [n_per_actor + 1] + (num_actors - extras) * [n_per_actor]
+        ).cumsum()
         indices = list(range(div_points[rank], div_points[rank + 1]))
     elif sharding == RayShardingMode.INTERLEAVED:
         indices = list(range(rank, n, num_actors))
     else:
-        raise ValueError(f"Invalid value for `sharding` parameter: "
-                         f"{sharding}"
-                         f"\nFIX THIS by passing any item of the "
-                         f"`RayShardingMode` enum, for instance "
-                         f"`RayShardingMode.BATCH`.")
+        raise ValueError(
+            f"Invalid value for `sharding` parameter: "
+            f"{sharding}"
+            f"\nFIX THIS by passing any item of the "
+            f"`RayShardingMode` enum, for instance "
+            f"`RayShardingMode.BATCH`."
+        )
     return indices
 
 
 @DeveloperAPI
 def combine_data(sharding: RayShardingMode, data: Iterable) -> np.ndarray:
     if sharding not in (RayShardingMode.BATCH, RayShardingMode.INTERLEAVED):
-        raise ValueError(f"Invalid value for `sharding` parameter: "
-                         f"{sharding}"
-                         f"\nFIX THIS by passing any item of the "
-                         f"`RayShardingMode` enum, for instance "
-                         f"`RayShardingMode.BATCH`.")
+        raise ValueError(
+            f"Invalid value for `sharding` parameter: "
+            f"{sharding}"
+            f"\nFIX THIS by passing any item of the "
+            f"`RayShardingMode` enum, for instance "
+            f"`RayShardingMode.BATCH`."
+        )
 
     # discard empty arrays that show up with BATCH
     data = [d for d in data if len(d)]
@@ -1031,7 +1117,8 @@ def combine_data(sharding: RayShardingMode, data: Iterable) -> np.ndarray:
             res = np.ravel(np.column_stack([d[0:min_len] for d in data]))
             # Append these here
             res = np.concatenate(
-                [res] + [d[min_len:] for d in data if len(d) > min_len])
+                [res] + [d[min_len:] for d in data if len(d) > min_len]
+            )
     else:
         # objective="multi:softprob" returns n-dimensional arrays that
         # need to be handled differently
@@ -1044,8 +1131,10 @@ def combine_data(sharding: RayShardingMode, data: Iterable) -> np.ndarray:
             class_len = data[0].shape[1]
             min_len_data = [d[0:min_len] for d in data]
             res = np.hstack(min_len_data).reshape(
-                len(min_len_data) * min_len, class_len)
+                len(min_len_data) * min_len, class_len
+            )
             # Append these here
             res = np.concatenate(
-                [res] + [d[min_len:] for d in data if len(d) > min_len])
+                [res] + [d[min_len:] for d in data if len(d) > min_len]
+            )
     return res

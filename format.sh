@@ -407,14 +407,6 @@ fi
 
 check_docstyle
 
-# Ensure import ordering
-# Make sure that for every import psutil; import setproctitle
-# There's a import ray above it.
-
-PYTHON_EXECUTABLE=${PYTHON_EXECUTABLE:-python}
-
-$PYTHON_EXECUTABLE ci/lint/check_import_order.py . -s ci -s python/ray/thirdparty_files -s python/build -s lib
-
 if ! git diff --quiet &>/dev/null; then
     echo 'Reformatted changed files. Please review and stage the changes.'
     echo 'Files updated:'

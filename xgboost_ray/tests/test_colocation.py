@@ -3,13 +3,13 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
-import pytest
 
 import numpy as np
-
+import pytest
 import ray
 from ray.util.queue import _QueueActor
-from xgboost_ray import train, RayDMatrix, RayParams
+
+from xgboost_ray import RayDMatrix, RayParams, train
 from xgboost_ray.main import _train
 from xgboost_ray.util import _EventActor
 
@@ -28,12 +28,15 @@ class _MockEventActor(_EventActor):
 class TestColocation(unittest.TestCase):
     def setUp(self) -> None:
         repeat = 8  # Repeat data a couple of times for stability
-        self.x = np.array([
-            [1, 0, 0, 0],  # Feature 0 -> Label 0
-            [0, 1, 0, 0],  # Feature 1 -> Label 1
-            [0, 0, 1, 1],  # Feature 2+3 -> Label 0
-            [0, 0, 1, 0],  # Feature 2+!3 -> Label 1
-        ] * repeat)
+        self.x = np.array(
+            [
+                [1, 0, 0, 0],  # Feature 0 -> Label 0
+                [0, 1, 0, 0],  # Feature 1 -> Label 1
+                [0, 0, 1, 1],  # Feature 2+3 -> Label 0
+                [0, 0, 1, 0],  # Feature 2+!3 -> Label 1
+            ]
+            * repeat
+        )
         self.y = np.array([0, 1, 0, 1] * repeat)
 
         self.params = {
@@ -42,7 +45,7 @@ class TestColocation(unittest.TestCase):
             "nthread": 1,
             "max_depth": 2,
             "objective": "binary:logistic",
-            "seed": 1000
+            "seed": 1000,
         }
 
         self.kwargs = {}
@@ -75,11 +78,14 @@ class TestColocation(unittest.TestCase):
             assert local_node in ray.state.node_ids()
 
             def _mock_train(*args, _training_state, **kwargs):
-                assert ray.get(_training_state.queue.actor.get_node_id.remote(
-                )) == ray.state.current_node_id()
-                assert ray.get(
-                    _training_state.stop_event.actor.get_node_id.remote()) == \
-                    ray.state.current_node_id()
+                assert (
+                    ray.get(_training_state.queue.actor.get_node_id.remote())
+                    == ray.state.current_node_id()
+                )
+                assert (
+                    ray.get(_training_state.stop_event.actor.get_node_id.remote())
+                    == ray.state.current_node_id()
+                )
                 return _train(*args, _training_state=_training_state, **kwargs)
 
             with patch("xgboost_ray.main._train") as mocked:
@@ -88,7 +94,8 @@ class TestColocation(unittest.TestCase):
                     self.params,
                     RayDMatrix(self.x, self.y),
                     num_boost_round=2,
-                    ray_params=RayParams(max_actor_restarts=1, num_actors=6))
+                    ray_params=RayParams(max_actor_restarts=1, num_actors=6),
+                )
 
     def test_no_tune_spread(self):
         """Tests whether workers are spread when not using Tune."""
@@ -98,13 +105,11 @@ class TestColocation(unittest.TestCase):
             cluster.wait_for_nodes()
             ray.init(address=cluster.address)
 
-            ray_params = RayParams(
-                max_actor_restarts=1, num_actors=2, cpus_per_actor=2)
+            ray_params = RayParams(max_actor_restarts=1, num_actors=2, cpus_per_actor=2)
 
             def _mock_train(*args, _training_state, **kwargs):
                 try:
-                    results = _train(
-                        *args, _training_state=_training_state, **kwargs)
+                    results = _train(*args, _training_state=_training_state, **kwargs)
                     return results
                 except Exception:
                     raise
@@ -124,7 +129,8 @@ class TestColocation(unittest.TestCase):
                     self.params,
                     RayDMatrix(self.x, self.y),
                     num_boost_round=4,
-                    ray_params=ray_params)
+                    ray_params=ray_params,
+                )
 
     def test_tune_pack(self):
         """Tests whether workers are packed when using Tune."""
@@ -140,12 +146,12 @@ class TestColocation(unittest.TestCase):
             ray.init(address=cluster.address)
 
             ray_params = RayParams(
-                max_actor_restarts=1, num_actors=num_actors, cpus_per_actor=1)
+                max_actor_restarts=1, num_actors=num_actors, cpus_per_actor=1
+            )
 
             def _mock_train(*args, _training_state, **kwargs):
                 try:
-                    results = _train(
-                        *args, _training_state=_training_state, **kwargs)
+                    results = _train(*args, _training_state=_training_state, **kwargs)
                     return results
                 except Exception:
                     raise
@@ -167,7 +173,8 @@ class TestColocation(unittest.TestCase):
                             params,
                             RayDMatrix(x, y),
                             num_boost_round=4,
-                            ray_params=ray_params)
+                            ray_params=ray_params,
+                        )
 
                 return inner_func
 
@@ -192,10 +199,14 @@ class TestColocation(unittest.TestCase):
                     ray_params=RayParams(
                         max_actor_restarts=1,
                         num_actors=2,
-                        resources_per_actor={"invalid": 1}))
+                        resources_per_actor={"invalid": 1},
+                    ),
+                )
 
 
 if __name__ == "__main__":
-    import pytest  # noqa: F811
     import sys
+
+    import pytest  # noqa: F811
+
     sys.exit(pytest.main(["-v", __file__]))

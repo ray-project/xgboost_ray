@@ -7,7 +7,8 @@ def main():
         num_rows=1_000_000,
         num_partitions=100,
         num_features=8,
-        num_classes=2)
+        num_classes=2,
+    )
 
 
 if __name__ == "__main__":
