@@ -56,7 +56,7 @@ class MultiActorTask:
     The `is_ready()` method will return True once all futures are ready.
 
     Args:
-        pending_futures (list): List of object references (futures)
+        pending_futures: List of object references (futures)
             that should be tracked.
     """
 

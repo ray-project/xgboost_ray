@@ -108,10 +108,10 @@ def _kill_callback(die_lock_file: str,
     """Returns a callback to kill an actor process.
 
     Args:
-        die_lock_file (str): A file lock used to prevent race conditions
+        die_lock_file: A file lock used to prevent race conditions
             when killing the actor.
-        actor_rank (int): The rank of the actor to kill.
-        fail_iteration (int): The iteration after which the actor is killed.
+        actor_rank: The rank of the actor to kill.
+        fail_iteration: The iteration after which the actor is killed.
 
     """
 
@@ -142,10 +142,10 @@ def _fail_callback(die_lock_file: str,
     """Returns a callback to cause an Xgboost actor to fail training.
 
     Args:
-        die_lock_file (str): A file lock used to prevent race conditions
+        die_lock_file: A file lock used to prevent race conditions
             when causing the actor to fail.
-        actor_rank (int): The rank of the actor to fail.
-        fail_iteration (int): The iteration after which the training for
+        actor_rank: The rank of the actor to fail.
+        fail_iteration: The iteration after which the training for
             the specified actor fails.
 
     """
@@ -173,9 +173,9 @@ def _checkpoint_callback(frequency: int = 1, before_iteration_=False):
     """Returns a callback to checkpoint a model.
 
     Args:
-        frequency (int): The interval at which checkpointing occurs. If
+        frequency: The interval at which checkpointing occurs. If
             frequency is set to n, checkpointing occurs every n epochs.
-        before_iteration_ (bool): If True, checkpoint before the iteration
+        before_iteration_: If True, checkpoint before the iteration
             begins. Else, checkpoint after the iteration ends.
 
     """
@@ -201,9 +201,9 @@ def _sleep_callback(sleep_iteration: int = 6, sleep_seconds: int = 5):
     This artificially inflates training time.
 
     Args:
-        sleep_iteration (int): The iteration after which the actor should
+        sleep_iteration: The iteration after which the actor should
             sleep.
-        sleep_seconds (int): Time in seconds the actor should sleep.
+        sleep_seconds: Time in seconds the actor should sleep.
 
     """
 

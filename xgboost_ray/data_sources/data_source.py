@@ -41,8 +41,8 @@ class DataSource:
         """Check if the supplied data matches this data source.
 
         Args:
-            data (Any): Dataset.
-            filetype (Optional[RayFileType]): RayFileType of the provided
+            data: Dataset.
+            filetype: RayFileType of the provided
                 dataset. Some DataSource implementations might require
                 that this is explicitly set (e.g. if multiple sources can
                 read CSV files).
@@ -62,7 +62,7 @@ class DataSource:
         is returned.
 
         Args:
-            data (Any): Data set
+            data: Data set
 
         Returns:
             RayFileType or None.
@@ -80,9 +80,9 @@ class DataSource:
         Ignore specific columns, and optionally select specific indices.
 
         Args:
-            data (Any): Input data
-            ignore (Optional[Sequence[str]]): Column names to ignore
-            indices (Optional[Sequence[Any]]): Indices to select. What an
+            data: Input data
+            ignore: Column names to ignore
+            indices: Indices to select. What an
                 index indicates depends on the data source.
 
         Returns:
@@ -96,8 +96,8 @@ class DataSource:
         """Optionally update feature names before training/prediction
 
         Args:
-            matrix (xgb.DMatrix): xgboost DMatrix object.
-            feature_names (List[str]): Feature names manually passed to the
+            matrix: xgboost DMatrix object.
+            feature_names: Feature names manually passed to the
                 ``RayDMatrix`` object.
 
         """
@@ -140,7 +140,7 @@ class DataSource:
         """Get a dict mapping actor ranks to shards.
 
         Args:
-            data (Any): Data to shard.
+            data: Data to shard.
 
         Returns:
             Returns a tuple of which the first element indicates the new

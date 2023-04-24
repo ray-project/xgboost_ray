@@ -653,7 +653,7 @@ class RayDMatrix:
             after initialization. If this is None, it will be set by
             the ``xgboost_ray.train()`` function, and it will be loaded and
             stored in the object store then. Defaults to None.
-        filetype (Optional[RayFileType]): Type of data to read.
+        filetype: Type of data to read.
             This is disregarded if a data object like a pandas dataframe
             is passed as the ``data`` argument. For filenames,
             the filetype is automaticlly detected via the file name
@@ -661,14 +661,14 @@ class RayDMatrix:
             Passing this argument will overwrite the detected filename.
             If the filename cannot be determined from the ``data`` object,
             passing this is mandatory. Defaults to ``None`` (auto detection).
-        ignore (Optional[List[str]]): Exclude these columns from the
+        ignore: Exclude these columns from the
             dataframe after loading the data.
-        distributed (Optional[bool]): If True, use distributed loading
+        distributed: If True, use distributed loading
             (each worker loads a share of the dataset). If False, use
             central loading (the head node loads the whole dataset and
             distributed it). If None, auto-detect and default to
             distributed loading, if possible.
-        sharding (RayShardingMode): How to shard the data for different
+        sharding: How to shard the data for different
             workers. ``RayShardingMode.INTERLEAVED`` will divide the data
             per row, i.e. every i-th row will be passed to the first worker,
             every (i+1)th row to the second worker, etc.
@@ -679,7 +679,7 @@ class RayDMatrix:
             loading, sharding happens on a per-file basis, and not on a
             per-row basis, i.e. For interleaved every ith *file* will be
             passed into the first worker, etc.
-        lazy (bool): If ``num_actors`` is passed, setting this to ``True``
+        lazy: If ``num_actors`` is passed, setting this to ``True``
             will defer data loading and storing until ``load_data()`` or
             ``get_data()`` is called. Defaults to ``False``.
         **kwargs: Keyword arguments will be passed to the data loading

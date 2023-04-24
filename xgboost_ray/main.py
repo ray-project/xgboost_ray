@@ -253,8 +253,8 @@ class _RabitContextBase:
     Rabit tracker.
 
     Args:
-        actor_id (str): Unique actor ID
-        args (dict): Arguments for Rabit initialisation. These are
+        actor_id: Unique actor ID
+        args: Arguments for Rabit initialisation. These are
             environment variables to configure Rabit clients.
     """
 
@@ -408,23 +408,23 @@ class RayParams:
     """Parameters to configure Ray-specific behavior.
 
     Args:
-        num_actors (int): Number of parallel Ray actors.
-        cpus_per_actor (int): Number of CPUs to be used per Ray actor.
-        gpus_per_actor (int): Number of GPUs to be used per Ray actor.
-        resources_per_actor (Optional[Dict]): Dict of additional resources
+        num_actors: Number of parallel Ray actors.
+        cpus_per_actor: Number of CPUs to be used per Ray actor.
+        gpus_per_actor: Number of GPUs to be used per Ray actor.
+        resources_per_actor: Dict of additional resources
             required per Ray actor.
-        elastic_training (bool): If True, training will continue with
+        elastic_training: If True, training will continue with
             fewer actors if an actor fails. Default False.
-        max_failed_actors (int): If `elastic_training` is True, this
+        max_failed_actors: If `elastic_training` is True, this
             specifies the maximum number of failed actors with which
             we still continue training.
-        max_actor_restarts (int): Number of retries when Ray actors fail.
+        max_actor_restarts: Number of retries when Ray actors fail.
             Defaults to 0 (no retries). Set to -1 for unlimited retries.
-        checkpoint_frequency (int): How often to save checkpoints. Defaults
+        checkpoint_frequency: How often to save checkpoints. Defaults
             to ``5`` (every 5th iteration).
-        verbose (bool): Whether to output Ray-specific info messages
+        verbose: Whether to output Ray-specific info messages
             during training/prediction.
-        placement_options (dict): Optional kwargs to pass to
+        placement_options: Optional kwargs to pass to
             ``PlacementGroupFactory`` in ``get_tune_resources()``.
     """
     # Actor scheduling
@@ -505,10 +505,10 @@ class RayXGBoostActor:
     sends the checkpoint back to the driver.
 
     Args:
-        rank (int): Rank of the actor. Must be ``0 <= rank < num_actors``.
-        num_actors (int): Total number of actors.
-        queue (Queue): Ray queue to communicate with main process.
-        checkpoint_frequency (int): How often to store checkpoints. Defaults
+        rank: Rank of the actor. Must be ``0 <= rank < num_actors``.
+        num_actors: Total number of actors.
+        queue: Ray queue to communicate with main process.
+        checkpoint_frequency: How often to store checkpoints. Defaults
             to ``5``, saving checkpoints every 5 boosting rounds.
 
     """
@@ -1287,16 +1287,15 @@ def train(
     Third, if none of the above is the case, training is aborted.
 
     Args:
-        params (Dict): parameter dict passed to ``xgboost.train()``
-        dtrain (RayDMatrix): Data object containing the training data.
-        evals (Union[List[Tuple[RayDMatrix, str]], Tuple[RayDMatrix, str]]):
-            ``evals`` tuple passed to ``xgboost.train()``.
-        evals_result (Optional[Dict]): Dict to store evaluation results in.
-        additional_results (Optional[Dict]): Dict to store additional results.
-        ray_params (Union[None, RayParams, Dict]): Parameters to configure
+        params: parameter dict passed to ``xgboost.train()``
+        dtrain: Data object containing the training data.
+        evals: ``evals`` tuple passed to ``xgboost.train()``.
+        evals_result: Dict to store evaluation results in.
+        additional_results: Dict to store additional results.
+        ray_params: Parameters to configure
             Ray-specific behavior. See :class:`RayParams` for a list of valid
             configuration parameters.
-        _remote (bool): Whether to run the driver process in a remote
+        _remote: Whether to run the driver process in a remote
             function. This is enabled by default in Ray client mode.
         **kwargs: Keyword arguments will be passed to the local
             `xgb.train()` calls.
@@ -1691,12 +1690,12 @@ def predict(model: xgb.Booster,
     returned.
 
     Args:
-        model (xgb.Booster): Booster object to call for prediction.
-        data (RayDMatrix): Data object containing the prediction data.
-        ray_params (Union[None, RayParams, Dict]): Parameters to configure
+        model: Booster object to call for prediction.
+        data: Data object containing the prediction data.
+        ray_params: Parameters to configure
             Ray-specific behavior. See :class:`RayParams` for a list of valid
             configuration parameters.
-        _remote (bool): Whether to run the driver process in a remote
+        _remote: Whether to run the driver process in a remote
             function. This is enabled by default in Ray client mode.
         **kwargs: Keyword arguments will be passed to the local
             `xgb.predict()` calls.
