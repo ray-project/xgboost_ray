@@ -976,10 +976,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         reg.fit(X, y)
 
         config = json.loads(reg.get_booster().save_config())
-        if XGBOOST_VERSION > Version("1.7.4"):
-            assert (config["learner"]["gradient_booster"]["tree_train_param"][
-                "interaction_constraints"] == "[[0, 1], [2, 3, 4]]")
-        elif XGBOOST_VERSION >= Version("1.6.0"):
+
+        if XGBOOST_VERSION >= Version("1.6.0"):
             assert (config["learner"]["gradient_booster"]["updater"][
                 "grow_histmaker"]["train_param"]["interaction_constraints"] ==
                     "[[0, 1], [2, 3, 4]]")
