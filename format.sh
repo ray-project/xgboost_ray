@@ -79,7 +79,6 @@ fi
 FLAKE8_VERSION=$(flake8 --version | head -n 1 | awk '{print $1}')
 MYPY_VERSION=$(mypy --version | awk '{print $2}')
 ISORT_VERSION=$(isort --version | grep VERSION | awk '{print $2}')
-GOOGLE_JAVA_FORMAT_JAR=/tmp/google-java-format-1.7-all-deps.jar
 
 # params: tool name, tool version, required version
 tool_version_check() {
@@ -105,15 +104,6 @@ if command -v clang-format >/dev/null; then
   tool_version_check "clang-format" "$CLANG_FORMAT_VERSION" "12.0.0"
 else
     echo "WARNING: clang-format is not installed!"
-fi
-
-if command -v java >/dev/null; then
-  if [ ! -f "$GOOGLE_JAVA_FORMAT_JAR" ]; then
-    echo "Java code format tool google-java-format.jar is not installed, start to install it."
-    wget https://github.com/google/google-java-format/releases/download/google-java-format-1.7/google-java-format-1.7-all-deps.jar -O "$GOOGLE_JAVA_FORMAT_JAR"
-  fi
-else
-    echo "WARNING:java is not installed, skip format java files!"
 fi
 
 if [[ $(flake8 --version) != *"flake8_quotes"* ]]; then
@@ -163,19 +153,6 @@ GIT_LS_EXCLUDES=(
   ':(exclude)python/ray/_private/runtime_env/_clonevirtualenv.py'
 )
 
-JAVA_EXCLUDES=(
-  'java/api/src/main/java/io/ray/api/ActorCall.java'
-  'java/api/src/main/java/io/ray/api/CppActorCall.java'
-  'java/api/src/main/java/io/ray/api/PyActorCall.java'
-  'java/api/src/main/java/io/ray/api/RayCall.java'
-)
-
-JAVA_EXCLUDES_REGEX=""
-for f in "${JAVA_EXCLUDES[@]}"; do
-  JAVA_EXCLUDES_REGEX="$JAVA_EXCLUDES_REGEX|(${f//\//\/})"
-done
-JAVA_EXCLUDES_REGEX=${JAVA_EXCLUDES_REGEX#|}
-
 # TODO(barakmich): This should be cleaned up. I've at least excised the copies
 # of these arguments to this location, but the long-term answer is to actually
 # make a flake8 config file
@@ -188,28 +165,13 @@ shellcheck_scripts() {
 # Runs mypy on each argument in sequence. This is different than running mypy
 # once on the list of arguments.
 mypy_on_each() {
-    pushd python
+    pushd xgboost_ray
     for file in "$@"; do
        echo "Running mypy on $file"
        mypy ${MYPY_FLAGS[@]+"${MYPY_FLAGS[@]}"} "$file"
     done
     popd
 }
-
-format_frontend() {
-  (
-    echo "$(date)" "format frontend...."
-    local folder
-    folder="$(pwd)/dashboard/client"
-    local filenames
-    # shellcheck disable=SC2207
-    filenames=($(find "${folder}"/src -name "*.ts" -or -name "*.tsx"))
-    "${folder}/"node_modules/.bin/eslint --max-warnings 0 "${filenames[@]}"
-    "${folder}/"node_modules/.bin/prettier -w "${filenames[@]}"
-    "${folder}/"node_modules/.bin/prettier --check "${folder}/"public/index.html
-  )
-}
-
 
 # Format specified files
 format_files() {
@@ -297,24 +259,6 @@ format_all_scripts() {
     fi
 }
 
-# Format all files, and print the diff to stdout for travis.
-# Mypy is run only on files specified in the array MYPY_FILES.
-format_all() {
-    format_all_scripts "${@}"
-
-    echo "$(date)" "clang-format...."
-    if command -v clang-format >/dev/null; then
-      git ls-files -- '*.cc' '*.h' '*.proto' "${GIT_LS_EXCLUDES[@]}" | xargs -P 5 clang-format -i
-    fi
-
-    echo "$(date)" "format java...."
-    if command -v java >/dev/null & [ -f "$GOOGLE_JAVA_FORMAT_JAR" ]; then
-      git ls-files -- '*.java' "${GIT_LS_EXCLUDES[@]}" | sed -E "\:$JAVA_EXCLUDES_REGEX:d" | xargs -P 5 java -jar "$GOOGLE_JAVA_FORMAT_JAR" -i
-    fi
-
-    echo "$(date)" "done!"
-}
-
 # Format files that differ from main branch. Ignores dirs that are not slated
 # for autoformat yet.
 format_changed() {
@@ -354,12 +298,6 @@ format_changed() {
         fi
     fi
 
-    if command -v java >/dev/null & [ -f "$GOOGLE_JAVA_FORMAT_JAR" ]; then
-       if ! git diff --diff-filter=ACRM --quiet --exit-code "$MERGEBASE" -- '*.java' &>/dev/null; then
-            git diff --name-only --diff-filter=ACRM "$MERGEBASE" -- '*.java' | sed -E "\:$JAVA_EXCLUDES_REGEX:d" | xargs -P 5 java -jar "$GOOGLE_JAVA_FORMAT_JAR" -i
-        fi
-    fi
-
     if command -v shellcheck >/dev/null; then
         local shell_files non_shell_files
         non_shell_files=($(git diff --name-only --diff-filter=ACRM "$MERGEBASE" -- ':(exclude)*.sh'))
@@ -370,10 +308,6 @@ format_changed() {
         if [ 0 -lt "${#shell_files[@]}" ]; then
             shellcheck_scripts "${shell_files[@]}"
         fi
-    fi
-
-    if ! git diff --diff-filter=ACRM --quiet --exit-code "$MERGEBASE" -- '*.ts' '*.tsx' &>/dev/null; then
-        format_frontend
     fi
 }
 
@@ -388,10 +322,8 @@ elif [ "${1-}" == '--all-scripts' ]; then
     if [ -n "${FORMAT_SH_PRINT_DIFF-}" ]; then git --no-pager diff; fi
 # Format the all Python, C++, Java and other script files.
 elif [ "${1-}" == '--all' ]; then
-    format_all "${@}"
+    format_all_scripts "${@}"
     if [ -n "${FORMAT_SH_PRINT_DIFF-}" ]; then git --no-pager diff; fi
-elif [ "${1-}" == '--frontend' ]; then
-    format_frontend
 else
     # Add the upstream remote if it doesn't exist
     if ! git remote -v | grep -q upstream; then
