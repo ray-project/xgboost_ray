@@ -8,7 +8,6 @@ set -euo pipefail
 FLAKE8_VERSION_REQUIRED="3.9.1"
 BLACK_VERSION_REQUIRED="22.10.0"
 SHELLCHECK_VERSION_REQUIRED="0.7.1"
-MYPY_VERSION_REQUIRED="0.982"
 ISORT_VERSION_REQUIRED="5.10.1"
 
 check_python_command_exist() {
@@ -19,9 +18,6 @@ check_python_command_exist() {
             ;;
         flake8)
             VERSION=$FLAKE8_VERSION_REQUIRED
-            ;;
-        mypy)
-            VERSION=$MYPY_VERSION_REQUIRED
             ;;
         isort)
             VERSION=$ISORT_VERSION_REQUIRED
@@ -53,7 +49,6 @@ check_docstyle() {
 
 check_python_command_exist black
 check_python_command_exist flake8
-check_python_command_exist mypy
 check_python_command_exist isort
 
 # this stops git rev-parse from failing if we run this from the .git directory
@@ -77,7 +72,6 @@ else
     BLACK_VERSION=$(echo "$BLACK_VERSION_STR" | head -n 1 | awk '{print $3}')
 fi
 FLAKE8_VERSION=$(flake8 --version | head -n 1 | awk '{print $1}')
-MYPY_VERSION=$(mypy --version | awk '{print $2}')
 ISORT_VERSION=$(isort --version | grep VERSION | awk '{print $2}')
 
 # params: tool name, tool version, required version
@@ -89,7 +83,6 @@ tool_version_check() {
 
 tool_version_check "flake8" "$FLAKE8_VERSION" "$FLAKE8_VERSION_REQUIRED"
 tool_version_check "black" "$BLACK_VERSION" "$BLACK_VERSION_REQUIRED"
-tool_version_check "mypy" "$MYPY_VERSION" "$MYPY_VERSION_REQUIRED"
 tool_version_check "isort" "$ISORT_VERSION" "$ISORT_VERSION_REQUIRED"
 
 if command -v shellcheck >/dev/null; then
@@ -120,23 +113,6 @@ SHELLCHECK_FLAGS=(
   --exclude=2207  # "Prefer mapfile or read -a to split command output (or quote to avoid splitting)." -- these aren't compatible with macOS's old Bash
 )
 
-# TODO(dmitri): When more of the codebase is typed properly, the mypy flags
-# should be set to do a more stringent check.
-MYPY_FLAGS=(
-    '--follow-imports=skip'
-    '--ignore-missing-imports'
-)
-
-MYPY_FILES=(
-    # Relative to ray/python
-    'ray/autoscaler/node_provider.py'
-    'ray/autoscaler/sdk/__init__.py'
-    'ray/autoscaler/sdk/sdk.py'
-    'ray/autoscaler/_private/commands.py'
-    'ray/autoscaler/_private/autoscaler.py'
-    'ray/_private/gcs_utils.py'
-)
-
 
 BLACK_EXCLUDES=(
     '--force-exclude'
@@ -160,17 +136,6 @@ FLAKE8_PYX_IGNORES="--ignore=C408,E121,E123,E126,E211,E225,E226,E227,E24,E704,E9
 
 shellcheck_scripts() {
   shellcheck "${SHELLCHECK_FLAGS[@]}" "$@"
-}
-
-# Runs mypy on each argument in sequence. This is different than running mypy
-# once on the list of arguments.
-mypy_on_each() {
-    pushd xgboost_ray
-    for file in "$@"; do
-       echo "Running mypy on $file"
-       mypy ${MYPY_FLAGS[@]+"${MYPY_FLAGS[@]}"} "$file"
-    done
-    popd
 }
 
 # Format specified files
@@ -234,8 +199,6 @@ format_all_scripts() {
     echo "$(date)" "Black...."
     git ls-files -- '*.py' "${GIT_LS_EXCLUDES[@]}" | xargs -P 10 \
       black "${BLACK_EXCLUDES[@]}"
-    echo "$(date)" "MYPY...."
-    mypy_on_each "${MYPY_FILES[@]}"
     if [ $HAS_FLAKE8 ]; then
       echo "$(date)" "Flake8...."
       git ls-files -- '*.py' "${GIT_LS_EXCLUDES[@]}" | xargs -P 5 \
