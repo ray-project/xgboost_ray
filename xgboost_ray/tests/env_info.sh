@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2005
 
 echo "Test environment information"
 echo "----------------------------"

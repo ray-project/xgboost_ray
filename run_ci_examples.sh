@@ -1,3 +1,4 @@
+#!/bin/bash
 set -e
 
 TUNE=1

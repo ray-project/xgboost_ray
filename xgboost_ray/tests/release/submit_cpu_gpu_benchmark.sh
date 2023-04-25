@@ -1,3 +1,5 @@
+#!/bin/bash
+
 if [ ! -f "./.anyscale.yaml" ]; then
   echo "Anyscale project not initialized. Please run 'anyscale init'"
   exit 1
