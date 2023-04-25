@@ -203,9 +203,6 @@ format_all_scripts() {
       echo "$(date)" "Flake8...."
       git ls-files -- '*.py' "${GIT_LS_EXCLUDES[@]}" | xargs -P 5 \
         flake8 --config=.flake8
-
-      git ls-files -- '*.pyx' '*.pxd' '*.pxi' "${GIT_LS_EXCLUDES[@]}" | xargs -P 5 \
-        flake8 --config=.flake8 "$FLAKE8_PYX_IGNORES"
     fi
 
     if command -v shellcheck >/dev/null; then

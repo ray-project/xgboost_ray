@@ -26,6 +26,7 @@ jobs:
         ./xgboost_ray/tests/env_info.sh
     - name: Run format script
       run: |
+        ls -alp
         ./format.sh --all
 
   test_linux_ray_master:
