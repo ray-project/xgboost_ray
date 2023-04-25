@@ -1,4 +1,4 @@
-from typing import Any, Optional, Sequence, Union, List
+from typing import Any, List, Optional, Sequence, Union
 
 import pandas as pd
 
@@ -6,6 +6,7 @@ from xgboost_ray.data_sources.data_source import DataSource, RayFileType
 
 try:
     import petastorm
+
     PETASTORM_INSTALLED = True
 except ImportError:
     PETASTORM_INSTALLED = False
@@ -19,7 +20,8 @@ def _assert_petastorm_installed():
             "\nFIX THIS by installing petastorm: `pip install petastorm`. "
             "\nPlease also raise an issue on our GitHub: "
             "https://github.com/ray-project/xgboost_ray as this part of "
-            "the code should not have been reached.")
+            "the code should not have been reached."
+        )
 
 
 class Petastorm(DataSource):
@@ -31,12 +33,12 @@ class Petastorm(DataSource):
     This class accesses Petastorm's dataset loading interface for efficient
     loading of large datasets.
     """
+
     supports_central_loading = True
     supports_distributed_loading = True
 
     @staticmethod
-    def is_data_type(data: Any,
-                     filetype: Optional[RayFileType] = None) -> bool:
+    def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:
         return PETASTORM_INSTALLED and filetype == RayFileType.PETASTORM
 
     @staticmethod
@@ -48,10 +50,12 @@ class Petastorm(DataSource):
             data = [data]
 
         def _is_compatible(url: str):
-            return url.endswith(".parquet") and (url.startswith("s3://")
-                                                 or url.startswith("gs://")
-                                                 or url.startswith("hdfs://")
-                                                 or url.startswith("file://"))
+            return url.endswith(".parquet") and (
+                url.startswith("s3://")
+                or url.startswith("gs://")
+                or url.startswith("hdfs://")
+                or url.startswith("file://")
+            )
 
         if all(_is_compatible(url) for url in data):
             return RayFileType.PETASTORM
@@ -59,14 +63,17 @@ class Petastorm(DataSource):
         return None
 
     @staticmethod
-    def load_data(data: Union[str, Sequence[str]],
-                  ignore: Optional[Sequence[str]] = None,
-                  indices: Optional[Sequence[int]] = None,
-                  **kwargs) -> pd.DataFrame:
+    def load_data(
+        data: Union[str, Sequence[str]],
+        ignore: Optional[Sequence[str]] = None,
+        indices: Optional[Sequence[int]] = None,
+        **kwargs
+    ) -> pd.DataFrame:
         _assert_petastorm_installed()
         with petastorm.make_batch_reader(data) as reader:
             shards = [
-                pd.DataFrame(batch._asdict()) for i, batch in enumerate(reader)
+                pd.DataFrame(batch._asdict())
+                for i, batch in enumerate(reader)
                 if not indices or i in indices
             ]
 

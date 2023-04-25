@@ -3,20 +3,28 @@ import os
 import shutil
 import tempfile
 import time
-from unittest.mock import patch, DEFAULT, MagicMock
+import unittest
+from unittest.mock import DEFAULT, MagicMock, patch
 
 import numpy as np
-import unittest
+import ray
 import xgboost as xgb
 
-import ray
-
-from xgboost_ray import train, RayDMatrix, RayParams
+from xgboost_ray import RayDMatrix, RayParams, train
 from xgboost_ray.main import RayXGBoostActorAvailable
-from xgboost_ray.tests.fault_tolerance import FaultToleranceManager, \
-    DelayedLoadingCallback, DieCallback
-from xgboost_ray.tests.utils import flatten_obj, _checkpoint_callback, \
-    _fail_callback, tree_obj, _kill_callback, get_num_trees
+from xgboost_ray.tests.fault_tolerance import (
+    DelayedLoadingCallback,
+    DieCallback,
+    FaultToleranceManager,
+)
+from xgboost_ray.tests.utils import (
+    _checkpoint_callback,
+    _fail_callback,
+    _kill_callback,
+    flatten_obj,
+    get_num_trees,
+    tree_obj,
+)
 
 
 class _FakeTask(MagicMock):
@@ -37,12 +45,15 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         os.environ["RXGB_ELASTIC_RESTART_DISABLED"] = "0"
 
         repeat = 8  # Repeat data a couple of times for stability
-        self.x = np.array([
-            [1, 0, 0, 0],  # Feature 0 -> Label 0
-            [0, 1, 0, 0],  # Feature 1 -> Label 1
-            [0, 0, 1, 1],  # Feature 2+3 -> Label 2
-            [0, 0, 1, 0],  # Feature 2+!3 -> Label 3
-        ] * repeat)
+        self.x = np.array(
+            [
+                [1, 0, 0, 0],  # Feature 0 -> Label 0
+                [0, 1, 0, 0],  # Feature 1 -> Label 1
+                [0, 0, 1, 1],  # Feature 2+3 -> Label 2
+                [0, 0, 1, 0],  # Feature 2+!3 -> Label 3
+            ]
+            * repeat
+        )
         self.y = np.array([0, 1, 2, 3] * repeat)
 
         self.params = {
@@ -50,7 +61,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             "nthread": 1,
             "max_depth": 2,
             "objective": "multi:softmax",
-            "num_class": 4
+            "num_class": 4,
         }
 
         self.tmpdir = str(tempfile.mkdtemp())
@@ -93,7 +104,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 callbacks=[_kill_callback(self.die_lock_file)],
                 num_boost_round=20,
                 ray_params=RayParams(max_actor_restarts=1, num_actors=2),
-                additional_results=additional_results)
+                additional_results=additional_results,
+            )
 
         self.assertEqual(20, get_num_trees(bst))
 
@@ -134,8 +146,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     max_actor_restarts=1,
                     num_actors=2,
                     elastic_training=True,
-                    max_failed_actors=1),
-                additional_results=additional_results)
+                    max_failed_actors=1,
+                ),
+                additional_results=additional_results,
+            )
 
         self.assertEqual(20, get_num_trees(bst))
 
@@ -159,11 +173,11 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         ft_manager = FaultToleranceManager.remote()
 
         ft_manager.schedule_kill.remote(rank=0, boost_round=6)
-        ft_manager.delay_return.remote(
-            rank=1, start_boost_round=12, end_boost_round=21)
+        ft_manager.delay_return.remote(rank=1, start_boost_round=12, end_boost_round=21)
 
         delay_callback = DelayedLoadingCallback(
-            ft_manager, reload_data=True, sleep_time=0.1)
+            ft_manager, reload_data=True, sleep_time=0.1
+        )
         die_callback = DieCallback(ft_manager, training_delay=0.25)
 
         additional_results = {}
@@ -185,8 +199,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     num_actors=2,
                     elastic_training=True,
                     max_failed_actors=1,
-                    distributed_callbacks=[delay_callback]),
-                additional_results=additional_results)
+                    distributed_callbacks=[delay_callback],
+                ),
+                additional_results=additional_results,
+            )
 
         self.assertEqual(20, get_num_trees(bst))
 
@@ -216,18 +232,18 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             self.params,
             RayDMatrix(self.x, self.y),
             callbacks=[
-                _kill_callback(
-                    self.die_lock_file, fail_iteration=6, actor_rank=0),
-                _kill_callback(
-                    self.die_lock_file_2, fail_iteration=14, actor_rank=1),
+                _kill_callback(self.die_lock_file, fail_iteration=6, actor_rank=0),
+                _kill_callback(self.die_lock_file_2, fail_iteration=14, actor_rank=1),
             ],
             num_boost_round=20,
             ray_params=RayParams(
                 max_actor_restarts=2,
                 num_actors=2,
                 elastic_training=True,
-                max_failed_actors=2),
-            additional_results=additional_results)
+                max_failed_actors=2,
+            ),
+            additional_results=additional_results,
+        )
 
         self.assertEqual(20, get_num_trees(bst))
 
@@ -258,8 +274,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     max_actor_restarts=1,
                     num_actors=2,
                     elastic_training=True,
-                    max_failed_actors=1),
-                additional_results=additional_results)
+                    max_failed_actors=1,
+                ),
+                additional_results=additional_results,
+            )
 
         self.assertEqual(20, get_num_trees(bst))
 
@@ -285,7 +303,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 RayDMatrix(self.x, self.y),
                 callbacks=[_kill_callback(self.die_lock_file)],
                 num_boost_round=20,
-                ray_params=RayParams(max_actor_restarts=0, num_actors=2))
+                ray_params=RayParams(max_actor_restarts=0, num_actors=2),
+            )
 
     def testTrainingStopElastic(self):
         """This should now stop training after one actor died."""
@@ -296,11 +315,11 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
         ft_manager.schedule_kill.remote(rank=0, boost_round=3)
         ft_manager.schedule_kill.remote(rank=1, boost_round=6)
-        ft_manager.delay_return.remote(
-            rank=0, start_boost_round=4, end_boost_round=5)
+        ft_manager.delay_return.remote(rank=0, start_boost_round=4, end_boost_round=5)
 
         delay_callback = DelayedLoadingCallback(
-            ft_manager, reload_data=True, sleep_time=0.1)
+            ft_manager, reload_data=True, sleep_time=0.1
+        )
         die_callback = DieCallback(ft_manager, training_delay=0.25)
 
         with self.assertRaises(RuntimeError):
@@ -314,7 +333,9 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     max_failed_actors=1,
                     max_actor_restarts=1,
                     num_actors=2,
-                    distributed_callbacks=[delay_callback]))
+                    distributed_callbacks=[delay_callback],
+                ),
+            )
 
     def testCheckpointContinuationValidity(self):
         """Test that checkpoints are stored and loaded correctly"""
@@ -324,12 +345,11 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         bst_1 = train(
             self.params,
             RayDMatrix(self.x, self.y),
-            callbacks=[
-                _checkpoint_callback(frequency=1, before_iteration_=False)
-            ],
+            callbacks=[_checkpoint_callback(frequency=1, before_iteration_=False)],
             num_boost_round=2,
             ray_params=RayParams(num_actors=2),
-            additional_results=res_1)
+            additional_results=res_1,
+        )
         last_checkpoint_1 = res_1["callback_returns"][0][-1]
         last_checkpoint_other_rank_1 = res_1["callback_returns"][1][-1]
 
@@ -347,12 +367,13 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             RayDMatrix(self.x, self.y),
             callbacks=[
                 _checkpoint_callback(frequency=1, before_iteration_=True),
-                _checkpoint_callback(frequency=1, before_iteration_=False)
+                _checkpoint_callback(frequency=1, before_iteration_=False),
             ],
             num_boost_round=4,
             ray_params=RayParams(num_actors=2),
             additional_results=res_2,
-            xgb_model=lc1)
+            xgb_model=lc1,
+        )
         first_checkpoint_2 = res_2["callback_returns"][0][0]
         first_checkpoint_other_actor_2 = res_2["callback_returns"][1][0]
         last_checkpoint_2 = res_2["callback_returns"][0][-1]
@@ -384,20 +405,23 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             self.params,
             RayDMatrix(self.x, self.y),
             num_boost_round=10,
-            ray_params=RayParams(max_actor_restarts=0, num_actors=2))
+            ray_params=RayParams(max_actor_restarts=0, num_actors=2),
+        )
 
         bst_2part_1 = train(
             self.params,
             RayDMatrix(self.x, self.y),
             num_boost_round=5,
-            ray_params=RayParams(max_actor_restarts=0, num_actors=2))
+            ray_params=RayParams(max_actor_restarts=0, num_actors=2),
+        )
 
         bst_2part_2 = train(
             self.params,
             RayDMatrix(self.x, self.y),
             num_boost_round=5,
             ray_params=RayParams(max_actor_restarts=0, num_actors=2),
-            xgb_model=bst_2part_1)
+            xgb_model=bst_2part_1,
+        )
 
         res_error = {}
         bst_error = train(
@@ -406,8 +430,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
             callbacks=[_fail_callback(self.die_lock_file, fail_iteration=7)],
             num_boost_round=10,
             ray_params=RayParams(
-                max_actor_restarts=1, num_actors=2, checkpoint_frequency=5),
-            additional_results=res_error)
+                max_actor_restarts=1, num_actors=2, checkpoint_frequency=5
+            ),
+            additional_results=res_error,
+        )
 
         flat_noerror = flatten_obj({"tree": tree_obj(bst_noerror)})
         flat_error = flatten_obj({"tree": tree_obj(bst_error)})
@@ -436,19 +462,24 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         after each call.
 
         """
+        from xgboost_ray.elastic import (
+            _maybe_schedule_new_actors,
+            _update_scheduled_actor_states,
+        )
         from xgboost_ray.main import _TrainingState
-        from xgboost_ray.elastic import _update_scheduled_actor_states
-        from xgboost_ray.elastic import _maybe_schedule_new_actors
 
         os.environ["RXGB_ELASTIC_RESTART_GRACE_PERIOD_S"] = "30"
 
         # Three actors are dead
         actors = [
-            MagicMock(), None,
             MagicMock(),
-            MagicMock(), None,
-            MagicMock(), None,
-            MagicMock()
+            None,
+            MagicMock(),
+            MagicMock(),
+            None,
+            MagicMock(),
+            None,
+            MagicMock(),
         ]
 
         # Mock training state
@@ -480,7 +511,9 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     num_actors=8,
                     elastic_training=True,
                     max_failed_actors=1,
-                    max_actor_restarts=2))
+                    max_actor_restarts=2,
+                ),
+            )
 
             # 3 new actors should have been created
             self.assertEqual(len(created_actors), 3)
@@ -498,7 +531,9 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                     num_actors=8,
                     elastic_training=True,
                     max_failed_actors=1,
-                    max_actor_restarts=2))
+                    max_actor_restarts=2,
+                ),
+            )
 
             self.assertEqual(len(created_actors), 3)
             self.assertEqual(len(state.pending_actors), 3)
@@ -528,8 +563,7 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
             # Grace period is set through ENV.ELASTIC_RESTART_GRACE_PERIOD_S
             # Allow for some slack in test execution
-            self.assertGreaterEqual(state.restart_training_at,
-                                    time.time() + 22)
+            self.assertGreaterEqual(state.restart_training_at, time.time() + 22)
 
             # The first actor should have been promoted to full actor
             self.assertTrue(actors[1])
@@ -554,11 +588,11 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
         ft_manager = FaultToleranceManager.remote()
 
         ft_manager.schedule_kill.remote(rank=1, boost_round=16)
-        ft_manager.delay_return.remote(
-            rank=1, start_boost_round=14, end_boost_round=68)
+        ft_manager.delay_return.remote(rank=1, start_boost_round=14, end_boost_round=68)
 
         delay_callback = DelayedLoadingCallback(
-            ft_manager, reload_data=True, sleep_time=0.1)
+            ft_manager, reload_data=True, sleep_time=0.1
+        )
         die_callback = DieCallback(ft_manager, training_delay=0.25)
 
         res_1 = {}
@@ -573,8 +607,10 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
                 elastic_training=True,
                 max_failed_actors=1,
                 max_actor_restarts=1,
-                distributed_callbacks=[delay_callback]),
-            additional_results=res_1)
+                distributed_callbacks=[delay_callback],
+            ),
+            additional_results=res_1,
+        )
 
         logs = ray.get(ft_manager.get_logs.remote())
 
@@ -597,6 +633,8 @@ class XGBoostRayFaultToleranceTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import pytest
     import sys
+
+    import pytest
+
     sys.exit(pytest.main(["-v", __file__]))

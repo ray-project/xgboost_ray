@@ -1,8 +1,8 @@
 import argparse
-import numpy as np
 import os
-import pandas as pd
 
+import numpy as np
+import pandas as pd
 from sklearn.datasets import make_classification, make_regression
 
 if __name__ == "__main__":
@@ -12,47 +12,38 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create fake data.")
     parser.add_argument("filename", type=str, default="/data/parted.parquet/")
     parser.add_argument(
-        "-r",
-        "--num-rows",
-        required=False,
-        type=int,
-        default=1e8,
-        help="num rows")
+        "-r", "--num-rows", required=False, type=int, default=1e8, help="num rows"
+    )
     parser.add_argument(
         "-p",
         "--num-partitions",
         required=False,
         type=int,
         default=100,
-        help="num partitions")
+        help="num partitions",
+    )
     parser.add_argument(
         "-c",
         "--num-cols",
         required=False,
         type=int,
         default=4,
-        help="num columns (features)")
+        help="num columns (features)",
+    )
     parser.add_argument(
-        "-C",
-        "--num-classes",
-        required=False,
-        type=int,
-        default=2,
-        help="num classes")
+        "-C", "--num-classes", required=False, type=int, default=2, help="num classes"
+    )
     parser.add_argument(
-        "-s",
-        "--seed",
-        required=False,
-        type=int,
-        default=1234,
-        help="random seed")
+        "-s", "--seed", required=False, type=int, default=1234, help="random seed"
+    )
     parser.add_argument(
         "-T",
         "--target",
         required=False,
         type=float,
         default=0.8,
-        help="target accuracy")
+        help="target accuracy",
+    )
 
     args = parser.parse_args()
 
@@ -93,8 +84,7 @@ if __name__ == "__main__":
 
     rows_per_partition = np.floor(len(data) / num_partitions)
 
-    partition_arr = np.repeat(
-        np.arange(num_partitions), repeats=rows_per_partition)
+    partition_arr = np.repeat(np.arange(num_partitions), repeats=rows_per_partition)
     if len(partition_arr) < len(data):
         # If this was not evenly divided, append
         missing = len(data) - len(partition_arr)
@@ -114,4 +104,5 @@ if __name__ == "__main__":
             filename,
             partition_cols=["partition"],
             engine="pyarrow",
-            partition_filename_cb=lambda key: f"part_{key[0]}.parquet")
+            partition_filename_cb=lambda key: f"part_{key[0]}.parquet",
+        )

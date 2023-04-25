@@ -9,15 +9,16 @@ class Pandas(DataSource):
     """Read from pandas dataframes and series."""
 
     @staticmethod
-    def is_data_type(data: Any,
-                     filetype: Optional[RayFileType] = None) -> bool:
+    def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:
         return isinstance(data, (pd.DataFrame, pd.Series))
 
     @staticmethod
-    def load_data(data: Any,
-                  ignore: Optional[Sequence[str]] = None,
-                  indices: Optional[Sequence[int]] = None,
-                  **kwargs) -> pd.DataFrame:
+    def load_data(
+        data: Any,
+        ignore: Optional[Sequence[str]] = None,
+        indices: Optional[Sequence[int]] = None,
+        **kwargs
+    ) -> pd.DataFrame:
         local_df = data
 
         if ignore:

@@ -1,4 +1,4 @@
-from typing import Any, Optional, Sequence, Iterable, Union
+from typing import Any, Iterable, Optional, Sequence, Union
 
 import pandas as pd
 
@@ -8,12 +8,12 @@ from xgboost_ray.data_sources.pandas import Pandas
 
 class Parquet(DataSource):
     """Read one or many Parquet files."""
+
     supports_central_loading = True
     supports_distributed_loading = True
 
     @staticmethod
-    def is_data_type(data: Any,
-                     filetype: Optional[RayFileType] = None) -> bool:
+    def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:
         return filetype == RayFileType.PARQUET
 
     @staticmethod
@@ -23,10 +23,12 @@ class Parquet(DataSource):
         return None
 
     @staticmethod
-    def load_data(data: Union[str, Sequence[str]],
-                  ignore: Optional[Sequence[str]] = None,
-                  indices: Optional[Sequence[int]] = None,
-                  **kwargs) -> pd.DataFrame:
+    def load_data(
+        data: Union[str, Sequence[str]],
+        ignore: Optional[Sequence[str]] = None,
+        indices: Optional[Sequence[int]] = None,
+        **kwargs
+    ) -> pd.DataFrame:
         if isinstance(data, Iterable) and not isinstance(data, str):
             shards = []
 

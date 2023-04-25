@@ -2,8 +2,9 @@
 
 
 def readme_simple():
-    from xgboost_ray import RayDMatrix, RayParams, train
     from sklearn.datasets import load_breast_cancer
+
+    from xgboost_ray import RayDMatrix, RayParams, train
 
     train_x, train_y = load_breast_cancer(return_X_y=True)
     train_set = RayDMatrix(train_x, train_y)
@@ -18,17 +19,18 @@ def readme_simple():
         evals_result=evals_result,
         evals=[(train_set, "train")],
         verbose_eval=False,
-        ray_params=RayParams(num_actors=2, cpus_per_actor=1))
+        ray_params=RayParams(num_actors=2, cpus_per_actor=1),
+    )
 
     bst.save_model("model.xgb")
-    print("Final training error: {:.4f}".format(
-        evals_result["train"]["error"][-1]))
+    print("Final training error: {:.4f}".format(evals_result["train"]["error"][-1]))
 
 
 def readme_predict():
-    from xgboost_ray import RayDMatrix, RayParams, predict
-    from sklearn.datasets import load_breast_cancer
     import xgboost as xgb
+    from sklearn.datasets import load_breast_cancer
+
+    from xgboost_ray import RayDMatrix, RayParams, predict
 
     data, labels = load_breast_cancer(return_X_y=True)
 
@@ -41,14 +43,14 @@ def readme_predict():
 
 
 def readme_tune():
-    from xgboost_ray import RayDMatrix, RayParams, train
     from sklearn.datasets import load_breast_cancer
+
+    from xgboost_ray import RayDMatrix, RayParams, train
 
     num_actors = 4
     num_cpus_per_actor = 1
 
-    ray_params = RayParams(
-        num_actors=num_actors, cpus_per_actor=num_cpus_per_actor)
+    ray_params = RayParams(num_actors=num_actors, cpus_per_actor=num_cpus_per_actor)
 
     def train_model(config):
         train_x, train_y = load_breast_cancer(return_X_y=True)
@@ -61,7 +63,8 @@ def readme_tune():
             evals_result=evals_result,
             evals=[(train_set, "train")],
             verbose_eval=False,
-            ray_params=ray_params)
+            ray_params=ray_params,
+        )
         bst.save_model("model.xgb")
 
     from ray import tune
@@ -73,7 +76,7 @@ def readme_tune():
         "eval_metric": ["logloss", "error"],
         "eta": tune.loguniform(1e-4, 1e-1),
         "subsample": tune.uniform(0.5, 1.0),
-        "max_depth": tune.randint(1, 9)
+        "max_depth": tune.randint(1, 9),
     }
 
     # Make sure to use the `get_tune_resources` method to set the `resources_per_trial`
@@ -83,7 +86,8 @@ def readme_tune():
         metric="train-error",
         mode="min",
         num_samples=4,
-        resources_per_trial=ray_params.get_tune_resources())
+        resources_per_trial=ray_params.get_tune_resources(),
+    )
     print("Best hyperparameters", analysis.best_config)
 
 

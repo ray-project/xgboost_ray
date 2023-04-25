@@ -1,9 +1,9 @@
-from abc import ABC
-from typing import Dict, Sequence, TYPE_CHECKING, Any, Union
-
 import os
+from abc import ABC
+from typing import TYPE_CHECKING, Any, Dict, Sequence, Union
+
 import pandas as pd
-from ray.util.annotations import PublicAPI, DeveloperAPI
+from ray.util.annotations import DeveloperAPI, PublicAPI
 
 if TYPE_CHECKING:
     from xgboost_ray.main import RayXGBoostActor
@@ -29,27 +29,32 @@ class DistributedCallback(ABC):
     def on_init(self, actor: "RayXGBoostActor", *args, **kwargs):
         pass
 
-    def before_data_loading(self, actor: "RayXGBoostActor", data: "RayDMatrix",
-                            *args, **kwargs):
+    def before_data_loading(
+        self, actor: "RayXGBoostActor", data: "RayDMatrix", *args, **kwargs
+    ):
         pass
 
-    def after_data_loading(self, actor: "RayXGBoostActor", data: "RayDMatrix",
-                           *args, **kwargs):
+    def after_data_loading(
+        self, actor: "RayXGBoostActor", data: "RayDMatrix", *args, **kwargs
+    ):
         pass
 
     def before_train(self, actor: "RayXGBoostActor", *args, **kwargs):
         pass
 
-    def after_train(self, actor: "RayXGBoostActor", result_dict: Dict, *args,
-                    **kwargs):
+    def after_train(self, actor: "RayXGBoostActor", result_dict: Dict, *args, **kwargs):
         pass
 
     def before_predict(self, actor: "RayXGBoostActor", *args, **kwargs):
         pass
 
-    def after_predict(self, actor: "RayXGBoostActor",
-                      predictions: Union[pd.Series, pd.DataFrame], *args,
-                      **kwargs):
+    def after_predict(
+        self,
+        actor: "RayXGBoostActor",
+        predictions: Union[pd.Series, pd.DataFrame],
+        *args,
+        **kwargs
+    ):
         pass
 
 
@@ -62,13 +67,15 @@ class DistributedCallbackContainer:
         for callback in self.callbacks:
             callback.on_init(actor, *args, **kwargs)
 
-    def before_data_loading(self, actor: "RayXGBoostActor", data: "RayDMatrix",
-                            *args, **kwargs):
+    def before_data_loading(
+        self, actor: "RayXGBoostActor", data: "RayDMatrix", *args, **kwargs
+    ):
         for callback in self.callbacks:
             callback.before_data_loading(actor, data, *args, **kwargs)
 
-    def after_data_loading(self, actor: "RayXGBoostActor", data: "RayDMatrix",
-                           *args, **kwargs):
+    def after_data_loading(
+        self, actor: "RayXGBoostActor", data: "RayDMatrix", *args, **kwargs
+    ):
         for callback in self.callbacks:
             callback.after_data_loading(actor, data, *args, **kwargs)
 
@@ -76,8 +83,7 @@ class DistributedCallbackContainer:
         for callback in self.callbacks:
             callback.before_train(actor, *args, **kwargs)
 
-    def after_train(self, actor: "RayXGBoostActor", result_dict: Dict, *args,
-                    **kwargs):
+    def after_train(self, actor: "RayXGBoostActor", result_dict: Dict, *args, **kwargs):
         for callback in self.callbacks:
             callback.after_train(actor, result_dict, *args, **kwargs)
 
@@ -85,9 +91,13 @@ class DistributedCallbackContainer:
         for callback in self.callbacks:
             callback.before_predict(actor, *args, **kwargs)
 
-    def after_predict(self, actor: "RayXGBoostActor",
-                      predictions: Union[pd.Series, pd.DataFrame], *args,
-                      **kwargs):
+    def after_predict(
+        self,
+        actor: "RayXGBoostActor",
+        predictions: Union[pd.Series, pd.DataFrame],
+        *args,
+        **kwargs
+    ):
         for callback in self.callbacks:
             callback.after_predict(actor, predictions, *args, **kwargs)
 

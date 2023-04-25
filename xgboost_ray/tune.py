@@ -1,33 +1,37 @@
 # Tune imports.
+import logging
 from typing import Dict, Optional
 
 import ray
-
-import logging
-
 from ray.util.annotations import PublicAPI
 
-from xgboost_ray.xgb import xgboost as xgb
-
-from xgboost_ray.session import put_queue, get_rabit_rank
+from xgboost_ray.session import get_rabit_rank, put_queue
 from xgboost_ray.util import Unavailable, force_on_current_node
+from xgboost_ray.xgb import xgboost as xgb
 
 try:
     from ray import tune
     from ray.tune import is_session_enabled
+    from ray.tune.integration.xgboost import (
+        TuneReportCallback as OrigTuneReportCallback,
+    )
+    from ray.tune.integration.xgboost import (
+        TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback,
+    )
+    from ray.tune.integration.xgboost import (
+        _TuneCheckpointCallback as _OrigTuneCheckpointCallback,
+    )
     from ray.tune.utils import flatten_dict
-    from ray.tune.integration.xgboost import \
-        TuneReportCallback as OrigTuneReportCallback, \
-        _TuneCheckpointCallback as _OrigTuneCheckpointCallback, \
-        TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback
 
     TUNE_INSTALLED = True
 except ImportError:
     tune = None
-    TuneReportCallback = _TuneCheckpointCallback = \
-        TuneReportCheckpointCallback = Unavailable
-    OrigTuneReportCallback = _OrigTuneCheckpointCallback = \
-        OrigTuneReportCheckpointCallback = object
+    TuneReportCallback = (
+        _TuneCheckpointCallback
+    ) = TuneReportCheckpointCallback = Unavailable
+    OrigTuneReportCallback = (
+        _OrigTuneCheckpointCallback
+    ) = OrigTuneReportCheckpointCallback = object
 
     def is_session_enabled():
         return False
@@ -46,8 +50,11 @@ if TUNE_INSTALLED:
     class _TuneCheckpointCallback(_OrigTuneCheckpointCallback):
         def after_iteration(self, model, epoch: int, evals_log: Dict):
             if get_rabit_rank() == 0:
-                put_queue(lambda: self._create_checkpoint(
-                    model, epoch, self._filename, self._frequency))
+                put_queue(
+                    lambda: self._create_checkpoint(
+                        model, epoch, self._filename, self._frequency
+                    )
+                )
 
     class TuneReportCheckpointCallback(OrigTuneReportCheckpointCallback):
         _checkpoint_callback_cls = _TuneCheckpointCallback
@@ -60,13 +67,14 @@ def _try_add_tune_callback(kwargs: Dict):
         new_callbacks = []
         has_tune_callback = False
 
-        REPLACE_MSG = "Replaced `{orig}` with `{target}`. If you want to " \
-                      "avoid this warning, pass `{target}` as a callback " \
-                      "directly in your calls to `xgboost_ray.train()`."
+        REPLACE_MSG = (
+            "Replaced `{orig}` with `{target}`. If you want to "
+            "avoid this warning, pass `{target}` as a callback "
+            "directly in your calls to `xgboost_ray.train()`."
+        )
 
         for cb in callbacks:
-            if isinstance(cb,
-                          (TuneReportCallback, TuneReportCheckpointCallback)):
+            if isinstance(cb, (TuneReportCallback, TuneReportCheckpointCallback)):
                 has_tune_callback = True
                 new_callbacks.append(cb)
             elif isinstance(cb, OrigTuneReportCallback):
@@ -75,19 +83,23 @@ def _try_add_tune_callback(kwargs: Dict):
                 logging.warning(
                     REPLACE_MSG.format(
                         orig="ray.tune.integration.xgboost.TuneReportCallback",
-                        target="xgboost_ray.tune.TuneReportCallback"))
+                        target="xgboost_ray.tune.TuneReportCallback",
+                    )
+                )
                 has_tune_callback = True
             elif isinstance(cb, OrigTuneReportCheckpointCallback):
                 replace_cb = TuneReportCheckpointCallback(
                     metrics=cb._report._metrics,
                     filename=cb._checkpoint._filename,
-                    frequency=cb._checkpoint._frequency)
+                    frequency=cb._checkpoint._frequency,
+                )
                 new_callbacks.append(replace_cb)
                 logging.warning(
                     REPLACE_MSG.format(
                         orig="ray.tune.integration.xgboost."
                         "TuneReportCheckpointCallback",
-                        target="xgboost_ray.tune.TuneReportCheckpointCallback")
+                        target="xgboost_ray.tune.TuneReportCheckpointCallback",
+                    )
                 )
                 has_tune_callback = True
             else:
@@ -103,22 +115,23 @@ def _try_add_tune_callback(kwargs: Dict):
         return False
 
 
-def _get_tune_resources(num_actors: int, cpus_per_actor: int,
-                        gpus_per_actor: int,
-                        resources_per_actor: Optional[Dict],
-                        placement_options: Optional[Dict]):
+def _get_tune_resources(
+    num_actors: int,
+    cpus_per_actor: int,
+    gpus_per_actor: int,
+    resources_per_actor: Optional[Dict],
+    placement_options: Optional[Dict],
+):
     """Returns object to use for ``resources_per_trial`` with Ray Tune."""
     if TUNE_INSTALLED:
         from ray.tune import PlacementGroupFactory
 
         head_bundle = {}
         child_bundle = {"CPU": cpus_per_actor, "GPU": gpus_per_actor}
-        child_bundle_extra = {} if resources_per_actor is None else \
-            resources_per_actor
-        child_bundles = [{
-            **child_bundle,
-            **child_bundle_extra
-        } for _ in range(num_actors)]
+        child_bundle_extra = {} if resources_per_actor is None else resources_per_actor
+        child_bundles = [
+            {**child_bundle, **child_bundle_extra} for _ in range(num_actors)
+        ]
         bundles = [head_bundle] + child_bundles
         placement_options = placement_options or {}
         placement_options.setdefault("strategy", "PACK")
@@ -127,14 +140,15 @@ def _get_tune_resources(num_actors: int, cpus_per_actor: int,
         # TODO remove after Ray 2.3 is out
         if placement_options.get("_max_cpu_fraction_per_node", None) is None:
             placement_options.pop("_max_cpu_fraction_per_node", None)
-        placement_group_factory = PlacementGroupFactory(
-            bundles, **placement_options)
+        placement_group_factory = PlacementGroupFactory(bundles, **placement_options)
 
         return placement_group_factory
     else:
-        raise RuntimeError("Tune is not installed, so `get_tune_resources` is "
-                           "not supported. You can install Ray Tune via `pip "
-                           "install ray[tune]`.")
+        raise RuntimeError(
+            "Tune is not installed, so `get_tune_resources` is "
+            "not supported. You can install Ray Tune via `pip "
+            "install ray[tune]`."
+        )
 
 
 @PublicAPI(stability="beta")

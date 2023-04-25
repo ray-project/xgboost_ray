@@ -4,9 +4,9 @@ import time
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-
 from higgs import download_higgs
-from xgboost_ray import train, RayDMatrix, RayParams
+
+from xgboost_ray import RayDMatrix, RayParams, train
 
 FILENAME_CSV = "HIGGS.csv.gz"
 FILENAME_PARQUET = "HIGGS.parquet"
@@ -18,7 +18,8 @@ def csv_to_parquet(in_file, out_file, chunksize=100_000, **csv_kwargs):
 
     print(f"Converting CSV {in_file} to PARQUET {out_file}")
     csv_stream = pd.read_csv(
-        in_file, sep=",", chunksize=chunksize, low_memory=False, **csv_kwargs)
+        in_file, sep=",", chunksize=chunksize, low_memory=False, **csv_kwargs
+    )
 
     parquet_schema = None
     parquet_writer = None
@@ -29,7 +30,8 @@ def csv_to_parquet(in_file, out_file, chunksize=100_000, **csv_kwargs):
             parquet_schema = pa.Table.from_pandas(df=chunk).schema
             # Open a Parquet file for writing
             parquet_writer = pq.ParquetWriter(
-                out_file, parquet_schema, compression="snappy")
+                out_file, parquet_schema, compression="snappy"
+            )
         # Write CSV chunk to the parquet file
         table = pa.Table.from_pandas(chunk, schema=parquet_schema)
         parquet_writer.write_table(table)
@@ -53,21 +55,44 @@ def main():
             FILENAME_CSV,
             FILENAME_PARQUET,
             names=[
-                "label", "feature-01", "feature-02", "feature-03",
-                "feature-04", "feature-05", "feature-06", "feature-07",
-                "feature-08", "feature-09", "feature-10", "feature-11",
-                "feature-12", "feature-13", "feature-14", "feature-15",
-                "feature-16", "feature-17", "feature-18", "feature-19",
-                "feature-20", "feature-21", "feature-22", "feature-23",
-                "feature-24", "feature-25", "feature-26", "feature-27",
-                "feature-28"
-            ])
+                "label",
+                "feature-01",
+                "feature-02",
+                "feature-03",
+                "feature-04",
+                "feature-05",
+                "feature-06",
+                "feature-07",
+                "feature-08",
+                "feature-09",
+                "feature-10",
+                "feature-11",
+                "feature-12",
+                "feature-13",
+                "feature-14",
+                "feature-15",
+                "feature-16",
+                "feature-17",
+                "feature-18",
+                "feature-19",
+                "feature-20",
+                "feature-21",
+                "feature-22",
+                "feature-23",
+                "feature-24",
+                "feature-25",
+                "feature-26",
+                "feature-27",
+                "feature-28",
+            ],
+        )
 
     colnames = ["label"] + ["feature-%02d" % i for i in range(1, 29)]
 
     # Here we load the Parquet file
     dtrain = RayDMatrix(
-        os.path.abspath(FILENAME_PARQUET), label="label", columns=colnames)
+        os.path.abspath(FILENAME_PARQUET), label="label", columns=colnames
+    )
 
     config = {
         "tree_method": "hist",
@@ -83,17 +108,18 @@ def main():
         evals_result=evals_result,
         ray_params=RayParams(max_actor_restarts=1, num_actors=1),
         num_boost_round=100,
-        evals=[(dtrain, "train")])
+        evals=[(dtrain, "train")],
+    )
     taken = time.time() - start
     print(f"TRAIN TIME TAKEN: {taken:.2f} seconds")
 
     bst.save_model("higgs.xgb")
-    print("Final training error: {:.4f}".format(
-        evals_result["train"]["error"][-1]))
+    print("Final training error: {:.4f}".format(evals_result["train"]["error"][-1]))
 
 
 if __name__ == "__main__":
     import ray
+
     ray.init()
 
     start = time.time()

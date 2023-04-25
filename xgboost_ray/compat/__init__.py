@@ -5,6 +5,7 @@ if TYPE_CHECKING:
 
 try:
     from xgboost.callback import TrainingCallback
+
     LEGACY_CALLBACK = False
 except ImportError:
 
@@ -23,13 +24,15 @@ except ImportError:
                 self._before_iteration(
                     model=callback_env.model,
                     epoch=callback_env.iteration,
-                    evals_log=callback_env.evaluation_result_list)
+                    evals_log=callback_env.evaluation_result_list,
+                )
 
             if hasattr(self, "after_iteration"):
                 self.after_iteration(
                     model=callback_env.model,
                     epoch=callback_env.iteration,
-                    evals_log=callback_env.evaluation_result_list)
+                    evals_log=callback_env.evaluation_result_list,
+                )
 
         def before_training(self, model):
             pass

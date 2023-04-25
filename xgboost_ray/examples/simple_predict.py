@@ -1,18 +1,19 @@
 import os
 
+import numpy as np
+import xgboost as xgb
 from sklearn import datasets
 
-import xgboost as xgb
-from xgboost_ray import RayDMatrix, predict, RayParams
-
-import numpy as np
+from xgboost_ray import RayDMatrix, RayParams, predict
 
 
 def main():
     if not os.path.exists("simple.xgb"):
-        raise ValueError("Model file not found: `simple.xgb`"
-                         "\nFIX THIS by running `python `simple.py` first to "
-                         "train the model.")
+        raise ValueError(
+            "Model file not found: `simple.xgb`"
+            "\nFIX THIS by running `python `simple.py` first to "
+            "train the model."
+        )
 
     # Load dataset
     data, labels = datasets.load_breast_cancer(return_X_y=True)

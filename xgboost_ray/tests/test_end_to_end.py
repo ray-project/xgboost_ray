@@ -1,20 +1,18 @@
 import os
 import shutil
 import tempfile
+import unittest
 
 import numpy as np
-import unittest
-import xgboost as xgb
-
 import ray
+import xgboost as xgb
 from ray.exceptions import RayActorError, RayTaskError
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
-
 from scipy.sparse import csr_matrix
 
-from xgboost_ray import RayParams, train, RayDMatrix, predict, RayShardingMode
-from xgboost_ray.main import RayXGBoostTrainingError
+from xgboost_ray import RayDMatrix, RayParams, RayShardingMode, predict, train
 from xgboost_ray.callback import DistributedCallback
+from xgboost_ray.main import RayXGBoostTrainingError
 from xgboost_ray.tests.utils import get_num_trees
 
 
@@ -72,12 +70,15 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
     def setUp(self):
         repeat = 8  # Repeat data a couple of times for stability
-        self.x = np.array([
-            [1, 0, 0, 0],  # Feature 0 -> Label 0
-            [0, 1, 0, 0],  # Feature 1 -> Label 1
-            [0, 0, 1, 1],  # Feature 2+3 -> Label 2
-            [0, 0, 1, 0],  # Feature 2+!3 -> Label 3
-        ] * repeat)
+        self.x = np.array(
+            [
+                [1, 0, 0, 0],  # Feature 0 -> Label 0
+                [0, 1, 0, 0],  # Feature 1 -> Label 1
+                [0, 0, 1, 1],  # Feature 2+3 -> Label 2
+                [0, 0, 1, 0],  # Feature 2+!3 -> Label 3
+            ]
+            * repeat
+        )
         self.y = np.array([0, 1, 2, 3] * repeat)
 
         self.params = {
@@ -85,7 +86,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             "nthread": 1,
             "max_depth": 2,
             "objective": "multi:softmax",
-            "num_class": 4
+            "num_class": 4,
         }
 
     def tearDown(self):
@@ -141,9 +142,10 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         ray.init(num_cpus=5, num_gpus=0)
 
         @ray.remote
-        class DummyTrainActor():
+        class DummyTrainActor:
             def test(self):
                 import xgboost_ray
+
                 return xgboost_ray.main._ray_get_actor_cpus()
 
         actor = DummyTrainActor.options(num_cpus=2).remote()
@@ -153,13 +155,11 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         ray.get(pg.ready())
         actor2 = DummyTrainActor.options(
             num_cpus=2,
-            scheduling_strategy=PlacementGroupSchedulingStrategy(
-                placement_group=pg)).remote()
+            scheduling_strategy=PlacementGroupSchedulingStrategy(placement_group=pg),
+        ).remote()
         assert ray.get(actor2.test.remote()) == 2
 
-    def _testJointTraining(self,
-                           sharding=RayShardingMode.INTERLEAVED,
-                           softprob=False):
+    def _testJointTraining(self, sharding=RayShardingMode.INTERLEAVED, softprob=False):
         """Train with Ray. The data will be split, but the trees
         should be combined together and find the true model."""
         params = self.params.copy()
@@ -169,7 +169,8 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         bst = train(
             params,
             RayDMatrix(self.x, self.y, sharding=sharding),
-            ray_params=RayParams(num_actors=2))
+            ray_params=RayParams(num_actors=2),
+        )
 
         x_mat = xgb.DMatrix(self.x)
         pred_y = bst.predict(x_mat)
@@ -189,7 +190,8 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         bst = train(
             params,
             RayDMatrix(self.x[:-1], self.y[:-1], sharding=sharding),
-            ray_params=RayParams(num_actors=2))
+            ray_params=RayParams(num_actors=2),
+        )
 
         x_mat = RayDMatrix(self.x[:-1], sharding=sharding)
         pred_y = predict(bst, x_mat, ray_params=RayParams(num_actors=2))
@@ -201,19 +203,16 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
     def testJointTrainingInterleaved(self):
         ray.init(num_cpus=2, num_gpus=0)
         self._testJointTraining(sharding=RayShardingMode.INTERLEAVED)
-        self._testJointTraining(
-            sharding=RayShardingMode.INTERLEAVED, softprob=True)
+        self._testJointTraining(sharding=RayShardingMode.INTERLEAVED, softprob=True)
 
     def testJointTrainingBatch(self):
         ray.init(num_cpus=2, num_gpus=0)
         self._testJointTraining(sharding=RayShardingMode.BATCH)
         self._testJointTraining(sharding=RayShardingMode.BATCH, softprob=True)
 
-    def testTrainPredict(self,
-                         init=True,
-                         remote=None,
-                         softprob=False,
-                         **ray_param_dict):
+    def testTrainPredict(
+        self, init=True, remote=None, softprob=False, **ray_param_dict
+    ):
         """Train with evaluation and predict"""
         if init:
             ray.init(num_cpus=2, num_gpus=0)
@@ -233,7 +232,8 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             ray_params=RayParams(num_actors=2, **ray_param_dict),
             evals=[(dtrain, "dtrain")],
             evals_result=evals_result,
-            _remote=remote)
+            _remote=remote,
+        )
 
         self.assertEqual(get_num_trees(bst), 38)
 
@@ -244,7 +244,8 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             bst,
             x_mat,
             ray_params=RayParams(num_actors=2, **ray_param_dict),
-            _remote=remote)
+            _remote=remote,
+        )
 
         if softprob:
             self.assertEqual(pred_y.shape[1], len(np.unique(self.y)))
@@ -281,14 +282,16 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
         test_callback = _make_callback(tmpdir)
 
         self.testTrainPredict(
-            init=init, remote=remote, distributed_callbacks=[test_callback])
+            init=init, remote=remote, distributed_callbacks=[test_callback]
+        )
         rank_0_log_file = os.path.join(tmpdir, "rank_0.log")
         rank_1_log_file = os.path.join(tmpdir, "rank_1.log")
         self.assertTrue(os.path.exists(rank_1_log_file))
 
         rank_0_log = open(rank_0_log_file, "rt").read()
         self.assertEqual(
-            rank_0_log, "Actor 0: Init\n"
+            rank_0_log,
+            "Actor 0: Init\n"
             "Actor 0: Before loading\n"
             "Actor 0: After loading\n"
             "Actor 0: Before train\n"
@@ -297,7 +300,8 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             "Actor 0: Before loading\n"
             "Actor 0: After loading\n"
             "Actor 0: Before predict\n"
-            "Actor 0: After predict\n")
+            "Actor 0: After predict\n",
+        )
         shutil.rmtree(tmpdir)
 
     def testDistributedCallbacksTrainPredictClient(self):
@@ -326,11 +330,12 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
                 {
                     "objective": "multi:softmax",
                     "num_class": 2,
-                    "eval_metric": ["logloss", "error"]
+                    "eval_metric": ["logloss", "error"],
                 },  # This will error
                 train_set,
                 evals=[(train_set, "train")],
-                ray_params=RayParams(num_actors=1, max_actor_restarts=0))
+                ray_params=RayParams(num_actors=1, max_actor_restarts=0),
+            )
         except RuntimeError as exc:
             self.assertTrue(exc.__cause__)
             self.assertTrue(isinstance(exc.__cause__, RayActorError))
@@ -340,11 +345,12 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
             self.assertTrue(exc.__cause__.__cause__.cause)
             self.assertTrue(
-                isinstance(exc.__cause__.__cause__.cause,
-                           RayXGBoostTrainingError))
+                isinstance(exc.__cause__.__cause__.cause, RayXGBoostTrainingError)
+            )
 
-            self.assertIn("label and prediction size not match",
-                          str(exc.__cause__.__cause__))
+            self.assertIn(
+                "label and prediction size not match", str(exc.__cause__.__cause__)
+            )
 
     def testKwargsValidation(self):
         x = np.random.uniform(0, 1, size=(100, 4))
@@ -357,22 +363,42 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
                 {
                     "objective": "multi:softmax",
                     "num_class": 2,
-                    "eval_metric": ["logloss", "error"]
+                    "eval_metric": ["logloss", "error"],
                 },
                 train_set,
                 evals=[(train_set, "train")],
                 ray_params=RayParams(num_actors=1, max_actor_restarts=0),
-                totally_invalid_kwarg="")
+                totally_invalid_kwarg="",
+            )
 
     def testRanking(self):
         Xrow = np.array([1, 2, 6, 8, 11, 14, 16, 17])
         Xcol = np.array([0, 0, 1, 1, 2, 2, 3, 3])
-        X = csr_matrix(
-            (np.ones(shape=8), (Xrow, Xcol)), shape=(20, 4)).toarray()
-        y = np.array([
-            0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
-            0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0
-        ])
+        X = csr_matrix((np.ones(shape=8), (Xrow, Xcol)), shape=(20, 4)).toarray()
+        y = np.array(
+            [
+                0.0,
+                1.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                1.0,
+                1.0,
+                0.0,
+                0.0,
+            ]
+        )
 
         qid = np.array([0] * 5 + [1] * 5 + [2] * 5 + [3] * 5)
         dtrain = RayDMatrix(X, label=y, qid=qid)
@@ -381,7 +407,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             "eta": 1,
             "objective": "rank:pairwise",
             "eval_metric": ["auc", "aucpr"],
-            "max_depth": 1
+            "max_depth": 1,
         }
         evals_result = {}
         train(
@@ -390,14 +416,16 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             10,
             evals=[(dtrain, "train")],
             evals_result=evals_result,
-            ray_params=RayParams(num_actors=2, max_actor_restarts=0))
+            ray_params=RayParams(num_actors=2, max_actor_restarts=0),
+        )
         auc_rec = evals_result["train"]["auc"]
         self.assertTrue(all(p <= q for p, q in zip(auc_rec, auc_rec[1:])))
         auc_rec = evals_result["train"]["aucpr"]
         self.assertTrue((p <= q for p, q in zip(auc_rec, auc_rec[1:])))
 
-    @unittest.skipIf(xgb.__version__ < "1.3.0",
-                     f"not supported in xgb version {xgb.__version__}")
+    @unittest.skipIf(
+        xgb.__version__ < "1.3.0", f"not supported in xgb version {xgb.__version__}"
+    )
     def testFeatureWeightsParam(self):
         """Test the feature_weights parameter for xgb version >= 1.3.0.
         Adapted from the official demo codes:
@@ -411,7 +439,7 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
         X = rng.randn(kRows, kCols)
         y = rng.randn(kRows)
-        fw = np.ones(shape=(kCols, ))
+        fw = np.ones(shape=(kCols,))
         for i in range(kCols):
             fw[i] *= float(i)
         train_set = RayDMatrix(X, y, feature_weights=fw)
@@ -429,8 +457,9 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
             evals=[(train_set, "train")],
             verbose_eval=False,
             ray_params=RayParams(
-                num_actors=2,  # Number of remote actors
-                cpus_per_actor=1))
+                num_actors=2, cpus_per_actor=1  # Number of remote actors
+            ),
+        )
 
         feature_map = bst.get_fscore()
         # feature zero has 0 weight
@@ -439,6 +468,8 @@ class XGBoostRayEndToEndTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    import pytest
     import sys
+
+    import pytest
+
     sys.exit(pytest.main(["-v", __file__]))

@@ -1,7 +1,7 @@
 import os
 import time
 from collections import defaultdict
-from typing import Dict, Tuple, Set
+from typing import Dict, Set, Tuple
 
 import ray
 from ray.actor import ActorHandle
@@ -30,8 +30,7 @@ class FaultToleranceManager:
         """Kill an actor when reaching this global boost round"""
         self.scheduled_kill[boost_round].add(rank)
 
-    def delay_return(self, rank: int, start_boost_round: int,
-                     end_boost_round: int):
+    def delay_return(self, rank: int, start_boost_round: int, end_boost_round: int):
         """Do not allow an actor to finish data loading between these rounds"""
         self.delayed_return[rank].add((start_boost_round, end_boost_round))
 
@@ -69,10 +68,7 @@ class FaultToleranceManager:
 class DelayedLoadingCallback(DistributedCallback):
     """Used to control when actors return to training"""
 
-    def __init__(self,
-                 ft_manager: ActorHandle,
-                 reload_data=True,
-                 sleep_time=0.5):
+    def __init__(self, ft_manager: ActorHandle, reload_data=True, sleep_time=0.5):
         self.ft_manager = ft_manager
         self.reload_data = reload_data
         self.sleep_time = sleep_time

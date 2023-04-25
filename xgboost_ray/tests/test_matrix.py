@@ -2,12 +2,12 @@ import inspect
 import os
 import tempfile
 import unittest
-import xgboost as xgb
 
 import numpy as np
 import pandas as pd
-
 import ray
+import xgboost as xgb
+
 try:
     import ray.data as ray_data
 except (ImportError, ModuleNotFoundError):
@@ -15,8 +15,7 @@ except (ImportError, ModuleNotFoundError):
     ray_data = None
 
 from xgboost_ray import RayDMatrix
-from xgboost_ray.matrix import (concat_dataframes, RayShardingMode,
-                                _get_sharding_indices)
+from xgboost_ray.matrix import RayShardingMode, _get_sharding_indices, concat_dataframes
 
 
 class XGBoostRayDMatrixTest(unittest.TestCase):
@@ -24,12 +23,15 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def setUp(self):
         repeat = 8  # Repeat data a couple of times for stability
-        self.x = np.array([
-            [1, 0, 0, 0],  # Feature 0 -> Label 0
-            [0, 1, 0, 0],  # Feature 1 -> Label 1
-            [0, 0, 1, 1],  # Feature 2+3 -> Label 2
-            [0, 0, 1, 0],  # Feature 2+!3 -> Label 3
-        ] * repeat)
+        self.x = np.array(
+            [
+                [1, 0, 0, 0],  # Feature 0 -> Label 0
+                [0, 1, 0, 0],  # Feature 1 -> Label 1
+                [0, 0, 1, 1],  # Feature 2+3 -> Label 2
+                [0, 0, 1, 0],  # Feature 2+!3 -> Label 3
+            ]
+            * repeat
+        )
         self.y = np.array([0, 1, 2, 3] * repeat)
 
     @classmethod
@@ -117,6 +119,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testFromModinDfDf(self):
         from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+
         if not MODIN_INSTALLED:
             self.skipTest("Modin not installed.")
             return
@@ -129,6 +132,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testFromModinDfSeries(self):
         from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+
         if not MODIN_INSTALLED:
             self.skipTest("Modin not installed.")
             return
@@ -141,6 +145,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testFromModinDfString(self):
         from xgboost_ray.data_sources.modin import MODIN_INSTALLED
+
         if not MODIN_INSTALLED:
             self.skipTest("Modin not installed.")
             return
@@ -154,6 +159,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testFromDaskDfSeries(self):
         from xgboost_ray.data_sources.dask import DASK_INSTALLED
+
         if not DASK_INSTALLED:
             self.skipTest("Dask not installed.")
             return
@@ -167,12 +173,13 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testFromDaskDfArray(self):
         from xgboost_ray.data_sources.dask import DASK_INSTALLED
+
         if not DASK_INSTALLED:
             self.skipTest("Dask not installed.")
             return
 
-        import dask.dataframe as dd
         import dask.array as da
+        import dask.dataframe as dd
 
         in_x = dd.from_array(self.x)
         in_y = da.from_array(self.y)
@@ -181,6 +188,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
     def testFromDaskDfString(self):
         from xgboost_ray.data_sources.dask import DASK_INSTALLED
+
         if not DASK_INSTALLED:
             self.skipTest("Dask not installed.")
             return
@@ -207,10 +215,8 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_df["label"] = pd.Series(self.y)
             data_df.to_parquet(data_file)
 
-            self._testMatrixCreation(
-                f"file://{data_file}", "label", distributed=False)
-            self._testMatrixCreation(
-                f"file://{data_file}", "label", distributed=True)
+            self._testMatrixCreation(f"file://{data_file}", "label", distributed=False)
+            self._testMatrixCreation(f"file://{data_file}", "label", distributed=True)
 
     def testFromPetastormMultiParquetString(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -220,8 +226,8 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
             data_df["label"] = pd.Series(self.y)
 
-            df_1 = data_df[0:len(data_df) // 2]
-            df_2 = data_df[len(data_df) // 2:]
+            df_1 = data_df[0 : len(data_df) // 2]
+            df_2 = data_df[len(data_df) // 2 :]
 
             df_1.to_parquet(data_file_1)
             df_2.to_parquet(data_file_2)
@@ -229,11 +235,13 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             self._testMatrixCreation(
                 [f"file://{data_file_1}", f"file://{data_file_2}"],
                 "label",
-                distributed=False)
+                distributed=False,
+            )
             self._testMatrixCreation(
                 [f"file://{data_file_1}", f"file://{data_file_2}"],
                 "label",
-                distributed=True)
+                distributed=True,
+            )
 
     def testFromCSVString(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -255,16 +263,18 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
             data_df["label"] = pd.Series(self.y)
 
-            df_1 = data_df[0:len(data_df) // 2]
-            df_2 = data_df[len(data_df) // 2:]
+            df_1 = data_df[0 : len(data_df) // 2]
+            df_2 = data_df[len(data_df) // 2 :]
 
             df_1.to_csv(data_file_1, header=True, index=False)
             df_2.to_csv(data_file_2, header=True, index=False)
 
             self._testMatrixCreation(
-                [data_file_1, data_file_2], "label", distributed=False)
+                [data_file_1, data_file_2], "label", distributed=False
+            )
             self._testMatrixCreation(
-                [data_file_1, data_file_2], "label", distributed=True)
+                [data_file_1, data_file_2], "label", distributed=True
+            )
 
     def testFromParquetString(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -285,16 +295,18 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
             data_df["label"] = pd.Series(self.y)
 
-            df_1 = data_df[0:len(data_df) // 2]
-            df_2 = data_df[len(data_df) // 2:]
+            df_1 = data_df[0 : len(data_df) // 2]
+            df_2 = data_df[len(data_df) // 2 :]
 
             df_1.to_parquet(data_file_1)
             df_2.to_parquet(data_file_2)
 
             self._testMatrixCreation(
-                [data_file_1, data_file_2], "label", distributed=False)
+                [data_file_1, data_file_2], "label", distributed=False
+            )
             self._testMatrixCreation(
-                [data_file_1, data_file_2], "label", distributed=True)
+                [data_file_1, data_file_2], "label", distributed=True
+            )
 
     def testDetectDistributed(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -341,8 +353,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
     def testBatchShardingAllActorsGetIndices(self):
         """Check if all actors get indices with batch mode"""
         for i in range(16):
-            self.assertTrue(
-                _get_sharding_indices(RayShardingMode.BATCH, i, 16, 100))
+            self.assertTrue(_get_sharding_indices(RayShardingMode.BATCH, i, 16, 100))
 
     def testLegacyParams(self):
         """Test if all params can be set regardless of xgb version"""
@@ -359,17 +370,20 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             weight=weight,
             base_margin=base_margin,
             label_lower_bound=label_lower_bound,
-            label_upper_bound=label_upper_bound)
+            label_upper_bound=label_upper_bound,
+        )
         self._testMatrixCreation(
             in_x,
             in_y,
             qid=qid,
             base_margin=base_margin,
             label_lower_bound=label_lower_bound,
-            label_upper_bound=label_upper_bound)
+            label_upper_bound=label_upper_bound,
+        )
 
-    @unittest.skipIf(xgb.__version__ < "1.3.0",
-                     f"not supported in xgb version {xgb.__version__}")
+    @unittest.skipIf(
+        xgb.__version__ < "1.3.0", f"not supported in xgb version {xgb.__version__}"
+    )
     def testFeatureWeightsParam(self):
         """Test the feature_weights parameter for xgb version >= 1.3.0"""
         in_x = self.x
@@ -377,8 +391,10 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         feature_weights = np.arange(len(in_y))
         self._testMatrixCreation(in_x, in_y, feature_weights=feature_weights)
 
-    @unittest.skipIf("qid" not in inspect.signature(xgb.DMatrix).parameters,
-                     f"not supported in xgb version {xgb.__version__}")
+    @unittest.skipIf(
+        "qid" not in inspect.signature(xgb.DMatrix).parameters,
+        f"not supported in xgb version {xgb.__version__}",
+    )
     def testQidSortedBehaviorXGBoost(self):
         """Test that data with unsorted qid is sorted in RayDMatrix"""
         in_x = self.x
@@ -386,22 +402,24 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         unsorted_qid = np.array([1, 2] * 16)
 
         from xgboost import DMatrix
+
         with self.assertRaises(ValueError):
             DMatrix(**{"data": in_x, "label": in_y, "qid": unsorted_qid})
-        DMatrix(**{
-            "data": in_x,
-            "label": in_y,
-            "qid": np.sort(unsorted_qid)
-        })  # no exception
+        DMatrix(
+            **{"data": in_x, "label": in_y, "qid": np.sort(unsorted_qid)}
+        )  # no exception
         # test RayDMatrix handles sorting automatically
         mat = RayDMatrix(in_x, in_y, qid=unsorted_qid)
         params = mat.get_data(rank=0, num_actors=1)
         DMatrix(**params)
 
-    @unittest.skipIf("qid" not in inspect.signature(xgb.DMatrix).parameters,
-                     f"not supported in xgb version {xgb.__version__}")
+    @unittest.skipIf(
+        "qid" not in inspect.signature(xgb.DMatrix).parameters,
+        f"not supported in xgb version {xgb.__version__}",
+    )
     def testQidSortedParquet(self):
         from xgboost import DMatrix
+
         with tempfile.TemporaryDirectory() as dir:
             parquet_file1 = os.path.join(dir, "file1.parquet")
             parquet_file2 = os.path.join(dir, "file2.parquet")
@@ -423,12 +441,15 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
                 [parquet_file1, parquet_file2],
                 columns=["a", "b", "c", "d", "label", "group"],
                 label="label",
-                qid="group")
+                qid="group",
+            )
             params = mat.get_data(rank=0, num_actors=1)
             DMatrix(**params)
 
 
 if __name__ == "__main__":
-    import pytest
     import sys
+
+    import pytest
+
     sys.exit(pytest.main(["-v", __file__]))
