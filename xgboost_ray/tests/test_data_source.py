@@ -7,7 +7,7 @@ import pandas as pd
 import ray
 from ray import ObjectRef
 
-from xgboost_ray.data_sources import Dask, Modin, Partitioned
+from xgboost_ray.data_sources import Dask, Modin, Partitioned, RayDataset
 from xgboost_ray.data_sources.dask import DASK_INSTALLED
 from xgboost_ray.data_sources.modin import MODIN_INSTALLED
 from xgboost_ray.main import _RemoteRayXGBoostActor
@@ -434,6 +434,13 @@ class DaskDataSourceTest(_DistributedDataSourceTest, unittest.TestCase):
 # Ray Datasets data source is not tested, as we do not make use of xgboost-ray
 # partition-to-actor assign logic. Furthermore, xgboost-ray with Ray Datasets
 # is tested in ray-project/ray.
+# The only thing we test here is automatic repartitioning.
+class RayDatasetSourceTest(unittest.TestCase):
+    def testRepartitioning(self):
+        ds = ray.data.from_items([1])
+        assert ds.num_blocks() == 1
+        ds = RayDataset.repartition(ds, 4)
+        assert ds.num_blocks() == 4
 
 
 class PartitionedSourceTest(_DistributedDataSourceTest, unittest.TestCase):
