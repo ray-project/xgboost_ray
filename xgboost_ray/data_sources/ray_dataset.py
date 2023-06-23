@@ -34,7 +34,7 @@ class RayDataset(DataSource):
 
     supports_central_loading = True
     supports_distributed_loading = True
-    needs_partitions = True
+    needs_partitions = False
 
     @staticmethod
     def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:
