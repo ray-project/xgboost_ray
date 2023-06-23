@@ -34,6 +34,7 @@ class DataSource:
 
     supports_central_loading = True
     supports_distributed_loading = False
+    needs_partitions = True
 
     @staticmethod
     def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:
@@ -127,11 +128,6 @@ class DataSource:
         elif column is not None:
             return cls.convert_to_series(column), None
         return column, None
-
-    @staticmethod
-    def repartition(data: Any, num_partitions: int) -> Optional[Any]:
-        """Repartition dataset, if possible."""
-        return None
 
     @staticmethod
     def get_n(data: Any):

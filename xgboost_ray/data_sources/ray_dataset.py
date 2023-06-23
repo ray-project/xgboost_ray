@@ -34,6 +34,7 @@ class RayDataset(DataSource):
 
     supports_central_loading = True
     supports_distributed_loading = True
+    needs_partitions = True
 
     @staticmethod
     def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:
@@ -100,13 +101,6 @@ class RayDataset(DataSource):
         return None, {
             i: [dataset_split] for i, dataset_split in enumerate(dataset_splits)
         }
-
-    @staticmethod
-    def repartition(
-        data: "ray.data.dataset.Dataset", num_partitions: int
-    ) -> "ray.data.dataset.Dataset":
-        """Repartition dataset, if possible."""
-        return data.repartition(num_partitions)
 
     @staticmethod
     def get_n(data: "ray.data.dataset.Dataset"):
