@@ -431,11 +431,18 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
 
         max_num_shards = self._cached_n or data_source.get_n(self.data)
         if num_actors > max_num_shards:
-            raise RuntimeError(
-                f"Trying to shard data for {num_actors} actors, but the "
-                f"maximum number of shards (i.e. the number of data rows) "
-                f"is {max_num_shards}. Consider using fewer actors."
+            repartitioned = data_source.repartition(
+                self.data, num_partitions=num_actors
             )
+            if repartitioned:
+                self.data = repartitioned
+                self._cached_n = data_source.get_n(self.data)
+            else:
+                raise RuntimeError(
+                    f"Trying to shard data for {num_actors} actors, but the "
+                    f"maximum number of shards (i.e. the number of data rows) "
+                    f"is {max_num_shards}. Consider using fewer actors."
+                )
 
         # We're doing central data loading here, so we don't pass any indices,
         # yet. Instead, we'll be selecting the rows below.
@@ -566,14 +573,21 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
 
         max_num_shards = self._cached_n or data_source.get_n(self.data)
         if num_actors > max_num_shards:
-            raise RuntimeError(
-                f"Trying to shard data for {num_actors} actors, but the "
-                f"maximum number of shards is {max_num_shards}. If you "
-                f"want to shard the dataset by rows, consider "
-                f"centralized loading by passing `distributed=False` to "
-                f"the `RayDMatrix`. Otherwise consider using fewer actors "
-                f"or re-partitioning your data."
+            repartitioned = data_source.repartition(
+                self.data, num_partitions=num_actors
             )
+            if repartitioned:
+                self.data = repartitioned
+                self._cached_n = data_source.get_n(self.data)
+            else:
+                raise RuntimeError(
+                    f"Trying to shard data for {num_actors} actors, but the "
+                    f"maximum number of shards is {max_num_shards}. If you "
+                    f"want to shard the dataset by rows, consider "
+                    f"centralized loading by passing `distributed=False` to "
+                    f"the `RayDMatrix`. Otherwise consider using fewer actors "
+                    f"or re-partitioning your data."
+                )
 
     def assign_shards_to_actors(self, actors: Sequence[ActorHandle]) -> bool:
         if not isinstance(self.label, str):

@@ -129,6 +129,11 @@ class DataSource:
         return column, None
 
     @staticmethod
+    def repartition(data: Any, num_partitions: int) -> Optional[Any]:
+        """Repartition dataset, if possible."""
+        return None
+
+    @staticmethod
     def get_n(data: Any):
         """Get length of data source partitions for sharding."""
         return len(data)

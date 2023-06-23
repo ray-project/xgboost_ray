@@ -102,7 +102,14 @@ class RayDataset(DataSource):
         }
 
     @staticmethod
-    def get_n(data: Any):
+    def repartition(
+        data: "ray.data.dataset.Dataset", num_partitions: int
+    ) -> "ray.data.dataset.Dataset":
+        """Repartition dataset, if possible."""
+        return data.repartition(num_partitions)
+
+    @staticmethod
+    def get_n(data: "ray.data.dataset.Dataset"):
         """
         Return number of distributed blocks.
         """
