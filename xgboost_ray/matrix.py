@@ -430,7 +430,7 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
         data_source = self.get_data_source()
 
         max_num_shards = self._cached_n or data_source.get_n(self.data)
-        if num_actors > max_num_shards:
+        if num_actors > max_num_shards and data_source.needs_partitions:
             raise RuntimeError(
                 f"Trying to shard data for {num_actors} actors, but the "
                 f"maximum number of shards (i.e. the number of data rows) "
@@ -565,7 +565,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
             return
 
         max_num_shards = self._cached_n or data_source.get_n(self.data)
-        if num_actors > max_num_shards:
+        if num_actors > max_num_shards and data_source.needs_partitions:
             raise RuntimeError(
                 f"Trying to shard data for {num_actors} actors, but the "
                 f"maximum number of shards is {max_num_shards}. If you "

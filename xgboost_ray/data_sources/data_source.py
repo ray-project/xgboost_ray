@@ -34,6 +34,7 @@ class DataSource:
 
     supports_central_loading = True
     supports_distributed_loading = False
+    needs_partitions = True
 
     @staticmethod
     def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:

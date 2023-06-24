@@ -34,6 +34,7 @@ class RayDataset(DataSource):
 
     supports_central_loading = True
     supports_distributed_loading = True
+    needs_partitions = False
 
     @staticmethod
     def is_data_type(data: Any, filetype: Optional[RayFileType] = None) -> bool:
@@ -102,7 +103,7 @@ class RayDataset(DataSource):
         }
 
     @staticmethod
-    def get_n(data: Any):
+    def get_n(data: "ray.data.dataset.Dataset"):
         """
         Return number of distributed blocks.
         """
