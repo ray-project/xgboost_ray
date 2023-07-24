@@ -3,11 +3,13 @@ import argparse
 import numpy as np
 import pandas as pd
 import ray
+from xgboost import DMatrix
 
 from xgboost_ray import RayDMatrix, RayParams, train
 
 
 def main(cpus_per_actor, num_actors):
+    np.random.seed(1234)
     # Generate dataset
     x = np.repeat(range(8), 16).reshape((32, 4))
     # Even numbers --> 0, odd numbers --> 1
@@ -22,16 +24,7 @@ def main(cpus_per_actor, num_actors):
     data.columns = [str(c) for c in data.columns]
     data["label"] = y
 
-    # There was recent API change - the first clause covers the new
-    # and current Ray master API
-    if hasattr(ray.data, "from_pandas_refs"):
-        # Generate Ray dataset from 4 partitions
-        ray_ds = ray.data.from_pandas(data).repartition(num_actors)
-    else:
-        # Split into 4 partitions
-        partitions = [ray.put(part) for part in np.split(data, num_actors)]
-        ray_ds = ray.data.from_pandas(partitions)
-
+    ray_ds = ray.data.from_pandas(data).repartition(num_actors)
     train_set = RayDMatrix(ray_ds, "label")
 
     evals_result = {}
@@ -61,6 +54,12 @@ def main(cpus_per_actor, num_actors):
     model_path = "ray_datasets.xgb"
     bst.save_model(model_path)
     print("Final training error: {:.4f}".format(evals_result["train"]["error"][-1]))
+
+    # Distributed prediction
+    scored = ray_ds.drop_columns(["label"]).map_batches(
+        lambda batch: {"pred": bst.predict(DMatrix(batch))}, batch_format="pandas"
+    )
+    print(scored.to_pandas())
 
 
 if __name__ == "__main__":
