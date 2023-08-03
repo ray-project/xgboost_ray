@@ -85,7 +85,7 @@ def ensure_sorted_by_qid(
         _qid = qid.iloc[:, 0]
     elif isinstance(qid, pd.Series):
         _qid = qid
-    if _qid.is_monotonic:
+    if getattr(_qid, "is_monotonic", False):
         return _qid, df
     else:
         if isinstance(qid, str):
