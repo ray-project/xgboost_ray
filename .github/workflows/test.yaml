@@ -34,13 +34,13 @@ jobs:
     timeout-minutes: 160
     strategy:
       matrix:
-        python-version: [3.8, 3.9, 3.10]
+        python-version: ["3.8", "3.9", "3.10"]
         include:
-          - python-version: 3.8
+          - python-version: "3.8"
             ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp38-cp38-manylinux2014_x86_64.whl
-          - python-version: 3.9
+          - python-version: "3.9"
             ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl
-          - python-version: 3.10
+          - python-version: "3.10"
             ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp310-cp310-manylinux2014_x86_64.whl
     steps:
     - uses: actions/checkout@v3
@@ -78,7 +78,7 @@ jobs:
     timeout-minutes: 160
     strategy:
       matrix:
-        python-version: [3.8, 3.9, 3.10]
+        python-version: ["3.8", "3.9", "3.10"]
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -117,7 +117,7 @@ jobs:
     timeout-minutes: 160
     strategy:
       matrix:
-        python-version: [3.8, 3.9, 3.10]
+        python-version: ["3.8", "3.9", "3.10"]
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -161,13 +161,13 @@ jobs:
     strategy:
       matrix:
         # no new versions for xgboost are published for 3.6
-        python-version: [3.8, 3.9, 3.10]
+        python-version: ["3.8", "3.9", "3.10"]
         include:
-          - python-version: 3.8
+          - python-version: "3.8"
             ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp38-cp38-manylinux2014_x86_64.whl
-          - python-version: 3.9
+          - python-version: "3.9"
             ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl
-          - python-version: 3.10
+          - python-version: "3.10"
             ray-wheel: https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp310-cp310-manylinux2014_x86_64.whl
     steps:
     - uses: actions/checkout@v3
