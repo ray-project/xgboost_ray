@@ -24,7 +24,7 @@ def main(cpus_per_actor, num_actors):
     data.columns = [str(c) for c in data.columns]
     data["label"] = y
 
-    ray_ds = ray.data.from_pandas(data).repartition(num_actors)
+    ray_ds = ray.data.from_pandas(data)
     train_set = RayDMatrix(ray_ds, "label")
 
     evals_result = {}
