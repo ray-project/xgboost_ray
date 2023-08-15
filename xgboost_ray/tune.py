@@ -10,7 +10,7 @@ from xgboost_ray.util import Unavailable, force_on_current_node
 from xgboost_ray.xgb import xgboost as xgb
 
 try:
-    from ray import tune
+    from ray import train, tune
     from ray.tune import is_session_enabled
     from ray.tune.integration.xgboost import (
         TuneReportCallback as OrigTuneReportCallback,
@@ -40,12 +40,17 @@ except ImportError:
     TUNE_INSTALLED = False
 
 if TUNE_INSTALLED:
+    if hasattr(train, "report"):
+        report = train.report
+    else:
+        report = tune.report
+
     # New style callbacks.
     class TuneReportCallback(OrigTuneReportCallback):
         def after_iteration(self, model, epoch: int, evals_log: Dict):
             if get_rabit_rank() == 0:
                 report_dict = self._get_report_dict(evals_log)
-                put_queue(lambda: tune.report(**report_dict))
+                put_queue(lambda: report(**report_dict))
 
     class _TuneCheckpointCallback(_OrigTuneCheckpointCallback):
         def after_iteration(self, model, epoch: int, evals_log: Dict):
