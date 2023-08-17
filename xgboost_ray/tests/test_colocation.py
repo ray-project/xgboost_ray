@@ -16,12 +16,12 @@ from xgboost_ray.util import _EventActor
 
 class _MockQueueActor(_QueueActor):
     def get_node_id(self):
-        return ray.state.current_node_id()
+        return ray.get_runtime_context().get_node_id()
 
 
 class _MockEventActor(_EventActor):
     def get_node_id(self):
-        return ray.state.current_node_id()
+        return ray.get_runtime_context().get_node_id()
 
 
 @pytest.mark.usefixtures("ray_start_cluster")
@@ -71,20 +71,20 @@ class TestColocation(unittest.TestCase):
             cluster.wait_for_nodes()
             ray.init(address=cluster.address)
 
-            local_node = ray.state.current_node_id()
+            local_node = ray.get_runtime_context().get_node_id()
 
             # Note that these will have the same IP in the test cluster
-            assert len(ray.state.node_ids()) == 2
-            assert local_node in ray.state.node_ids()
+            assert len(ray.nodes()) == 2
+            assert local_node in [node["NodeID"] for node in ray.nodes()]
 
             def _mock_train(*args, _training_state, **kwargs):
                 assert (
                     ray.get(_training_state.queue.actor.get_node_id.remote())
-                    == ray.state.current_node_id()
+                    == ray.get_runtime_context().get_node_id()
                 )
                 assert (
                     ray.get(_training_state.stop_event.actor.get_node_id.remote())
-                    == ray.state.current_node_id()
+                    == ray.get_runtime_context().get_node_id()
                 )
                 return _train(*args, _training_state=_training_state, **kwargs)
 
