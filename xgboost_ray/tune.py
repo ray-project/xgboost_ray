@@ -41,9 +41,14 @@ except ImportError:
 
 if TUNE_INSTALLED:
     if hasattr(train, "report"):
-        report = train.report
+
+        def report(**metrics):
+            train.report(metrics)
+
     else:
-        report = tune.report
+
+        def report(**metrics):
+            tune.report(**metrics)
 
     # New style callbacks.
     class TuneReportCallback(OrigTuneReportCallback):
