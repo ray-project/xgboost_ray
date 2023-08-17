@@ -85,7 +85,7 @@ def get_current_node_resource_key() -> str:
     If using Ray Client, this will return the resource key for the node that
     is running the client server.
     """
-    current_node_id = ray.get_runtime_context().node_id.hex()
+    current_node_id = ray.get_runtime_context().get_node_id()
     for node in ray.nodes():
         if node["NodeID"] == current_node_id:
             # Found the node.

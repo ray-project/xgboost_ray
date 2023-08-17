@@ -144,7 +144,7 @@ def get_ip_to_parts(data: Any) -> Dict[int, Sequence[Any]]:
     # (though Ray tries to keep locality). We need to use that until
     # ray.state.objects() or something like it is available again.
     partition_locations_df = persisted.map_partitions(
-        lambda df: pd.DataFrame([ray.get_runtime_context().node_id.hex()])
+        lambda df: pd.DataFrame([ray.get_runtime_context().get_node_id()])
     ).compute()
     partition_locations = [
         partition_locations_df[0].iloc[i] for i in range(partition_locations_df.size)

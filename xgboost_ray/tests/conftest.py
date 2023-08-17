@@ -14,9 +14,9 @@ except ImportError:
 def get_default_fixure_system_config():
     system_config = {
         "object_timeout_milliseconds": 200,
-        "num_heartbeats_timeout": 10,
-        "object_store_full_max_retries": 3,
-        "object_store_full_initial_delay_ms": 100,
+        "health_check_initial_delay_ms": 0,
+        "health_check_failure_threshold": 10,
+        "object_store_full_delay_ms": 100,
     }
     return system_config
 
@@ -26,6 +26,8 @@ def get_default_fixture_ray_kwargs():
     ray_kwargs = {
         "num_cpus": 1,
         "object_store_memory": 150 * 1024 * 1024,
+        "dashboard_port": None,
+        "namespace": "default_test_namespace",
         "_system_config": system_config,
     }
     return ray_kwargs
