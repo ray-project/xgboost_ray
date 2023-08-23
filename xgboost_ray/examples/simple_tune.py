@@ -66,7 +66,7 @@ def main(cpus_per_actor, num_actors, num_samples):
 
     # Load the best model checkpoint.
     best_bst = xgboost_ray.tune.load_model(
-        os.path.join(analysis.best_logdir, "tuned.xgb")
+        os.path.join(analysis.best_trial.local_path, "tuned.xgb")
     )
 
     best_bst.save_model("best_model.xgb")

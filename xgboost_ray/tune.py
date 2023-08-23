@@ -3,6 +3,7 @@ import logging
 from typing import Dict, Optional
 
 import ray
+from ray.train._internal.session import get_session
 from ray.util.annotations import PublicAPI
 
 from xgboost_ray.session import get_rabit_rank, put_queue
@@ -39,40 +40,53 @@ except ImportError:
     flatten_dict = is_session_enabled
     TUNE_INSTALLED = False
 
-if TUNE_INSTALLED:
-    if hasattr(train, "report"):
 
-        def report(**metrics):
-            train.report(metrics)
+if TUNE_INSTALLED:
+    if not hasattr(train, "report"):
+
+        # New style callbacks.
+        class TuneReportCallback(OrigTuneReportCallback):
+            def after_iteration(self, model, epoch: int, evals_log: Dict):
+                if get_rabit_rank() == 0:
+                    report_dict = self._get_report_dict(evals_log)
+                    put_queue(lambda: tune.report(**report_dict))
+
+        class _TuneCheckpointCallback(_OrigTuneCheckpointCallback):
+            def after_iteration(self, model, epoch: int, evals_log: Dict):
+                if get_rabit_rank() == 0:
+                    put_queue(
+                        lambda: self._create_checkpoint(
+                            model, epoch, self._filename, self._frequency
+                        )
+                    )
+
+        class TuneReportCheckpointCallback(OrigTuneReportCheckpointCallback):
+            _checkpoint_callback_cls = _TuneCheckpointCallback
+            _report_callbacks_cls = TuneReportCallback
 
     else:
 
-        def report(**metrics):
-            tune.report(**metrics)
-
-    # New style callbacks.
-    class TuneReportCallback(OrigTuneReportCallback):
-        def after_iteration(self, model, epoch: int, evals_log: Dict):
-            if get_rabit_rank() == 0:
-                report_dict = self._get_report_dict(evals_log)
-                put_queue(lambda: report(**report_dict))
-
-    class _TuneCheckpointCallback(_OrigTuneCheckpointCallback):
-        def after_iteration(self, model, epoch: int, evals_log: Dict):
-            if get_rabit_rank() == 0:
-                put_queue(
-                    lambda: self._create_checkpoint(
-                        model, epoch, self._filename, self._frequency
+        class TuneReportCheckpointCallback(OrigTuneReportCheckpointCallback):
+            def after_iteration(self, model, epoch: int, evals_log: Dict):
+                if get_rabit_rank() == 0:
+                    put_queue(
+                        lambda: super(
+                            TuneReportCheckpointCallback, self
+                        ).after_iteration(model=model, epoch=epoch, evals_log=evals_log)
                     )
-                )
 
-    class TuneReportCheckpointCallback(OrigTuneReportCheckpointCallback):
-        _checkpoint_callback_cls = _TuneCheckpointCallback
-        _report_callbacks_cls = TuneReportCallback
+        class TuneReportCallback(OrigTuneReportCallback):
+            def after_iteration(self, model, epoch: int, evals_log: Dict):
+                if get_rabit_rank() == 0:
+                    put_queue(
+                        lambda: super(TuneReportCallback, self).after_iteration(
+                            model=model, epoch=epoch, evals_log=evals_log
+                        )
+                    )
 
 
 def _try_add_tune_callback(kwargs: Dict):
-    if TUNE_INSTALLED and is_session_enabled():
+    if TUNE_INSTALLED and (is_session_enabled() or get_session()):
         callbacks = kwargs.get("callbacks", []) or []
         new_callbacks = []
         has_tune_callback = False
