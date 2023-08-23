@@ -112,10 +112,19 @@ def _try_add_tune_callback(kwargs: Dict):
                 )
                 has_tune_callback = True
             elif isinstance(cb, OrigTuneReportCheckpointCallback):
+                if getattr(cb, "_report", None):
+                    orig_metrics = cb._report._metrics
+                    orig_filename = cb._checkpoint._filename
+                    orig_frequency = cb._checkpoint._frequency
+                else:
+                    orig_metrics = cb._metrics
+                    orig_filename = cb._filename
+                    orig_frequency = cb._frequency
+
                 replace_cb = TuneReportCheckpointCallback(
-                    metrics=cb._report._metrics,
-                    filename=cb._checkpoint._filename,
-                    frequency=cb._checkpoint._frequency,
+                    metrics=orig_metrics,
+                    filename=orig_filename,
+                    frequency=orig_frequency,
                 )
                 new_callbacks.append(replace_cb)
                 logging.warning(
