@@ -158,8 +158,13 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
         replaced = in_dict["callbacks"][0]
         self.assertTrue(isinstance(replaced, TuneReportCheckpointCallback))
-        self.assertSequenceEqual(replaced._report._metrics, ["met"])
-        self.assertEqual(replaced._checkpoint._filename, "test")
+
+        if getattr(replaced, "_report", None):
+            self.assertSequenceEqual(replaced._report._metrics, ["met"])
+            self.assertEqual(replaced._checkpoint._filename, "test")
+        else:
+            self.assertSequenceEqual(replaced._metrics, ["met"])
+            self.assertEqual(replaced._filename, "test")
 
     def testEndToEndCheckpointing(self):
         ray_params = RayParams(cpus_per_actor=1, num_actors=2)

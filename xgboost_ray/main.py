@@ -557,7 +557,7 @@ class RayXGBoostActor:
 
         self.checkpoint_frequency = checkpoint_frequency
 
-        self._data: Dict[RayDMatrix, xgb.DMatrix] = {}
+        self._data: Dict[RayDMatrix, dict] = {}
         self._local_n: Dict[RayDMatrix, int] = {}
 
         self._stop_event = stop_event
