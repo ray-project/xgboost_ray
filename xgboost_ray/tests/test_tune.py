@@ -58,7 +58,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
         def train_func(
             ray_params, callbacks=None, check_for_spread_strategy=False, **kwargs
         ):
-            def _inner_train(config, checkpoint_dir):
+            def _inner_train(config):
                 if check_for_spread_strategy:
                     assert tune.get_trial_resources().strategy == "SPREAD"
                 train_set = RayDMatrix(x, y)
