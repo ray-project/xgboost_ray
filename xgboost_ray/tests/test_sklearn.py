@@ -186,17 +186,13 @@ class XGBoostRaySklearnTest(unittest.TestCase):
                 )
             preds = xgb_model.predict(X[test_index])
             # test other params in XGBClassifier().fit
-            preds2 = xgb_model.predict(X[test_index], output_margin=True, ntree_limit=3)
-            preds3 = xgb_model.predict(X[test_index], output_margin=True, ntree_limit=0)
-            preds4 = xgb_model.predict(
-                X[test_index], output_margin=False, ntree_limit=3
-            )
+            preds2 = xgb_model.predict(X[test_index], output_margin=True)
+            preds3 = xgb_model.predict(X[test_index], output_margin=False)
             labels = y[test_index]
 
             check_pred(preds, labels, output_margin=False)
             check_pred(preds2, labels, output_margin=True)
-            check_pred(preds3, labels, output_margin=True)
-            check_pred(preds4, labels, output_margin=False)
+            check_pred(preds3, labels, output_margin=False)
 
         cls = RayXGBClassifier(n_estimators=4).fit(X, y)
         assert cls.n_classes_ == 3
@@ -210,38 +206,6 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         proba = cls.predict_proba(X)
         assert proba.shape[0] == X.shape[0]
         assert proba.shape[1] == cls.n_classes_
-
-    @unittest.skipIf(
-        XGBOOST_VERSION < Version("1.4.0"),
-        f"not supported in xgb version {xgb.__version__}",
-    )
-    def test_best_ntree_limit(self):
-        self._init_ray()
-
-        from sklearn.datasets import load_iris
-
-        X, y = load_iris(return_X_y=True)
-
-        def train(booster, forest):
-            rounds = 4
-            cls = RayXGBClassifier(
-                n_estimators=rounds, num_parallel_tree=forest, booster=booster
-            ).fit(X, y, eval_set=[(X, y)], early_stopping_rounds=3)
-
-            if forest:
-                assert cls.best_ntree_limit == rounds * forest
-            else:
-                assert cls.best_ntree_limit == 0
-
-            # best_ntree_limit is used by default,
-            # assert that under gblinear it's
-            # automatically ignored due to being 0.
-            cls.predict(X)
-
-        num_parallel_tree = 4
-        train("gbtree", num_parallel_tree)
-        train("dart", num_parallel_tree)
-        train("gblinear", None)
 
     def test_stacking_regression(self):
         self._init_ray()
@@ -364,17 +328,13 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
             preds = xgb_model.predict(X[test_index])
             # test other params in XGBRegressor().fit
-            preds2 = xgb_model.predict(X[test_index], output_margin=True, ntree_limit=3)
-            preds3 = xgb_model.predict(X[test_index], output_margin=True, ntree_limit=0)
-            preds4 = xgb_model.predict(
-                X[test_index], output_margin=False, ntree_limit=3
-            )
+            preds2 = xgb_model.predict(X[test_index], output_margin=True)
+            preds3 = xgb_model.predict(X[test_index], output_margin=False)
             labels = y[test_index]
 
             assert mean_squared_error(preds, labels) < 25
             assert mean_squared_error(preds2, labels) < 350
-            assert mean_squared_error(preds3, labels) < 25
-            assert mean_squared_error(preds4, labels) < 350
+            assert mean_squared_error(preds3, labels) < 350
 
     @unittest.skipIf(
         XGBOOST_VERSION < Version("1.0.0"),

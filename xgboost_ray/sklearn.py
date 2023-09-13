@@ -170,11 +170,6 @@ except ImportError:
 
 
 try:
-    from xgboost.sklearn import _convert_ntree_limit
-except ImportError:
-    _convert_ntree_limit = None
-
-try:
     from xgboost.sklearn import _cls_predict_proba
 except ImportError:
     # copied from the file in the top comment
@@ -367,27 +362,15 @@ class RayXGBMixin:
         self: "XGBModel",
         X,
         output_margin=False,
-        ntree_limit=None,
         validate_features=True,
         base_margin=None,
         iteration_range=None,
         ray_params: Union[None, RayParams, Dict] = None,
         _remote: Optional[bool] = None,
         ray_dmatrix_params: Optional[Dict] = None,
+        **kwargs,
     ):
         """Distributed predict via Ray"""
-        compat_predict_kwargs = {}
-        if _convert_ntree_limit is not None:
-            iteration_range = _convert_ntree_limit(
-                self.get_booster(), ntree_limit, iteration_range
-            )
-            iteration_range = self._get_iteration_range(iteration_range)
-            compat_predict_kwargs["iteration_range"] = iteration_range
-        else:
-            if ntree_limit is None:
-                ntree_limit = getattr(self, "best_ntree_limit", 0)
-            compat_predict_kwargs["ntree_limit"] = ntree_limit
-
         ray_params = self._ray_set_ray_params_n_jobs(ray_params, self.n_jobs)
         ray_dmatrix_params = ray_dmatrix_params or {}
 
@@ -407,7 +390,7 @@ class RayXGBMixin:
             validate_features=validate_features,
             ray_params=ray_params,
             _remote=_remote,
-            **compat_predict_kwargs,
+            **kwargs,
         )
 
     def _ray_get_wrap_evaluation_matrices_compat_kwargs(
@@ -589,24 +572,24 @@ class RayXGBRegressor(XGBRegressor, RayXGBMixin):
         self,
         X,
         output_margin=False,
-        ntree_limit=None,
         validate_features=True,
         base_margin=None,
         iteration_range=None,
         ray_params: Union[None, RayParams, Dict] = None,
         _remote: Optional[bool] = None,
         ray_dmatrix_params: Optional[Dict] = None,
+        **kwargs,
     ):
         return self._ray_predict(
             X,
             output_margin=output_margin,
-            ntree_limit=ntree_limit,
             validate_features=validate_features,
             base_margin=base_margin,
             iteration_range=iteration_range,
             ray_params=ray_params,
             _remote=_remote,
             ray_dmatrix_params=ray_dmatrix_params,
+            **kwargs,
         )
 
     predict.__doc__ = _treat_X_doc(_get_doc(XGBRegressor.predict)) + _RAY_PARAMS_DOC
@@ -717,7 +700,8 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
                     "`num_class` must be set during initalization if X"
                     " is a RayDMatrix"
                 )
-            self.classes_ = list(range(0, params["num_class"]))
+            if XGBOOST_VERSION < Version("2.0.0"):
+                self.classes_ = list(range(0, params["num_class"]))
             self.n_classes_ = params["num_class"]
             if self.n_classes_ <= 2:
                 params.pop("num_class")
@@ -841,8 +825,9 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
         if (_is_cudf_df and _is_cudf_df(y)) or (_is_cudf_ser and _is_cudf_ser(y)):
             import cupy as cp  # pylint: disable=E0401
 
-            self.classes_ = cp.unique(y.values)
-            self.n_classes_ = len(self.classes_)
+            if XGBOOST_VERSION < Version("2.0.0"):
+                self.classes_ = cp.unique(y.values)
+            self.n_classes_ = len(cp.unique(y.values))
             can_use_label_encoder = False
             expected_classes = cp.arange(self.n_classes_)
             if (
@@ -853,8 +838,9 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
         elif _is_cupy_array and _is_cupy_array(y):
             import cupy as cp  # pylint: disable=E0401
 
-            self.classes_ = cp.unique(y)
-            self.n_classes_ = len(self.classes_)
+            if XGBOOST_VERSION < Version("2.0.0"):
+                self.classes_ = cp.unique(y)
+            self.n_classes_ = len(cp.unique(y))
             can_use_label_encoder = False
             expected_classes = cp.arange(self.n_classes_)
             if (
@@ -863,8 +849,9 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
             ):
                 raise ValueError(label_encoding_check_error)
         else:
-            self.classes_ = np.unique(y)
-            self.n_classes_ = len(self.classes_)
+            if XGBOOST_VERSION < Version("2.0.0"):
+                self.classes_ = np.unique(y)
+            self.n_classes_ = len(np.unique(y))
             if not use_label_encoder and (
                 not np.array_equal(self.classes_, np.arange(self.n_classes_))
             ):
@@ -894,24 +881,24 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
         self,
         X,
         output_margin=False,
-        ntree_limit=None,
         validate_features=True,
         base_margin=None,
         iteration_range: Optional[Tuple[int, int]] = None,
         ray_params: Union[None, RayParams, Dict] = None,
         _remote: Optional[bool] = None,
         ray_dmatrix_params: Optional[Dict] = None,
+        **kwargs,
     ):
         class_probs = self._ray_predict(
             X=X,
             output_margin=output_margin,
-            ntree_limit=ntree_limit,
             validate_features=validate_features,
             base_margin=base_margin,
             iteration_range=iteration_range,
             ray_params=ray_params,
             _remote=_remote,
             ray_dmatrix_params=ray_dmatrix_params,
+            **kwargs,
         )
         if output_margin:
             # If output_margin is active, simply return the scores
@@ -934,25 +921,25 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
     def predict_proba(
         self,
         X,
-        ntree_limit=None,
         validate_features=False,
         base_margin=None,
         iteration_range: Optional[Tuple[int, int]] = None,
         ray_params: Union[None, RayParams, Dict] = None,
         _remote: Optional[bool] = None,
         ray_dmatrix_params: Optional[Dict] = None,
+        **kwargs,
     ) -> np.ndarray:
 
         class_probs = self._ray_predict(
             X=X,
             output_margin=self.objective == "multi:softmax",
-            ntree_limit=ntree_limit,
             validate_features=validate_features,
             base_margin=base_margin,
             iteration_range=iteration_range,
             ray_params=ray_params,
             _remote=_remote,
             ray_dmatrix_params=ray_dmatrix_params,
+            **kwargs,
         )
         # If model is loaded from a raw booster there's no `n_classes_`
         return _cls_predict_proba(
@@ -1172,24 +1159,24 @@ class RayXGBRanker(XGBRanker, RayXGBMixin):
         self,
         X,
         output_margin=False,
-        ntree_limit=None,
         validate_features=True,
         base_margin=None,
         iteration_range=None,
         ray_params: Union[None, RayParams, Dict] = None,
         _remote: Optional[bool] = None,
         ray_dmatrix_params: Optional[Dict] = None,
+        **kwargs,
     ):
         return self._ray_predict(
             X,
             output_margin=output_margin,
-            ntree_limit=ntree_limit,
             validate_features=validate_features,
             base_margin=base_margin,
             iteration_range=iteration_range,
             ray_params=ray_params,
             _remote=_remote,
             ray_dmatrix_params=ray_dmatrix_params,
+            **kwargs,
         )
 
     predict.__doc__ = _treat_X_doc(_get_doc(XGBRanker.predict)) + _RAY_PARAMS_DOC
