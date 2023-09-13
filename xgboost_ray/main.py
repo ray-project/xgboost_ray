@@ -25,7 +25,7 @@ except ImportError:
         pass
 
 
-# From xgboost>=1.7.0, rabit is replaced by a collective communicator
+# From xgboost>=1.7.0, rabit is replaced by a collective communicator.
 try:
     from xgboost.collective import CommunicatorContext
 
