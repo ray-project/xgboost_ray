@@ -53,7 +53,10 @@ try:
         remove_placement_group,
     )
     from ray.util.queue import Queue
-    from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+    from ray.util.scheduling_strategies import (
+        NodeAffinitySchedulingStrategy,
+        PlacementGroupSchedulingStrategy,
+    )
 
     from xgboost_ray.util import Event, MultiActorTask, force_on_current_node
 
@@ -985,8 +988,15 @@ def _create_communication_processes(added_tune_callback: bool = False):
     else:
         # Create Queue and Event actors and make sure to colocate with
         # driver node.
-        node_ip = get_node_ip_address()
-        placement_option.update({"resources": {f"node:{node_ip}": 0.01}})
+        node_id = ray.get_runtime_context().get_node_id()
+        placement_option.update(
+            {
+                "scheduling_strategy": NodeAffinitySchedulingStrategy(
+                    node_id=node_id,
+                    soft=True,
+                )
+            }
+        )
     queue = Queue(actor_options=placement_option)  # Queue actor
     stop_event = Event(actor_options=placement_option)  # Stop event actor
     return queue, stop_event

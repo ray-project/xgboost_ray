@@ -80,11 +80,11 @@ class TestColocation(unittest.TestCase):
             def _mock_train(*args, _training_state, **kwargs):
                 assert (
                     ray.get(_training_state.queue.actor.get_node_id.remote())
-                    == ray.get_runtime_context().get_node_id()
+                    == local_node
                 )
                 assert (
                     ray.get(_training_state.stop_event.actor.get_node_id.remote())
-                    == ray.get_runtime_context().get_node_id()
+                    == local_node
                 )
                 return _train(*args, _training_state=_training_state, **kwargs)
 
