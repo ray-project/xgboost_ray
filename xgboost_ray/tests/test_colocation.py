@@ -65,6 +65,8 @@ class TestColocation(unittest.TestCase):
     @patch("xgboost_ray.util._EventActor", _MockEventActor)
     def test_communication_colocation(self):
         """Checks that Queue and Event actors are colocated with the driver."""
+        os.environ["RXGB_COMMUNICATION_SOFT_PLACEMENT"] = "0"
+
         with self.ray_start_cluster() as cluster:
             cluster.add_node(num_cpus=3)
             cluster.add_node(num_cpus=3)
@@ -96,6 +98,8 @@ class TestColocation(unittest.TestCase):
                     num_boost_round=2,
                     ray_params=RayParams(max_actor_restarts=1, num_actors=6),
                 )
+
+        os.environ.pop("RXGB_COMMUNICATION_SOFT_PLACEMENT", None)
 
     def test_no_tune_spread(self):
         """Tests whether workers are spread when not using Tune."""

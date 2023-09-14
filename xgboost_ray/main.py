@@ -139,6 +139,10 @@ class _XGBoostEnv:
     # when new actors become available
     ELASTIC_RESTART_GRACE_PERIOD_S: int = 10
 
+    # Whether to allow soft-placement of communication processes. If True,
+    # the Queue and Event actors may be scheduled on non-driver nodes.
+    COMMUNICATION_SOFT_PLACEMENT: bool = True
+
     def __getattribute__(self, item):
         old_val = super(_XGBoostEnv, self).__getattribute__(item)
         new_val = _get_environ(item, old_val)
@@ -993,7 +997,7 @@ def _create_communication_processes(added_tune_callback: bool = False):
             {
                 "scheduling_strategy": NodeAffinitySchedulingStrategy(
                     node_id=node_id,
-                    soft=True,
+                    soft=ENV.COMMUNICATION_SOFT_PLACEMENT,
                 )
             }
         )
