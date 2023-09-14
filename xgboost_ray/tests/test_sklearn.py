@@ -182,7 +182,7 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             if hasattr(xgb_model.get_booster(), "num_boosted_rounds"):
                 assert (
                     xgb_model.get_booster().num_boosted_rounds()
-                    == xgb_model.n_estimators
+                    == xgb_model.get_num_boosting_rounds()
                 )
             preds = xgb_model.predict(X[test_index])
             # test other params in XGBClassifier().fit
