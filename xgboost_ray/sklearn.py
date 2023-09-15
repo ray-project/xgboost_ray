@@ -190,10 +190,6 @@ except ImportError:
     _is_cudf_ser = None
     _is_cupy_array = None
 
-try:
-    from xgboost.compat import XGBoostLabelEncoder
-except ImportError:
-    from sklearn.preprocessing import LabelEncoder as XGBoostLabelEncoder
 
 _RAY_PARAMS_DOC = """ray_params : None or RayParams or Dict
             Parameters to configure Ray-specific behavior.
@@ -685,16 +681,6 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
         )
 
         if train_dmatrix is not None:
-            if not hasattr(self, "use_label_encoder"):
-                warnings.warn(
-                    "If X is a RayDMatrix, no label encoding"
-                    " will be performed. Ensure the labels are"
-                    " encoded."
-                )
-            elif self.use_label_encoder:
-                raise ValueError(
-                    "X cannot be a RayDMatrix if `use_label_encoder` " "is set to True"
-                )
             if "num_class" not in params:
                 raise ValueError(
                     "`num_class` must be set during initalization if X"
@@ -714,7 +700,10 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
                     "Please reshape the input data X into 2-dimensional " "matrix."
                 )
 
-            label_transform = self._ray_fit_preprocess(y)
+            label_transform = lambda x: x  # noqa: E731
+            if XGBOOST_VERSION < Version("2.0.0"):
+                self.classes_ = np.unique(y)
+            self.n_classes_ = len(np.unique(y))
 
         if callable(self.objective):
             obj = _objective_decorator(self.objective)
@@ -802,77 +791,6 @@ class RayXGBClassifier(XGBClassifier, RayXGBMixin):
         return self
 
     fit.__doc__ = _treat_X_doc(_get_doc(XGBClassifier.fit)) + _RAY_PARAMS_DOC
-
-    def _ray_fit_preprocess(self, y) -> Callable:
-        """This has been separated out so that it can be easily overwritten
-        should a future xgboost version remove label encoding"""
-        # pylint: disable = attribute-defined-outside-init,too-many-statements
-        can_use_label_encoder = True
-        use_label_encoder = getattr(self, "use_label_encoder", True)
-        label_encoding_check_error = (
-            "The label must consist of integer "
-            "labels of form 0, 1, 2, ..., [num_class - 1]."
-        )
-        label_encoder_deprecation_msg = (
-            "The use of label encoder in XGBClassifier is deprecated and will "
-            "be removed in a future release. To remove this warning, do the "
-            "following: 1) Pass option use_label_encoder=False when "
-            "constructing XGBClassifier object; and 2) Encode your labels (y) "
-            "as integers starting with 0, i.e. 0, 1, 2, ..., [num_class - 1]."
-        )
-
-        # ray: modified this to allow for compatibility with legacy xgboost
-        if (_is_cudf_df and _is_cudf_df(y)) or (_is_cudf_ser and _is_cudf_ser(y)):
-            import cupy as cp  # pylint: disable=E0401
-
-            if XGBOOST_VERSION < Version("2.0.0"):
-                self.classes_ = cp.unique(y.values)
-            self.n_classes_ = len(cp.unique(y.values))
-            can_use_label_encoder = False
-            expected_classes = cp.arange(self.n_classes_)
-            if (
-                self.classes_.shape != expected_classes.shape
-                or not (self.classes_ == expected_classes).all()
-            ):
-                raise ValueError(label_encoding_check_error)
-        elif _is_cupy_array and _is_cupy_array(y):
-            import cupy as cp  # pylint: disable=E0401
-
-            if XGBOOST_VERSION < Version("2.0.0"):
-                self.classes_ = cp.unique(y)
-            self.n_classes_ = len(cp.unique(y))
-            can_use_label_encoder = False
-            expected_classes = cp.arange(self.n_classes_)
-            if (
-                self.classes_.shape != expected_classes.shape
-                or not (self.classes_ == expected_classes).all()
-            ):
-                raise ValueError(label_encoding_check_error)
-        else:
-            if XGBOOST_VERSION < Version("2.0.0"):
-                self.classes_ = np.unique(y)
-            self.n_classes_ = len(np.unique(y))
-            if not use_label_encoder and (
-                not np.array_equal(self.classes_, np.arange(self.n_classes_))
-            ):
-                raise ValueError(label_encoding_check_error)
-
-        if use_label_encoder:
-            if not can_use_label_encoder:
-                raise ValueError(
-                    "The option use_label_encoder=True is incompatible with "
-                    "inputs of type cuDF or cuPy. Please set "
-                    "use_label_encoder=False when  constructing XGBClassifier "
-                    "object. NOTE:" + label_encoder_deprecation_msg
-                )
-            if hasattr(self, "use_label_encoder"):
-                warnings.warn(label_encoder_deprecation_msg, UserWarning)
-            self._le = XGBoostLabelEncoder().fit(y)
-            label_transform = self._le.transform
-        else:
-            label_transform = lambda x: x  # noqa: E731
-
-        return label_transform
 
     def _can_use_inplace_predict(self) -> bool:
         return False
@@ -965,31 +883,6 @@ class RayXGBRFClassifier(RayXGBClassifier):
 
         def __init__(self, *args, **kwargs):
             raise ValueError("RayXGBRFClassifier not available with xgboost<1.0.0")
-
-    # use_label_encoder added in xgboost commit
-    # c8ec62103a36f1717d032b1ddff2bf9e0642508a (1.3.0)
-    elif "use_label_encoder" in inspect.signature(XGBRFClassifier.__init__).parameters:
-
-        @_deprecate_positional_args
-        @_xgboost_version_warn
-        def __init__(
-            self,
-            *,
-            learning_rate=1,
-            subsample=0.8,
-            colsample_bynode=0.8,
-            reg_lambda=1e-5,
-            use_label_encoder=True,
-            **kwargs,
-        ):
-            super().__init__(
-                learning_rate=learning_rate,
-                subsample=subsample,
-                colsample_bynode=colsample_bynode,
-                reg_lambda=reg_lambda,
-                use_label_encoder=use_label_encoder,
-                **kwargs,
-            )
 
     else:
 

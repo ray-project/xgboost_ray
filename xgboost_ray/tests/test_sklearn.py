@@ -774,15 +774,12 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         X = digits["data"]
         kf = KFold(n_splits=2, shuffle=True, random_state=self.rng)
         for train_index, test_index in kf.split(X, y):
-            xgb_model = RayXGBClassifier(use_label_encoder=False).fit(
-                X[train_index], y[train_index]
-            )
+            xgb_model = RayXGBClassifier().fit(X[train_index], y[train_index])
             xgb_model.save_model(model_path)
 
             xgb_model = RayXGBClassifier()
             xgb_model.load_model(model_path)
 
-            assert xgb_model.use_label_encoder is False
             assert isinstance(xgb_model.classes_, np.ndarray)
             assert isinstance(xgb_model._Booster, xgb.Booster)
 
