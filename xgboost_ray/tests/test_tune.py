@@ -183,8 +183,10 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
         if isinstance(analysis.best_checkpoint, Checkpoint):
             self.assertTrue(analysis.best_checkpoint)
-        else:
+        elif hasattr(analysis.best_checkpoint, "path"):
             self.assertTrue(os.path.exists(analysis.best_checkpoint.path))
+        else:
+            self.assertTrue(os.path.exists(analysis.best_checkpoint))
 
     def testEndToEndCheckpointingOrigTune(self):
         ray_params = RayParams(cpus_per_actor=1, num_actors=2)
@@ -203,8 +205,10 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
         if isinstance(analysis.best_checkpoint, Checkpoint):
             self.assertTrue(analysis.best_checkpoint)
-        else:
+        elif hasattr(analysis.best_checkpoint, "path"):
             self.assertTrue(os.path.exists(analysis.best_checkpoint.path))
+        else:
+            self.assertTrue(os.path.exists(analysis.best_checkpoint))
 
 
 if __name__ == "__main__":
