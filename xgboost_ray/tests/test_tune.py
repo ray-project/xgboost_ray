@@ -60,7 +60,10 @@ class XGBoostRayTuneTest(unittest.TestCase):
         ):
             def _inner_train(config):
                 if check_for_spread_strategy:
-                    assert tune.get_trial_resources().strategy == "SPREAD"
+                    assert (
+                        ray.train.get_context().get_trial_resources().strategy
+                        == "SPREAD"
+                    )
                 train_set = RayDMatrix(x, y)
                 train(
                     config["xgb"],
