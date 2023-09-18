@@ -595,8 +595,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         iris = datasets.load_iris()
         grid_cv.fit(iris.data, iris.target)
 
-        # Expect unique results for each parameter value
-        # This confirms sklearn is able to successfully update the parameter
+        # Expect unique results for each parameter value.
+        # This confirms sklearn is able to successfully update the parameter.
         means = grid_cv.cv_results_["mean_test_score"]
         assert len(means) == len(set(means))
 
