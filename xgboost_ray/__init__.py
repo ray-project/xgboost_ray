@@ -20,7 +20,7 @@ try:
 except ImportError:
     pass
 
-__version__ = "0.1.19"
+__version__ = "0.1.20"
 
 __all__ = [
     "__version__",
