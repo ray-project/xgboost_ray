@@ -25,7 +25,7 @@ except ImportError:
         pass
 
 
-# From xgboost>=1.7.0, rabit is replaced by a collective communicator
+# From xgboost>=1.7.0, rabit is replaced by a collective communicator.
 try:
     from xgboost.collective import CommunicatorContext
 
@@ -53,7 +53,10 @@ try:
         remove_placement_group,
     )
     from ray.util.queue import Queue
-    from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
+    from ray.util.scheduling_strategies import (
+        NodeAffinitySchedulingStrategy,
+        PlacementGroupSchedulingStrategy,
+    )
 
     from xgboost_ray.util import Event, MultiActorTask, force_on_current_node
 
@@ -135,6 +138,10 @@ class _XGBoostEnv:
     # How long to wait before triggering a new start of the training loop
     # when new actors become available
     ELASTIC_RESTART_GRACE_PERIOD_S: int = 10
+
+    # Whether to allow soft-placement of communication processes. If True,
+    # the Queue and Event actors may be scheduled on non-driver nodes.
+    COMMUNICATION_SOFT_PLACEMENT: bool = True
 
     def __getattribute__(self, item):
         old_val = super(_XGBoostEnv, self).__getattribute__(item)
@@ -985,8 +992,15 @@ def _create_communication_processes(added_tune_callback: bool = False):
     else:
         # Create Queue and Event actors and make sure to colocate with
         # driver node.
-        node_ip = get_node_ip_address()
-        placement_option.update({"resources": {f"node:{node_ip}": 0.01}})
+        node_id = ray.get_runtime_context().get_node_id()
+        placement_option.update(
+            {
+                "scheduling_strategy": NodeAffinitySchedulingStrategy(
+                    node_id=node_id,
+                    soft=ENV.COMMUNICATION_SOFT_PLACEMENT,
+                )
+            }
+        )
     queue = Queue(actor_options=placement_option)  # Queue actor
     stop_event = Event(actor_options=placement_option)  # Stop event actor
     return queue, stop_event

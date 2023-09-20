@@ -182,21 +182,17 @@ class XGBoostRaySklearnTest(unittest.TestCase):
             if hasattr(xgb_model.get_booster(), "num_boosted_rounds"):
                 assert (
                     xgb_model.get_booster().num_boosted_rounds()
-                    == xgb_model.n_estimators
+                    == xgb_model.get_num_boosting_rounds()
                 )
             preds = xgb_model.predict(X[test_index])
             # test other params in XGBClassifier().fit
-            preds2 = xgb_model.predict(X[test_index], output_margin=True, ntree_limit=3)
-            preds3 = xgb_model.predict(X[test_index], output_margin=True, ntree_limit=0)
-            preds4 = xgb_model.predict(
-                X[test_index], output_margin=False, ntree_limit=3
-            )
+            preds2 = xgb_model.predict(X[test_index], output_margin=True)
+            preds3 = xgb_model.predict(X[test_index], output_margin=False)
             labels = y[test_index]
 
             check_pred(preds, labels, output_margin=False)
             check_pred(preds2, labels, output_margin=True)
-            check_pred(preds3, labels, output_margin=True)
-            check_pred(preds4, labels, output_margin=False)
+            check_pred(preds3, labels, output_margin=False)
 
         cls = RayXGBClassifier(n_estimators=4).fit(X, y)
         assert cls.n_classes_ == 3
@@ -210,38 +206,6 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         proba = cls.predict_proba(X)
         assert proba.shape[0] == X.shape[0]
         assert proba.shape[1] == cls.n_classes_
-
-    @unittest.skipIf(
-        XGBOOST_VERSION < Version("1.4.0"),
-        f"not supported in xgb version {xgb.__version__}",
-    )
-    def test_best_ntree_limit(self):
-        self._init_ray()
-
-        from sklearn.datasets import load_iris
-
-        X, y = load_iris(return_X_y=True)
-
-        def train(booster, forest):
-            rounds = 4
-            cls = RayXGBClassifier(
-                n_estimators=rounds, num_parallel_tree=forest, booster=booster
-            ).fit(X, y, eval_set=[(X, y)], early_stopping_rounds=3)
-
-            if forest:
-                assert cls.best_ntree_limit == rounds * forest
-            else:
-                assert cls.best_ntree_limit == 0
-
-            # best_ntree_limit is used by default,
-            # assert that under gblinear it's
-            # automatically ignored due to being 0.
-            cls.predict(X)
-
-        num_parallel_tree = 4
-        train("gbtree", num_parallel_tree)
-        train("dart", num_parallel_tree)
-        train("gblinear", None)
 
     def test_stacking_regression(self):
         self._init_ray()
@@ -364,17 +328,13 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
             preds = xgb_model.predict(X[test_index])
             # test other params in XGBRegressor().fit
-            preds2 = xgb_model.predict(X[test_index], output_margin=True, ntree_limit=3)
-            preds3 = xgb_model.predict(X[test_index], output_margin=True, ntree_limit=0)
-            preds4 = xgb_model.predict(
-                X[test_index], output_margin=False, ntree_limit=3
-            )
+            preds2 = xgb_model.predict(X[test_index], output_margin=True)
+            preds3 = xgb_model.predict(X[test_index], output_margin=False)
             labels = y[test_index]
 
             assert mean_squared_error(preds, labels) < 25
             assert mean_squared_error(preds2, labels) < 350
-            assert mean_squared_error(preds3, labels) < 25
-            assert mean_squared_error(preds4, labels) < 350
+            assert mean_squared_error(preds3, labels) < 350
 
     @unittest.skipIf(
         XGBOOST_VERSION < Version("1.0.0"),
@@ -635,8 +595,8 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         iris = datasets.load_iris()
         grid_cv.fit(iris.data, iris.target)
 
-        # Expect unique results for each parameter value
-        # This confirms sklearn is able to successfully update the parameter
+        # Expect unique results for each parameter value.
+        # This confirms sklearn is able to successfully update the parameter.
         means = grid_cv.cv_results_["mean_test_score"]
         assert len(means) == len(set(means))
 
@@ -814,15 +774,12 @@ class XGBoostRaySklearnTest(unittest.TestCase):
         X = digits["data"]
         kf = KFold(n_splits=2, shuffle=True, random_state=self.rng)
         for train_index, test_index in kf.split(X, y):
-            xgb_model = RayXGBClassifier(use_label_encoder=False).fit(
-                X[train_index], y[train_index]
-            )
+            xgb_model = RayXGBClassifier().fit(X[train_index], y[train_index])
             xgb_model.save_model(model_path)
 
             xgb_model = RayXGBClassifier()
             xgb_model.load_model(model_path)
 
-            assert xgb_model.use_label_encoder is False
             assert isinstance(xgb_model.classes_, np.ndarray)
             assert isinstance(xgb_model._Booster, xgb.Booster)
 
@@ -1007,7 +964,14 @@ class XGBoostRaySklearnTest(unittest.TestCase):
 
         config = json.loads(reg.get_booster().save_config())
 
-        if XGBOOST_VERSION >= Version("1.6.0"):
+        if XGBOOST_VERSION >= Version("2.0.0"):
+            assert (
+                config["learner"]["gradient_booster"]["tree_train_param"][
+                    "interaction_constraints"
+                ]
+                == "[[0, 1], [2, 3, 4]]"
+            )
+        elif XGBOOST_VERSION >= Version("1.6.0"):
             assert (
                 config["learner"]["gradient_booster"]["updater"]["grow_histmaker"][
                     "train_param"

@@ -58,9 +58,12 @@ class XGBoostRayTuneTest(unittest.TestCase):
         def train_func(
             ray_params, callbacks=None, check_for_spread_strategy=False, **kwargs
         ):
-            def _inner_train(config, checkpoint_dir):
+            def _inner_train(config):
                 if check_for_spread_strategy:
-                    assert tune.get_trial_resources().strategy == "SPREAD"
+                    assert (
+                        ray.train.get_context().get_trial_resources().strategy
+                        == "SPREAD"
+                    )
                 train_set = RayDMatrix(x, y)
                 train(
                     config["xgb"],
@@ -183,6 +186,8 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
         if isinstance(analysis.best_checkpoint, Checkpoint):
             self.assertTrue(analysis.best_checkpoint)
+        elif hasattr(analysis.best_checkpoint, "path"):
+            self.assertTrue(os.path.exists(analysis.best_checkpoint.path))
         else:
             self.assertTrue(os.path.exists(analysis.best_checkpoint))
 
@@ -203,6 +208,8 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
         if isinstance(analysis.best_checkpoint, Checkpoint):
             self.assertTrue(analysis.best_checkpoint)
+        elif hasattr(analysis.best_checkpoint, "path"):
+            self.assertTrue(os.path.exists(analysis.best_checkpoint.path))
         else:
             self.assertTrue(os.path.exists(analysis.best_checkpoint))
 

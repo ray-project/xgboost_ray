@@ -29,60 +29,6 @@ class XGBoostRaySklearnMatrixTest(unittest.TestCase):
             ray.init(num_cpus=4)
 
     @unittest.skipIf(
-        not has_label_encoder, f"not supported in xgb version {xgb.__version__}"
-    )
-    def testClassifierLabelEncoder(self, n_class=2):
-        self._init_ray()
-
-        from sklearn.datasets import load_digits
-
-        digits = load_digits(n_class=n_class)
-        y = digits["target"]
-        X = digits["data"]
-
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5)
-
-        train_matrix = RayDMatrix(X_train, y_train)
-        test_matrix = RayDMatrix(X_test, y_test)
-
-        with self.assertRaisesRegex(Exception, "use_label_encoder"):
-            RayXGBClassifier(use_label_encoder=True, **self.params).fit(
-                train_matrix, None
-            )
-
-        with self.assertRaisesRegex(Exception, "num_class"):
-            RayXGBClassifier(use_label_encoder=False, **self.params).fit(
-                train_matrix, None
-            )
-
-        with self.assertRaisesRegex(Exception, r"must be \(RayDMatrix, str\)"):
-            RayXGBClassifier(use_label_encoder=False, **self.params).fit(
-                train_matrix, None, eval_set=[(X_test, y_test)]
-            )
-
-        with self.assertRaisesRegex(Exception, r"must be \(array_like, array_like\)"):
-            RayXGBClassifier(use_label_encoder=False, **self.params).fit(
-                X_train, y_train, eval_set=[(test_matrix, "eval")]
-            )
-
-        RayXGBClassifier(use_label_encoder=False, num_class=n_class, **self.params).fit(
-            train_matrix, None
-        )
-
-        clf = RayXGBClassifier(
-            use_label_encoder=False, num_class=n_class, **self.params
-        ).fit(train_matrix, None, eval_set=[(test_matrix, "eval")])
-
-        clf.predict(test_matrix)
-        clf.predict_proba(test_matrix)
-
-    @unittest.skipIf(
-        not has_label_encoder, f"not supported in xgb version {xgb.__version__}"
-    )
-    def testClassifierMulticlassLabelEncoder(self):
-        self.testClassifierLabelEncoder(n_class=3)
-
-    @unittest.skipIf(
         has_label_encoder, f"not supported in xgb version {xgb.__version__}"
     )
     def testClassifierNoLabelEncoder(self, n_class=2):
