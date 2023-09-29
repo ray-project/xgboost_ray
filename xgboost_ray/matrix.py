@@ -31,7 +31,6 @@ from ray import logger
 from ray.util.annotations import DeveloperAPI, PublicAPI
 
 from xgboost_ray.data_sources import DataSource, RayFileType, data_sources
-
 try:
     from ray.data.dataset import Dataset as RayDataset
 except ImportError:
@@ -307,7 +306,10 @@ class _RayDMatrixLoader:
 
         label, exclude = data_source.get_column(local_data, self.label)
         if exclude:
-            exclude_cols.add(exclude)
+            if isinstance(exclude, List):
+                exclude_cols.update(exclude)
+            else:
+                exclude_cols.add(exclude)
 
         weight, exclude = data_source.get_column(local_data, self.weight)
         if exclude:
@@ -406,7 +408,9 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
         ):  # noqa: E721:
             # Label is an object of a different type than the main data.
             # We have to make sure they are compatible
-            if not data_source.is_data_type(self.label):
+            # if it's a parquet data source and label is a list, then we consider it a multi-label data
+            if not data_source.is_data_type(self.label) \
+                and not (isinstance(self.label, List) and data_source.__name__ == "Parquet"):
                 raise ValueError(
                     "The passed `data` and `label` types are not compatible."
                     "\nFIX THIS by passing the same types to the "
@@ -521,7 +525,7 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 f"RayDMatrix."
             )
 
-        if self.label is not None and not isinstance(self.label, str):
+        if self.label is not None and not isinstance(self.label, str) and not isinstance(self.label, List):
             raise ValueError(
                 f"Invalid `label` value for distributed datasets: "
                 f"{self.label}. Only strings are supported. "
