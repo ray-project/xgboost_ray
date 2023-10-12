@@ -296,7 +296,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_file = os.path.join(dir, "data.parquet")
 
             data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
-            labels = [f"label_{l}" for l in range(4)]
+            labels = [f"label_{label}" for label in range(4)]
             data_df[labels] = self.multi_y
             data_df.to_parquet(data_file)
 
@@ -320,7 +320,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_file_2 = os.path.join(dir, "data_2.parquet")
 
             data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
-            labels = [f"label_{l}" for l in range(4)]
+            labels = [f"label_{label}" for label in range(4)]
             data_df[labels] = self.multi_y
 
             df_1 = data_df[0 : len(data_df) // 2]
