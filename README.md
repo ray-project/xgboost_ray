@@ -41,7 +41,7 @@ have to use `xgboost_ray.RayDMatrix`. You can also use a scikit-learn
 interface - see next section.
 
 
-Just as in original `xgb.train()` function, the 
+Just as in original `xgb.train()` function, the
 [training parameters](https://xgboost.readthedocs.io/en/stable/parameter.html)
 are passed as the `params` dictionary.
 
@@ -346,7 +346,7 @@ XGBoost-Ray enables multi GPU training. The XGBoost core backend
 will automatically leverage NCCL2 for cross-device communication.
 All you have to do is to start one actor per GPU and set XGBoost's
 `tree_method` to a GPU-compatible option, eg. `gpu_hist` (see XGBoost
-documentation for more details.) 
+documentation for more details.)
 
 For instance, if you have 2 machines with 4 GPUs each, you will want
 to start 8 remote actors, and set `gpus_per_actor=1`. There is usually
@@ -518,7 +518,7 @@ suggestions:
 
 ## Placement Strategies
 
-XGBoost-Ray leverages Ray's Placement Group API (<https://docs.ray.io/en/master/placement-group.html>)
+XGBoost-Ray leverages Ray's Placement Group API (<https://docs.ray.io/en/latest/ray-core/scheduling/placement-group.html>)
 to implement placement strategies for better fault tolerance.
 
 By default, a SPREAD strategy is used for training, which attempts to spread all of the training workers
@@ -542,7 +542,7 @@ how long this timeout should be.
 ## More examples
 
 For complete end to end examples, please have a look at
-the [examples folder](https://github.com/ray-project/xgboost_ray/tree/master/examples/):
+the [examples folder](https://github.com/ray-project/xgboost_ray/tree/master/xgboost_ray/examples/):
 
 - [Simple sklearn breastcancer dataset example](https://github.com/ray-project/xgboost_ray/blob/master/xgboost_ray/examples/simple.py) (requires `sklearn`)
 - [HIGGS classification example](https://github.com/ray-project/xgboost_ray/blob/master/xgboost_ray/examples/higgs.py)
@@ -552,7 +552,7 @@ the [examples folder](https://github.com/ray-project/xgboost_ray/tree/master/exa
 <!--$REMOVE-->
 ## Resources
 
-* [XGBoost-Ray documentation](https://docs.ray.io/en/master/xgboost-ray.html)	
+* [XGBoost-Ray documentation](https://xgboost.readthedocs.io/en/stable/tutorials/ray.html)
 * [Ray community slack](https://forms.gle/9TSdDYUgxYs8SA9e8)
 <!--$END_REMOVE-->
 <!--$UNCOMMENT## API reference
