@@ -408,7 +408,8 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
         ):  # noqa: E721:
             # Label is an object of a different type than the main data.
             # We have to make sure they are compatible
-            # if it's a parquet data source and label is a list, then we consider it a multi-label data
+            # if it's a parquet data source and label is a list,
+            # then we consider it a multi-label data
             if not data_source.is_data_type(self.label) \
                 and not (isinstance(self.label, List) \
                 and data_source.__name__ == "Parquet"):
