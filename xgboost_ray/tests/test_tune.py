@@ -8,14 +8,12 @@ import numpy as np
 import ray
 from ray import tune
 from ray.tune import TuneError
-from ray.tune.integration.xgboost import TuneReportCallback as OrigTuneReportCallback
 from ray.tune.integration.xgboost import (
     TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback,
 )
 
 from xgboost_ray import RayDMatrix, RayParams, train
 from xgboost_ray.tune import (
-    TuneReportCallback,
     TuneReportCheckpointCallback,
     _try_add_tune_callback,
 )
@@ -139,35 +137,18 @@ class XGBoostRayTuneTest(unittest.TestCase):
 
     def testReplaceTuneCheckpoints(self):
         """Test if ray.tune.integration.xgboost callbacks are replaced"""
-        # Report callback
-        in_cp = [OrigTuneReportCallback(metrics="met")]
-        in_dict = {"callbacks": in_cp}
-
-        with patch("xgboost_ray.tune.is_session_enabled") as mocked:
-            mocked.return_value = True
-            _try_add_tune_callback(in_dict)
-
-        replaced = in_dict["callbacks"][0]
-        self.assertTrue(isinstance(replaced, TuneReportCallback))
-        self.assertSequenceEqual(replaced._metrics, ["met"])
-
         # Report and checkpointing callback
-        in_cp = [OrigTuneReportCheckpointCallback(metrics="met", filename="test")]
+        in_cp = [OrigTuneReportCheckpointCallback(metrics="met")]
         in_dict = {"callbacks": in_cp}
 
-        with patch("xgboost_ray.tune.is_session_enabled") as mocked:
+        with patch("ray.train.get_context") as mocked:
             mocked.return_value = True
             _try_add_tune_callback(in_dict)
 
         replaced = in_dict["callbacks"][0]
         self.assertTrue(isinstance(replaced, TuneReportCheckpointCallback))
 
-        if getattr(replaced, "_report", None):
-            self.assertSequenceEqual(replaced._report._metrics, ["met"])
-            self.assertEqual(replaced._checkpoint._filename, "test")
-        else:
-            self.assertSequenceEqual(replaced._metrics, ["met"])
-            self.assertEqual(replaced._filename, "test")
+        self.assertSequenceEqual(replaced._metrics, ["met"])
 
     def testEndToEndCheckpointing(self):
         ray_params = RayParams(cpus_per_actor=1, num_actors=2)
