@@ -20,15 +20,16 @@ hosts actors of the same Ray Tune trial.
 """
 
 import argparse
-from collections import defaultdict
 import json
 import os
 import shutil
 import tempfile
 import time
+from collections import defaultdict
 
 import ray
 import ray.train
+from benchmark_cpu_gpu import train_ray
 from ray import tune
 from ray.tune.integration.docker import DockerSyncer
 from ray.tune.session import get_trial_id
@@ -38,8 +39,6 @@ from xgboost_ray import RayParams
 from xgboost_ray.compat import TrainingCallback
 from xgboost_ray.session import put_queue
 from xgboost_ray.tests.utils import create_parquet
-
-from benchmark_cpu_gpu import train_ray
 
 if "OMP_NUM_THREADS" in os.environ:
     del os.environ["OMP_NUM_THREADS"]

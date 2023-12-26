@@ -13,10 +13,7 @@ from ray.tune.integration.xgboost import (
 )
 
 from xgboost_ray import RayDMatrix, RayParams, train
-from xgboost_ray.tune import (
-    TuneReportCheckpointCallback,
-    _try_add_tune_callback,
-)
+from xgboost_ray.tune import TuneReportCheckpointCallback, _try_add_tune_callback
 
 
 class XGBoostRayTuneTest(unittest.TestCase):

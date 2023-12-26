@@ -17,9 +17,7 @@ except (ImportError, ModuleNotFoundError) as e:
     ) from e
 
 import ray.train
-from ray.tune.integration.xgboost import (
-    TuneReportCallback as OrigTuneReportCallback,
-)
+from ray.tune.integration.xgboost import TuneReportCallback as OrigTuneReportCallback
 from ray.tune.integration.xgboost import (
     TuneReportCheckpointCallback as OrigTuneReportCheckpointCallback,
 )

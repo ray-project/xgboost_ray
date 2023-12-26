@@ -98,14 +98,11 @@ RAY_TUNE_INSTALLED = True
 try:
     import ray.train
     import ray.tune
-except (ImportError, ModuleNotFoundError) as e:
+except (ImportError, ModuleNotFoundError):
     RAY_TUNE_INSTALLED = False
 
 if RAY_TUNE_INSTALLED:
-    from xgboost_ray.tune import (
-        _get_tune_resources,
-        _try_add_tune_callback,
-    )
+    from xgboost_ray.tune import _get_tune_resources, _try_add_tune_callback
 else:
     _get_tune_resources = _try_add_tune_callback = None
 
