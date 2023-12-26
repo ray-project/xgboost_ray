@@ -92,11 +92,22 @@ from xgboost_ray.session import (
     put_queue,
     set_session_queue,
 )
-from xgboost_ray.tune import (
-    _get_tune_resources,
-    _try_add_tune_callback,
-    is_session_enabled,
-)
+
+RAY_TUNE_INSTALLED = True
+
+try:
+    import ray.train
+    import ray.tune
+except (ImportError, ModuleNotFoundError) as e:
+    RAY_TUNE_INSTALLED = False
+
+if RAY_TUNE_INSTALLED:
+    from xgboost_ray.tune import (
+        _get_tune_resources,
+        _try_add_tune_callback,
+    )
+else:
+    _get_tune_resources = _try_add_tune_callback = None
 
 
 def _get_environ(item: str, old_val: Any):
@@ -521,8 +532,8 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) -> RayParams:
             f"({ray_params.num_actors}). XGBoost will NOT be distributed!"
         )
     if ray_params.verbose is None:
-        # In Tune sessions, reduce verbosity
-        ray_params.verbose = not is_session_enabled()
+        # In Tune/Train sessions, reduce verbosity
+        ray_params.verbose = not ray.train.get_context()
     return ray_params
 
 
@@ -708,7 +719,6 @@ class RayXGBoostActor:
         def _train():
             try:
                 with _RabitContext(str(id(self)), rabit_args):
-
                     local_dtrain = _get_dmatrix(dtrain, self._data[dtrain])
 
                     if not local_dtrain.get_label().size:
@@ -1398,7 +1408,7 @@ def train(
         )
 
     if _remote is None:
-        _remote = _is_client_connected() and not is_session_enabled()
+        _remote = _is_client_connected() and not ray.train.get_context()
 
     if not ray.is_initialized():
         ray.init()
@@ -1461,7 +1471,11 @@ def train(
             "`dtrain = RayDMatrix(data=data, label=label)`.".format(type(dtrain))
         )
 
-    added_tune_callback = _try_add_tune_callback(kwargs)
+    if RAY_TUNE_INSTALLED:
+        added_tune_callback = _try_add_tune_callback(kwargs)
+    else:
+        added_tune_callback = False
+
     # Tune currently does not support elastic training.
     if (
         added_tune_callback
@@ -1538,7 +1552,7 @@ def train(
     if not dtrain.loaded and not dtrain.distributed:
         dtrain.load_data(ray_params.num_actors)
 
-    for (deval, _name) in evals:
+    for deval, _name in evals:
         if not deval.has_label:
             raise ValueError(
                 "Evaluation data has no label set. Please make sure to set "
@@ -1827,7 +1841,7 @@ def predict(
         )
 
     if _remote is None:
-        _remote = _is_client_connected() and not is_session_enabled()
+        _remote = _is_client_connected() and not ray.train.get_context()
 
     if not ray.is_initialized():
         ray.init()
