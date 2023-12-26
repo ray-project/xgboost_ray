@@ -1,4 +1,6 @@
 """
+NOTE: This example is currently broken (very outdated) and not run in CI.
+
 Test Ray Tune trial placement across cluster nodes.
 
 Example: Run this script on a cluster with 4 workers nodes a 4 CPUs.
