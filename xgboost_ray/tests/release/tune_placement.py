@@ -18,14 +18,15 @@ hosts actors of the same Ray Tune trial.
 """
 
 import argparse
+from collections import defaultdict
 import json
 import os
 import shutil
+import tempfile
 import time
-from collections import defaultdict
 
 import ray
-from benchmark_cpu_gpu import train_ray
+import ray.train
 from ray import tune
 from ray.tune.integration.docker import DockerSyncer
 from ray.tune.session import get_trial_id
@@ -35,7 +36,8 @@ from xgboost_ray import RayParams
 from xgboost_ray.compat import TrainingCallback
 from xgboost_ray.session import put_queue
 from xgboost_ray.tests.utils import create_parquet
-from xgboost_ray.tune import TuneReportCallback
+
+from benchmark_cpu_gpu import train_ray
 
 if "OMP_NUM_THREADS" in os.environ:
     del os.environ["OMP_NUM_THREADS"]
@@ -128,7 +130,7 @@ def tune_test(
             xgboost_params=xgboost_params,
             # kwargs
             additional_results=additional_results,
-            callbacks=[PlacementCallback(), TuneReportCallback()],
+            callbacks=[PlacementCallback()],
         )
 
         bst.save_model("tuned.xgb")
@@ -139,9 +141,14 @@ def tune_test(
                 trial_ips.append(ip)
 
         tune_trial = get_trial_id()
-        with tune.checkpoint_dir(num_boost_rounds + 1) as checkpoint_dir:
-            with open(os.path.join(checkpoint_dir, "callback_returns.json"), "wt") as f:
+        with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
+            with open(
+                os.path.join(temp_checkpoint_dir, "callback_returns.json"), "wt"
+            ) as f:
                 json.dump({tune_trial: trial_ips}, f)
+            ray.train.report(
+                {}, checkpoint=ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
+            )
 
         if temp_dir:
             shutil.rmtree(temp_dir)
