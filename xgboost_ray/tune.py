@@ -121,11 +121,6 @@ def _get_tune_resources(
     bundles = [head_bundle] + child_bundles
     placement_options = placement_options or {}
     placement_options.setdefault("strategy", "PACK")
-    # Special case, same as in
-    # ray.air.ScalingConfig.as_placement_group_factory
-    # TODO remove after Ray 2.3 is out
-    if placement_options.get("_max_cpu_fraction_per_node", None) is None:
-        placement_options.pop("_max_cpu_fraction_per_node", None)
     placement_group_factory = PlacementGroupFactory(bundles, **placement_options)
 
     return placement_group_factory
