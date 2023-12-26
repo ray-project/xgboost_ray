@@ -18,13 +18,6 @@ from xgboost_ray.tune import (
     _try_add_tune_callback,
 )
 
-try:
-    from ray.air import Checkpoint
-except Exception:
-
-    class Checkpoint:
-        pass
-
 
 class XGBoostRayTuneTest(unittest.TestCase):
     def setUp(self):
