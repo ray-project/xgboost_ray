@@ -90,7 +90,12 @@ class XGBoostRayTuneTest(unittest.TestCase):
         params = self.params.copy()
         params["num_boost_round"] = tune.grid_search([1, 3])
         analysis = tune.run(
-            self.train_func(ray_params),
+            self.train_func(
+                ray_params,
+                callbacks=[
+                    TuneReportCheckpointCallback(frequency=1, checkpoint_at_end=False)
+                ],
+            ),
             config=self.params,
             resources_per_trial=ray_params.get_tune_resources(),
             num_samples=1,
@@ -165,12 +170,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
             local_dir=self.experiment_dir,
         )
 
-        if isinstance(analysis.best_checkpoint, Checkpoint):
-            self.assertTrue(analysis.best_checkpoint)
-        elif hasattr(analysis.best_checkpoint, "path"):
-            self.assertTrue(os.path.exists(analysis.best_checkpoint.path))
-        else:
-            self.assertTrue(os.path.exists(analysis.best_checkpoint))
+        self.assertTrue(os.path.exists(analysis.best_checkpoint.path))
 
     def testEndToEndCheckpointingOrigTune(self):
         ray_params = RayParams(cpus_per_actor=1, num_actors=2)
@@ -183,16 +183,10 @@ class XGBoostRayTuneTest(unittest.TestCase):
             num_samples=1,
             metric="train-mlogloss",
             mode="min",
-            log_to_file=True,
             local_dir=self.experiment_dir,
         )
 
-        if isinstance(analysis.best_checkpoint, Checkpoint):
-            self.assertTrue(analysis.best_checkpoint)
-        elif hasattr(analysis.best_checkpoint, "path"):
-            self.assertTrue(os.path.exists(analysis.best_checkpoint.path))
-        else:
-            self.assertTrue(os.path.exists(analysis.best_checkpoint))
+        self.assertTrue(os.path.exists(analysis.best_checkpoint.path))
 
 
 if __name__ == "__main__":
