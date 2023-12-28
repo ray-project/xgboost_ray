@@ -79,13 +79,16 @@ class XGBoostRayTuneTest(unittest.TestCase):
         ray_params = RayParams(cpus_per_actor=1, num_actors=2)
         params = self.params.copy()
         params["num_boost_round"] = tune.grid_search([1, 3])
+
+        # TODO(justinvyu): Remove this once the xgboost integration
+        # has been updated on the Ray side.
+        try:
+            callback = TuneReportCheckpointCallback(frequency=1, checkpoint_at_end=False)
+        except TypeError:
+            callback = TuneReportCheckpointCallback(frequency=1)
+
         analysis = tune.run(
-            self.train_func(
-                ray_params,
-                callbacks=[
-                    TuneReportCheckpointCallback(frequency=1, checkpoint_at_end=False)
-                ],
-            ),
+            self.train_func(ray_params, callbacks=[callback]),
             config=self.params,
             resources_per_trial=ray_params.get_tune_resources(),
             num_samples=1,
