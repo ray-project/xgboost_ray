@@ -2,7 +2,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import numpy as np
 import ray
@@ -140,7 +140,7 @@ class XGBoostRayTuneTest(unittest.TestCase):
         in_dict = {"callbacks": in_cp}
 
         with patch("ray.train.get_context") as mocked:
-            mocked.return_value = True
+            mocked.return_value = MagicMock(return_value=True)
             _try_add_tune_callback(in_dict)
 
         replaced = in_dict["callbacks"][0]
