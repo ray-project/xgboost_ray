@@ -58,7 +58,9 @@ class TuneReportCallback(OrigTuneReportCallback):
 
 
 def _try_add_tune_callback(kwargs: Dict):
-    ray_train_context_initialized = bool(ray.train.get_context())
+    ray_train_context_initialized = (
+        ray.train.get_context().get_trial_resources() is not None
+    )
     if ray_train_context_initialized:
         callbacks = kwargs.get("callbacks", []) or []
         new_callbacks = []

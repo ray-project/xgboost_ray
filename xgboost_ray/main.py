@@ -528,9 +528,9 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) -> RayParams:
             f"`num_actors` in `ray_params` is smaller than 2 "
             f"({ray_params.num_actors}). XGBoost will NOT be distributed!"
         )
-    if ray_params.verbose is None:
+    if ray_params.verbose is None and RAY_TUNE_INSTALLED:
         # In Tune/Train sessions, reduce verbosity
-        ray_params.verbose = not ray.train.get_context()
+        ray_params.verbose = ray.train.get_context().get_trial_resources() is not None
     return ray_params
 
 
@@ -1405,7 +1405,11 @@ def train(
         )
 
     if _remote is None:
-        _remote = _is_client_connected() and not ray.train.get_context()
+        in_ray_tune_session = (
+            RAY_TUNE_INSTALLED
+            and ray.train.get_context().get_trial_resources() is not None
+        )
+        _remote = _is_client_connected() and not in_ray_tune_session
 
     if not ray.is_initialized():
         ray.init()
@@ -1485,6 +1489,7 @@ def train(
             "order to use xgboost_ray with Tune."
         )
 
+    import ipdb; ipdb.set_trace()
     if added_tune_callback or get_current_placement_group():
         # Don't autodetect resources when used with Tune.
         cpus_per_actor = ray_params.cpus_per_actor
@@ -1838,7 +1843,11 @@ def predict(
         )
 
     if _remote is None:
-        _remote = _is_client_connected() and not ray.train.get_context()
+        in_ray_tune_session = (
+            RAY_TUNE_INSTALLED
+            and ray.train.get_context().get_trial_resources() is not None
+        )
+        _remote = _is_client_connected() and not in_ray_tune_session
 
     if not ray.is_initialized():
         ray.init()
