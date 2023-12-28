@@ -2,7 +2,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import ray
@@ -83,7 +83,9 @@ class XGBoostRayTuneTest(unittest.TestCase):
         # TODO(justinvyu): Remove this once the xgboost integration
         # has been updated on the Ray side.
         try:
-            callback = TuneReportCheckpointCallback(frequency=1, checkpoint_at_end=False)
+            callback = TuneReportCheckpointCallback(
+                frequency=1, checkpoint_at_end=False
+            )
         except TypeError:
             callback = TuneReportCheckpointCallback(frequency=1)
 
