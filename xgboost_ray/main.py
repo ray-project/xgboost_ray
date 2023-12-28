@@ -1489,7 +1489,9 @@ def train(
             "order to use xgboost_ray with Tune."
         )
 
-    import ipdb; ipdb.set_trace()
+    import ipdb
+
+    ipdb.set_trace()
     if added_tune_callback or get_current_placement_group():
         # Don't autodetect resources when used with Tune.
         cpus_per_actor = ray_params.cpus_per_actor
