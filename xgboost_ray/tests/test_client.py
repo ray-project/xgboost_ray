@@ -21,6 +21,14 @@ def start_client_server_5_cpus():
         yield client
 
 
+@pytest.fixture
+def start_client_server_5_cpus_modin(monkeypatch):
+    monkeypatch.setenv("__MODIN_AUTOIMPORT_PANDAS__", "1")
+    ray.init(num_cpus=5, runtime_env={"env_vars": {"__MODIN_AUTOIMPORT_PANDAS__": "1"}})
+    with ray_start_client_server() as client:
+        yield client
+
+
 def test_simple_train(start_client_server_4_cpus):
     assert ray.util.client.ray.is_connected()
     from xgboost_ray.examples.simple import main
@@ -43,7 +51,7 @@ def test_simple_dask(start_client_server_5_cpus):
     main(cpus_per_actor=1, num_actors=4)
 
 
-def test_simple_modin(start_client_server_5_cpus):
+def test_simple_modin(start_client_server_5_cpus_modin):
     assert ray.util.client.ray.is_connected()
     from xgboost_ray.examples.simple_modin import main
 
