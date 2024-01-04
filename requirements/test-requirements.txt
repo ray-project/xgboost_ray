@@ -4,9 +4,10 @@ pytest
 pyarrow
 ray[tune, data, default]
 scikit-learn
-# NOTE: modin==0.23.1.post0 is not compatible with xgboost_ray py38
-#       modin==0.26.0 is not compatible with xgboost_ray py39+
-modin<=0.23.1; python_version=='3.8' or modin<0.26.0; python_version != '3.8'
+# modin==0.23.1.post0 is not compatible with xgboost_ray py38
+modin<=0.23.1; python_version == '3.8'
+# modin==0.26.0 is not compatible with xgboost_ray py39+
+modin<0.26.0; python_version > '3.8'
 dask
 
 #workaround for now
