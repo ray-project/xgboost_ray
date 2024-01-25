@@ -204,6 +204,12 @@ def _assert_ray_support():
         )
 
 
+def _in_ray_tune_session() -> bool:
+    return (
+        RAY_TUNE_INSTALLED and ray.train.get_context().get_trial_resources() is not None
+    )
+
+
 def _maybe_print_legacy_warning():
     if LEGACY_MATRIX or LEGACY_CALLBACK:
         warnings.warn(LEGACY_WARNING)
@@ -530,7 +536,7 @@ def _validate_ray_params(ray_params: Union[None, RayParams, dict]) -> RayParams:
         )
     if ray_params.verbose is None and RAY_TUNE_INSTALLED:
         # In Tune/Train sessions, reduce verbosity
-        ray_params.verbose = ray.train.get_context().get_trial_resources() is not None
+        ray_params.verbose = not _in_ray_tune_session()
     return ray_params
 
 
@@ -1405,11 +1411,7 @@ def train(
         )
 
     if _remote is None:
-        in_ray_tune_session = (
-            RAY_TUNE_INSTALLED
-            and ray.train.get_context().get_trial_resources() is not None
-        )
-        _remote = _is_client_connected() and not in_ray_tune_session
+        _remote = _is_client_connected() and not _in_ray_tune_session()
 
     if not ray.is_initialized():
         ray.init()
@@ -1842,11 +1844,7 @@ def predict(
         )
 
     if _remote is None:
-        in_ray_tune_session = (
-            RAY_TUNE_INSTALLED
-            and ray.train.get_context().get_trial_resources() is not None
-        )
-        _remote = _is_client_connected() and not in_ray_tune_session
+        _remote = _is_client_connected() and not _in_ray_tune_session()
 
     if not ray.is_initialized():
         ray.init()
