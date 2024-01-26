@@ -1,4 +1,6 @@
 """
+NOTE: This example is currently broken (very outdated) and not run in CI.
+
 Test Ray Tune trial placement across cluster nodes.
 
 Example: Run this script on a cluster with 4 workers nodes a 4 CPUs.
@@ -21,10 +23,12 @@ import argparse
 import json
 import os
 import shutil
+import tempfile
 import time
 from collections import defaultdict
 
 import ray
+import ray.train
 from benchmark_cpu_gpu import train_ray
 from ray import tune
 from ray.tune.integration.docker import DockerSyncer
@@ -35,7 +39,6 @@ from xgboost_ray import RayParams
 from xgboost_ray.compat import TrainingCallback
 from xgboost_ray.session import put_queue
 from xgboost_ray.tests.utils import create_parquet
-from xgboost_ray.tune import TuneReportCallback
 
 if "OMP_NUM_THREADS" in os.environ:
     del os.environ["OMP_NUM_THREADS"]
@@ -128,7 +131,7 @@ def tune_test(
             xgboost_params=xgboost_params,
             # kwargs
             additional_results=additional_results,
-            callbacks=[PlacementCallback(), TuneReportCallback()],
+            callbacks=[PlacementCallback()],
         )
 
         bst.save_model("tuned.xgb")
@@ -139,9 +142,14 @@ def tune_test(
                 trial_ips.append(ip)
 
         tune_trial = get_trial_id()
-        with tune.checkpoint_dir(num_boost_rounds + 1) as checkpoint_dir:
-            with open(os.path.join(checkpoint_dir, "callback_returns.json"), "wt") as f:
+        with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
+            with open(
+                os.path.join(temp_checkpoint_dir, "callback_returns.json"), "wt"
+            ) as f:
                 json.dump({tune_trial: trial_ips}, f)
+            ray.train.report(
+                {}, checkpoint=ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
+            )
 
         if temp_dir:
             shutil.rmtree(temp_dir)
