@@ -1,7 +1,7 @@
 packaging
 petastorm
 pytest
-pyarrow
+pyarrow<15.0.0
 ray[tune, data, default]
 scikit-learn
 # modin==0.23.1.post0 is not compatible with xgboost_ray py38
