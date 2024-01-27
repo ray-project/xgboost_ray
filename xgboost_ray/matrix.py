@@ -49,11 +49,11 @@ except ImportError:
     LEGACY_MATRIX = True
 
 try:
-    from xgboost.core import QuantileDmatrix
+    from xgboost.core import QuantileDMatrix
 
     QUANTILE_AVAILABLE = True
 except ImportError:
-    QuantileDmatrix = object
+    QuantileDMatrix = object
     QUANTILE_AVAILABLE = False
 
 if TYPE_CHECKING:
