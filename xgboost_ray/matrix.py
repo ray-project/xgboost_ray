@@ -411,9 +411,9 @@ class _CentralRayDMatrixLoader(_RayDMatrixLoader):
             # We have to make sure they are compatible
             # if it's a parquet data source and label is a list,
             # then we consider it a multi-label data
-            if not data_source.is_data_type(self.label) \
-                and not (isinstance(self.label, List) \
-                and data_source.__name__ == "Parquet"):
+            if not data_source.is_data_type(self.label) and not (
+                isinstance(self.label, List) and data_source.__name__ == "Parquet"
+            ):
                 raise ValueError(
                     "The passed `data` and `label` types are not compatible."
                     "\nFIX THIS by passing the same types to the "

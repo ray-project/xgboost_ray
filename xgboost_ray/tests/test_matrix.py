@@ -71,7 +71,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
         assert data.columns.tolist() == cols[:-1]
 
-    def _testMatrixCreation(self, in_x, in_y, multi_label = False, **kwargs):
+    def _testMatrixCreation(self, in_x, in_y, multi_label=False, **kwargs):
         if "sharding" not in kwargs:
             kwargs["sharding"] = RayShardingMode.BATCH
         mat = RayDMatrix(in_x, in_y, **kwargs)
@@ -300,8 +300,12 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             data_df[labels] = self.multi_y
             data_df.to_parquet(data_file)
 
-            self._testMatrixCreation(data_file, labels, multi_label=True, distributed=False)
-            self._testMatrixCreation(data_file, labels, multi_label=True, distributed=True)
+            self._testMatrixCreation(
+                data_file, labels, multi_label=True, distributed=False
+            )
+            self._testMatrixCreation(
+                data_file, labels, multi_label=True, distributed=True
+            )
 
     def testFromParquetString(self):
         with tempfile.TemporaryDirectory() as dir:
@@ -313,7 +317,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
             self._testMatrixCreation(data_file, "label", distributed=False)
             self._testMatrixCreation(data_file, "label", distributed=True)
-            
+
     def testFromMultiParquetStringMultiLabel(self):
         with tempfile.TemporaryDirectory() as dir:
             data_file_1 = os.path.join(dir, "data_1.parquet")
