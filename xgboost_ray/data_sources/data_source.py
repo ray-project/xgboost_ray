@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import pandas as pd
 from ray.actor import ActorHandle
@@ -118,7 +118,7 @@ class DataSource:
     @classmethod
     def get_column(
         cls, data: pd.DataFrame, column: Any
-    ) -> Tuple[pd.Series, Optional[str]]:
+    ) -> Tuple[pd.Series, Optional[Union[str, List]]]:
         """Helper method wrapping around convert to series.
 
         This method should usually not be overwritten.

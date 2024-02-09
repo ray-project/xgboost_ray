@@ -33,6 +33,15 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
             * repeat
         )
         self.y = np.array([0, 1, 2, 3] * repeat)
+        self.multi_y = np.array(
+            [
+                [1, 0, 0, 0],
+                [0, 1, 0, 0],
+                [0, 0, 1, 1],
+                [0, 0, 1, 0],
+            ]
+            * repeat
+        )
 
     @classmethod
     def setUpClass(cls):
@@ -62,7 +71,7 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
         assert data.columns.tolist() == cols[:-1]
 
-    def _testMatrixCreation(self, in_x, in_y, **kwargs):
+    def _testMatrixCreation(self, in_x, in_y, multi_label = False, **kwargs):
         if "sharding" not in kwargs:
             kwargs["sharding"] = RayShardingMode.BATCH
         mat = RayDMatrix(in_x, in_y, **kwargs)
@@ -81,7 +90,10 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         x, y = _load_data(params)
 
         self.assertTrue(np.allclose(self.x, x))
-        self.assertTrue(np.allclose(self.y, y))
+        if multi_label:
+            self.assertTrue(np.allclose(self.multi_y, y))
+        else:
+            self.assertTrue(np.allclose(self.y, y))
 
         # Multi actor check
         mat = RayDMatrix(in_x, in_y, **kwargs)
@@ -95,7 +107,10 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
         x2, y2 = _load_data(params)
 
         self.assertTrue(np.allclose(self.x, concat_dataframes([x1, x2])))
-        self.assertTrue(np.allclose(self.y, concat_dataframes([y1, y2])))
+        if multi_label:
+            self.assertTrue(np.allclose(self.multi_y, concat_dataframes([y1, y2])))
+        else:
+            self.assertTrue(np.allclose(self.y, concat_dataframes([y1, y2])))
 
     def testFromNumpy(self):
         in_x = self.x
@@ -276,6 +291,18 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
                 [data_file_1, data_file_2], "label", distributed=True
             )
 
+    def testFromParquetStringMultiLabel(self):
+        with tempfile.TemporaryDirectory() as dir:
+            data_file = os.path.join(dir, "data.parquet")
+
+            data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
+            labels = [f"label_{label}" for label in range(4)]
+            data_df[labels] = self.multi_y
+            data_df.to_parquet(data_file)
+
+            self._testMatrixCreation(data_file, labels, multi_label=True, distributed=False)
+            self._testMatrixCreation(data_file, labels, multi_label=True, distributed=True)
+
     def testFromParquetString(self):
         with tempfile.TemporaryDirectory() as dir:
             data_file = os.path.join(dir, "data.parquet")
@@ -286,6 +313,28 @@ class XGBoostRayDMatrixTest(unittest.TestCase):
 
             self._testMatrixCreation(data_file, "label", distributed=False)
             self._testMatrixCreation(data_file, "label", distributed=True)
+            
+    def testFromMultiParquetStringMultiLabel(self):
+        with tempfile.TemporaryDirectory() as dir:
+            data_file_1 = os.path.join(dir, "data_1.parquet")
+            data_file_2 = os.path.join(dir, "data_2.parquet")
+
+            data_df = pd.DataFrame(self.x, columns=["a", "b", "c", "d"])
+            labels = [f"label_{label}" for label in range(4)]
+            data_df[labels] = self.multi_y
+
+            df_1 = data_df[0 : len(data_df) // 2]
+            df_2 = data_df[len(data_df) // 2 :]
+
+            df_1.to_parquet(data_file_1)
+            df_2.to_parquet(data_file_2)
+
+            self._testMatrixCreation(
+                [data_file_1, data_file_2], labels, multi_label=True, distributed=False
+            )
+            self._testMatrixCreation(
+                [data_file_1, data_file_2], labels, multi_label=True, distributed=True
+            )
 
     def testFromMultiParquetString(self):
         with tempfile.TemporaryDirectory() as dir:
