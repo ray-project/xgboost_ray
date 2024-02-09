@@ -123,7 +123,7 @@ class DataSource:
 
         This method should usually not be overwritten.
         """
-        if isinstance(column, str):
+        if isinstance(column, str) or isinstance(column, List):
             return data[column], column
         elif column is not None:
             return cls.convert_to_series(column), None
