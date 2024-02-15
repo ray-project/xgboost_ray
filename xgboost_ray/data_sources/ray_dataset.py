@@ -107,4 +107,4 @@ class RayDataset(DataSource):
         """
         Return number of distributed blocks.
         """
-        return data.num_blocks()
+        return data._plan.initial_num_blocks()
