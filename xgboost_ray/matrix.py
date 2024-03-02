@@ -528,7 +528,11 @@ class _DistributedRayDMatrixLoader(_RayDMatrixLoader):
                 f"RayDMatrix."
             )
 
-        if self.label is not None and not isinstance(self.label, str) and not isinstance(self.label, List):
+        if (
+            self.label is not None
+            and not isinstance(self.label, str)
+            and not isinstance(self.label, List)
+        ):
             raise ValueError(
                 f"Invalid `label` value for distributed datasets: "
                 f"{self.label}. Only strings are supported. "
